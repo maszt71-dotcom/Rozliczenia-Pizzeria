@@ -44,28 +44,24 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     data_gen = datetime.now().strftime("%d.%m.%Y %H:%M")
     pdf.cell(190, 10, f"RAPORT FINANSOWY - {data_gen}", ln=True, align="C")
     pdf.ln(10)
-    
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
-    
     pdf.set_font("Arial", "", 11)
     pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "WYDATKI GOTOWKOWE:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
-    
     pdf.ln(10)
     pdf.set_font("Arial", "B", 10)
     pdf.cell(30, 10, "Data wpisu", 1); pdf.cell(30, 10, "Typ", 1); pdf.cell(30, 10, "Kwota", 1); pdf.cell(30, 10, "Z dnia", 1); pdf.cell(70, 10, "Opis", 1)
     pdf.ln()
-    
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         if o == "nan": o = ""
         pdf.cell(30, 10, str(row['Data']), 1)
-        pdf.cell(30, 10, t, 1)
+        pdf.cell(40, 10, t, 1)
         pdf.cell(30, 10, f"{row['Kwota']:.2f} zl", 1)
         pdf.cell(30, 10, str(row['Data zdarzenia']), 1)
         pdf.cell(70, 10, o[:40], 1)
@@ -74,16 +70,13 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
 
 if check_password():
     DB_FILE = 'finanse_data.csv'
-    
     def load_data():
         if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
         return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-    
     def save_data(df): df.to_csv(DB_FILE, index=False)
 
     if 'data' not in st.session_state: st.session_state.data = load_data()
     df_all = st.session_state.data
-    
     if 'Status' not in df_all.columns: df_all['Status'] = 'Aktywny'
     if 'Data zdarzenia' not in df_all.columns: df_all['Data zdarzenia'] = df_all['Data']
     
@@ -107,7 +100,7 @@ if check_password():
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         etykieta_daty = "Data wydatku" if typ == "Wydatki gotówkowe" else "Data przychodu"
         data_wybrana = st.date_input(etykieta_daty, datetime.now())
-        opis = st.text_input("Opis wydatku") if typ == "Wydatki gotówkowe" else ""
+        opis = st.text_input("Opis wydatku")
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
@@ -134,51 +127,27 @@ if check_password():
     st.divider()
     st.subheader("📂 Historia")
     
-    df_display = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
+    # Przygotowanie danych do tabeli (zaokrąglenie kwoty)
+    df_history = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1].copy()
+    df_history['Kwota'] = df_history['Kwota'].map('{:,.2f} zł'.format)
+    df_history.columns = ['Data wpisu', 'Typ', 'Kwota', 'Z dnia', 'Opis']
 
+    # --- KOLOROWANIE I WYŚWIETLANIE (ZAWJANIE OPISU) ---
     def color_row(row):
-        if row['Typ'] == 'Przychód ogólny': return ['background-color: #d4edda'] * len(row)
-        if row['Typ'] == 'Wydatki gotówkowe': return ['background-color: #f8d7da'] * len(row)
-        if row['Typ'] == 'Gotówka': return ['background-color: #fff3cd'] * len(row)
-        return [''] * len(row)
+        colors = {'Przychód ogólny': '#d4edda', 'Wydatki gotówkowe': '#f8d7da', 'Gotówka': '#fff3cd'}
+        color = colors.get(row['Typ'], '')
+        return [f'background-color: {color}' for _ in row]
 
-    styled_df = df_display.style.apply(color_row, axis=1)
+    # Użycie st.table zamiast st.dataframe pozwala na zawijanie tekstu bez przesuwania strony
+    st.table(df_history.style.apply(color_row, axis=1))
 
-    if "table_id" not in st.session_state or st.session_state.get('reset_table', False):
-        st.session_state.table_id = random.randint(0, 100000)
-        st.session_state.reset_table = False
-
-    event = st.dataframe(
-        styled_df, 
-        use_container_width=True, 
-        hide_index=True, 
-        on_select="rerun", 
-        selection_mode="single-row",
-        key=f"tabela_{st.session_state.table_id}",
-        column_config={
-            "Data": st.column_config.TextColumn("Data wpisu", width="medium"),
-            "Typ": st.column_config.TextColumn("Typ", width="medium"),
-            "Kwota": st.column_config.NumberColumn("Kwota", width="medium", format="%.2f zł"),
-            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="medium"),
-            "Opis": st.column_config.TextColumn("Opis", width="large"),
-        }
-    )
-    
-    if event.selection.rows:
-        row_idx = event.selection.rows[0]
-        row_info = df_display.iloc[row_idx]
-        st.session_state.reset_table = True
-        
-        @st.dialog("Usuń wpis")
-        def delete_entry_dialog(r, idx):
-            st.warning(f"Czy usunąć: {r['Typ']} - {r['Kwota']:.2f} zł?")
-            if st.button("🔥 POTWIERDZAM: USUŃ", type="primary", use_container_width=True):
-                orig_idx = df_display.index[idx]
-                st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
-                save_data(st.session_state.data)
-                st.rerun()
-            if st.button("🔙 NIE USUWAJ", use_container_width=True): st.rerun()
-        delete_entry_dialog(row_info, row_idx)
+    # Przycisk usuwania ostatniego wpisu (uproszczony dla st.table)
+    if not df_active.empty:
+        if st.button("🗑️ USUŃ OSTATNI WPIS", use_container_width=True):
+            last_idx = df_active.index[-1]
+            st.session_state.data.at[last_idx, 'Status'] = 'Usunięty'
+            save_data(st.session_state.data)
+            st.rerun()
 
     with st.sidebar:
         st.header("⚙️ Opcje")
