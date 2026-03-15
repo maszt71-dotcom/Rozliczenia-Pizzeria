@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import random
 from datetime import datetime
 from fpdf import FPDF
 
@@ -99,6 +100,7 @@ if check_password():
             save_data(st.session_state.data)
             st.rerun()
         if st.button("🔙 NIE USUWAJ", use_container_width=True):
+            # Kluczowy moment: wymuszamy odświeżenie całej aplikacji
             st.rerun()
 
     c1, c2, c3 = st.columns(3)
@@ -116,10 +118,23 @@ if check_password():
     st.subheader("📂 Historia")
     df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
     
-    # Naprawiona tabela bez błędów przypisania
-    event = st.dataframe(df_display, use_container_width=True, hide_index=False, on_select="rerun", selection_mode="single-row")
+    # --- NOWA LOGIKA TABELI ---
+    # Generujemy losowy klucz, aby tabela "zapomniała" o zaznaczeniu po każdym odświeżeniu
+    if "table_id" not in st.session_state or st.session_state.get('reset_table', False):
+        st.session_state.table_id = random.randint(0, 100000)
+        st.session_state.reset_table = False
+
+    event = st.dataframe(
+        df_display, 
+        use_container_width=True, 
+        hide_index=False, 
+        on_select="rerun", 
+        selection_mode="single-row",
+        key=f"data_table_{st.session_state.table_id}"
+    )
     
     if event.selection.rows:
+        st.session_state.reset_table = True # Przy następnym rerun tabela dostanie nowy klucz
         delete_entry_dialog(event.selection.rows[0])
 
     with st.sidebar:
