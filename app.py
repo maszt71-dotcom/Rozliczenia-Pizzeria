@@ -22,6 +22,7 @@ def check_password():
         return False
     return True
 
+# Funkcja PDF
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -72,77 +73,68 @@ if check_password():
 
     st.title("🍕 Panel Rozliczeń")
 
+    # LOGIKA KOLORÓW
     if s_gotowka >= 0:
-        bg_gotowka, brd_gotowka, txt_gotowka = "#fff3cd", "#ffc107", "#856404"
+        bg_got, brd_got, txt_got = "#fff3cd", "#ffc107", "#856404"
     else:
-        bg_gotowka, brd_gotowka, txt_gotowka = "#ff0000", "#8b0000", "#ffffff"
+        bg_got, brd_got, txt_got = "#ff0000", "#8b0000", "#ffffff"
 
+    # OKNO DIALOGOWE DLA DODAWANIA
+    @st.dialog("Dodaj nowy wpis")
+    def add_entry_dialog(typ):
+        st.write(f"Kategoria: **{typ}**")
+        kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", value=None)
+        opis = ""
+        if typ == "Wydatki":
+            opis = st.text_input("Opis wydatku", placeholder="np. paliwo, zakupy...")
+        
+        if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
+            if kwota:
+                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
+                st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+                save_data(st.session_state.data)
+                st.rerun()
+            else:
+                st.error("Wpisz kwotę!")
+
+    # OKNO DIALOGOWE DLA USUWANIA
+    @st.dialog("Usuń wpis")
+    def delete_entry_dialog(row_idx):
+        row = df_display.iloc[row_idx]
+        st.warning(f"Czy na pewno chcesz usunąć: {row['Typ']} na kwotę {row['Kwota']:.2f} zł?")
+        if st.button("POTWIERDZAM: USUŃ", type="primary", use_container_width=True):
+            orig_idx = df_display.index[row_idx]
+            st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
+            save_data(st.session_state.data)
+            st.rerun()
+
+    # Kafelki
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj", key="b1", use_container_width=True): st.session_state.f = "Przychód ogólny"
+        if st.button("➕ Dodaj", key="b1", use_container_width=True): add_entry_dialog("Przychód ogólny")
     with c2:
-        st.markdown(f'<div style="background-color:{bg_gotowka}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_gotowka}; height: 100px;"><span style="color:{txt_gotowka}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{txt_gotowka}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj", key="b2", use_container_width=True): st.session_state.f = "Gotówka"
+        st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
+        if st.button("➕ Dodaj", key="b2", use_container_width=True): add_entry_dialog("Gotówka")
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➖ Dodaj", key="b3", use_container_width=True): st.session_state.f = "Wydatki"
+        if st.button("➖ Dodaj", key="b3", use_container_width=True): add_entry_dialog("Wydatki")
 
     st.divider()
 
-    # Formularz wpisu
-    if "f" in st.session_state:
-        typ = st.session_state.f
-        with st.form("form_wpisu", clear_on_submit=True):
-            kwota = st.number_input(f"Dodaj: {typ}", min_value=0.0, step=1.0, format="%.2f", value=None)
-            opis = st.text_input("Opis (tylko wydatki)", key="o") if typ == "Wydatki" else ""
-            cz, ca = st.columns(2)
-            with cz:
-                if st.form_submit_button("ZAPISZ", use_container_width=True):
-                    if kwota:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
-                        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
-                        save_data(st.session_state.data)
-                        del st.session_state.f
-                        st.rerun()
-            with ca:
-                if st.form_submit_button("ANULUJ", use_container_width=True):
-                    del st.session_state.f
-                    st.rerun()
-
     st.subheader("📂 Historia")
     df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
-    
-    # Wybór wiersza
     event = st.dataframe(df_display, use_container_width=True, hide_index=False, on_select="rerun", selection_mode="single-row")
-    wybrane = event.selection.rows
-
-    # MODAL USUWANIA (WYSKAKUJĄCE OKNO)
-    if wybrane:
-        @st.dialog("Potwierdź usunięcie")
-        def confirm_delete(idx_to_del):
-            row_data = df_display.iloc[idx_to_del]
-            st.write(f"Czy na pewno chcesz usunąć wpis: **{row_data['Typ']} - {row_data['Kwota']:.2f} zł**?")
-            c_u, c_a = st.columns(2)
-            with c_u:
-                if st.button("TAK, USUŃ", type="primary", use_container_width=True):
-                    orig_idx = df_display.index[idx_to_del]
-                    st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
-                    save_data(st.session_state.data)
-                    st.rerun()
-            with c_a:
-                if st.button("ANULUJ", use_container_width=True):
-                    st.rerun()
-        
-        confirm_delete(wybrane[0])
+    
+    if event.selection.rows:
+        delete_entry_dialog(event.selection.rows[0])
 
     with st.sidebar:
         st.header("⚙️ Opcje")
         if not df_all.empty:
             pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
-        
-        if not df_all.empty:
+            
             st.divider()
             st.warning("ZAMKNIĘCIE DNIA")
             pdf_res = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
@@ -155,6 +147,6 @@ if check_password():
                     save_data(st.session_state.data)
                     st.session_state.reset_check = False
                     st.rerun()
-                if st.button("🔙 POWRÓT", use_container_width=True):
+                if st.button("🔙 ANULUJ", use_container_width=True):
                     st.session_state.reset_check = False
                     st.rerun()
