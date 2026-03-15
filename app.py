@@ -22,7 +22,6 @@ def check_password():
         return False
     return True
 
-# Funkcja PDF z DATĄ W NAGŁÓWKU
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -30,7 +29,6 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     data_gen = datetime.now().strftime("%d.%m.%Y %H:%M")
     pdf.cell(190, 10, f"RAPORT FINANSOWY PIZZERIA - {data_gen}", ln=True, align="C")
     pdf.ln(10)
-    
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
@@ -39,11 +37,9 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "SUMA WYDATKOW:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
-    
     pdf.set_font("Arial", "B", 10)
     pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
     pdf.ln()
-    
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
@@ -76,7 +72,6 @@ if check_password():
 
     st.title("🍕 Panel Rozliczeń")
 
-    # Kolory kafelka Gotówka
     if s_gotowka >= 0:
         bg_gotowka, brd_gotowka, txt_gotowka = "#fff3cd", "#ffc107", "#856404"
     else:
@@ -95,11 +90,12 @@ if check_password():
 
     st.divider()
 
+    # Formularz wpisu
     if "f" in st.session_state:
         typ = st.session_state.f
         with st.form("form_wpisu", clear_on_submit=True):
             kwota = st.number_input(f"Dodaj: {typ}", min_value=0.0, step=1.0, format="%.2f", value=None)
-            opis = st.text_input("Na co wydano?", key="o") if typ == "Wydatki" else ""
+            opis = st.text_input("Opis (tylko wydatki)", key="o") if typ == "Wydatki" else ""
             cz, ca = st.columns(2)
             with cz:
                 if st.form_submit_button("ZAPISZ", use_container_width=True):
@@ -116,28 +112,36 @@ if check_password():
 
     st.subheader("📂 Historia")
     df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
+    
+    # Wybór wiersza
     event = st.dataframe(df_display, use_container_width=True, hide_index=False, on_select="rerun", selection_mode="single-row")
     wybrane = event.selection.rows
 
+    # MODAL USUWANIA (WYSKAKUJĄCE OKNO)
+    if wybrane:
+        @st.dialog("Potwierdź usunięcie")
+        def confirm_delete(idx_to_del):
+            row_data = df_display.iloc[idx_to_del]
+            st.write(f"Czy na pewno chcesz usunąć wpis: **{row_data['Typ']} - {row_data['Kwota']:.2f} zł**?")
+            c_u, c_a = st.columns(2)
+            with c_u:
+                if st.button("TAK, USUŃ", type="primary", use_container_width=True):
+                    orig_idx = df_display.index[idx_to_del]
+                    st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
+                    save_data(st.session_state.data)
+                    st.rerun()
+            with c_a:
+                if st.button("ANULUJ", use_container_width=True):
+                    st.rerun()
+        
+        confirm_delete(wybrane[0])
+
     with st.sidebar:
         st.header("⚙️ Opcje")
-        
-        # 1. Pobieranie raportu (zostaje jak było)
         if not df_all.empty:
             pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
         
-        st.divider()
-        
-        # 2. Usuwanie (zostaje jak było)
-        if wybrane:
-            orig_idx = df_display.index[wybrane[0]]
-            if st.button("🗑️ USUŃ WPIS", type="primary", use_container_width=True):
-                st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
-                save_data(st.session_state.data)
-                st.rerun()
-
-        # 3. Sekcja resetu (zostaje jak było z funkcją anuluj)
         if not df_all.empty:
             st.divider()
             st.warning("ZAMKNIĘCIE DNIA")
@@ -151,6 +155,6 @@ if check_password():
                     save_data(st.session_state.data)
                     st.session_state.reset_check = False
                     st.rerun()
-                if st.button("🔙 ANULUJ RESET", use_container_width=True):
+                if st.button("🔙 POWRÓT", use_container_width=True):
                     st.session_state.reset_check = False
                     st.rerun()
