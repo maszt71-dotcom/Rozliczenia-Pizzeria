@@ -109,7 +109,7 @@ if check_password():
                 st.session_state.pokaz_pytanie = False
                 st.rerun()
 
-    # --- KONTENERY Z PUSTYMI POLAMI KWOT ---
+    # --- KONTENERY ---
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -117,7 +117,7 @@ if check_password():
             @st.dialog("Dodaj Przychód")
             def d1():
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
-                da = st.date_input("Dzień", datetime.now())
+                da = st.date_input("Z dnia", datetime.now())
                 if st.button("Zapisz"):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
@@ -130,7 +130,7 @@ if check_password():
             @st.dialog("Dodaj Wydatek")
             def d3():
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
-                da = st.date_input("Dzień", datetime.now())
+                da = st.date_input("Z dnia", datetime.now())
                 op = st.text_input("Opis (max 35)", max_chars=35)
                 if st.button("Zapisz"):
                     if kw:
@@ -145,7 +145,7 @@ if check_password():
             @st.dialog("Dodaj Gotówkę")
             def d2():
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
-                da = st.date_input("Dzień", datetime.now())
+                da = st.date_input("Z dnia", datetime.now())
                 if st.button("Zapisz"):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Gotówka', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
