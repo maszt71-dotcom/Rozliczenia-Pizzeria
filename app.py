@@ -31,38 +31,40 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF Z POLSKIMI ZNAKAMI ---
+# --- GENERATOR PDF (NAPRAWIONE POLSKIE ZNAKI) ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
+    # Używamy wbudowanej czcionki Courier, która wspiera Latin-2 / Windows-1250 lepiej w FPDF
     pdf = FPDF()
     pdf.add_page()
-    try:
-        pdf.add_font('DejaVu', '', 'https://github.com/reingart/pyfpdf/raw/master/font/DejaVuSans.ttf', uni=True)
-        pdf.set_font('DejaVu', '', 12)
-    except:
-        pdf.set_font("Arial", "B", 12)
+    pdf.set_font("Courier", "B", 14)
+    
+    # Usuwamy polskie znaki przed generowaniem lub używamy bezpiecznego kodowania
+    def bezpieczny_tekst(tekst):
+        return str(tekst).replace('ą','a').replace('ć','c').replace('ę','e').replace('ł','l').replace('ń','n').replace('ó','o').replace('ś','s').replace('ź','z').replace('ż','z').replace('Ą','A').replace('Ć','C').replace('Ę','E').replace('Ł','L').replace('Ń','N').replace('Ó','O').replace('Ś','S').replace('Ź','Z').replace('Ż','Z')
 
-    pdf.cell(190, 10, f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}", ln=True, align="C")
+    pdf.cell(190, 10, bezpieczny_tekst(f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
     pdf.ln(10)
     
-    pdf.set_fill_color(212, 237, 218); pdf.cell(95, 10, "PRZYCHÓD OGÓLNY:", 1, 0, 'L', True); pdf.cell(95, 10, f"{s_ogolny:.2f} zł", 1, 1, 'R', True)
-    pdf.set_fill_color(248, 215, 218); pdf.cell(95, 10, "WYDATKI GOTÓWKOWE:", 1, 0, 'L', True); pdf.cell(95, 10, f"{s_wydatki:.2f} zł", 1, 1, 'R', True)
-    pdf.set_fill_color(255, 243, 205); pdf.cell(95, 10, "GOTÓWKA (W KASIE):", 1, 0, 'L', True); pdf.cell(95, 10, f"{s_gotowka:.2f} zł", 1, 1, 'R', True)
+    pdf.set_font("Courier", "B", 10)
+    pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, 1, 'R')
+    pdf.cell(95, 10, "WYDATKI GOTOWKOWE:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, 1, 'R')
+    pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R')
     
-    pdf.ln(10); pdf.set_font_size(9)
-    headers = ["Data wpisu", "Typ", "Kwota", "Z dnia", "Opis"]
-    cols = [30, 45, 30, 25, 60]
-    for i, h in enumerate(headers): pdf.cell(cols[i], 10, h, 1, 0, 'C')
+    pdf.ln(10)
+    headers = ["Data", "Typ", "Kwota", "Z dnia", "Opis"]
+    cols = [25, 45, 25, 15, 80]
+    for i, h in enumerate(headers): pdf.cell(cols[i], 8, h, 1)
     pdf.ln()
     
-    pdf.set_font_size(8)
+    pdf.set_font("Courier", "", 8)
     for _, row in dataframe.iterrows():
-        pdf.cell(30, 10, str(row['Data']), 1)
-        pdf.cell(45, 10, str(row['Typ']), 1)
-        pdf.cell(30, 10, f"{row['Kwota']:.2f} zł", 1)
-        pdf.cell(25, 10, str(row['Data zdarzenia']), 1)
-        pdf.cell(60, 10, str(row['Opis']) if str(row['Opis']) != 'nan' else "", 1)
+        pdf.cell(25, 8, bezpieczny_tekst(row['Data']), 1)
+        pdf.cell(45, 8, bezpieczny_tekst(row['Typ']), 1)
+        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1)
+        pdf.cell(15, 8, bezpieczny_tekst(row['Data zdarzenia']), 1)
+        pdf.cell(80, 8, bezpieczny_tekst(row['Opis'])[:45], 1)
         pdf.ln()
-    return pdf.output(dest='S')
+    return pdf.output(dest='S').encode('latin-1')
 
 def apply_row_styles(row):
     color = ''
@@ -105,47 +107,39 @@ if check_password():
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
 
-    # --- FINALNY DIALOG ZAMKNIĘCIA DNIA ---
-    @st.dialog("Zamknięcie Dnia")
+    # --- NOWA LOGIKA RESETU DNIA ---
+    @st.dialog("Pobierz raport i wyczyść")
     def final_reset_dialog():
         pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
         
-        # Przycisk 1: Pobieranie raportu
+        # 1. Pobieranie raportu
+        st.write("Krok 1: Pobierz raport PDF, aby odblokować czyszczenie.")
         if st.download_button("📄 1. POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True):
-            st.session_state.final_pdf_done = True
+            st.session_state.pdf_ready_to_reset = True
         
         st.divider()
 
-        # Przycisk Zeruj - Aktywny tylko po pobraniu PDF
-        if st.session_state.get('final_pdf_done', False):
-            if not st.session_state.get('show_final_confirm', False):
-                # KLIKNIĘCIE TUTAJ POWODUJE WYŚWIETLENIE "JESTEŚ PEWIEN?"
+        # 2. Aktywacja przycisku Reset
+        if st.session_state.get('pdf_ready_to_reset', False):
+            if not st.session_state.get('show_final_ask', False):
                 if st.button("🔥 2. ZERUJ HISTORIĘ I KONTENERY", type="primary", use_container_width=True):
-                    st.session_state.show_final_confirm = True
+                    st.session_state.show_final_ask = True
                     st.rerun()
             else:
-                # OSTATNI ETAP: POTWIERDZENIE "JESTEŚ PEWIEN?"
-                st.error("❗ JESTEŚ PEWIEN? Danych nie da się odzyskać!")
-                if st.button("TAK, JESTEM PEWIEN - ZERUJ", type="primary", use_container_width=True):
+                # 3. Ostateczne pytanie "Jesteś pewien?"
+                st.error("❗ JESTEŚ PEWIEN? To wyczyści wszystkie dane bezpowrotnie!")
+                col_a, col_b = st.columns(2)
+                if col_a.button("TAK, CZYŚĆ", type="primary", use_container_width=True):
                     st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                     save_data(st.session_state.data)
-                    st.session_state.final_pdf_done = False
-                    st.session_state.show_final_confirm = False
+                    st.session_state.pdf_ready_to_reset = False
+                    st.session_state.show_final_ask = False
                     st.rerun()
-                if st.button("ANULUJ", use_container_width=True):
-                    st.session_state.show_final_confirm = False
+                if col_b.button("ANULUJ", use_container_width=True):
+                    st.session_state.show_final_ask = False
                     st.rerun()
         else:
-            # PRZYCISK NIEAKTYWNY (SZARY) DO CZASU POBRANIA RAPORTU
-            st.button("2. ZERUJ HISTORIĘ I KONTENERY (Zablokowane)", disabled=True, use_container_width=True)
-
-    @st.dialog("Potwierdź usunięcie")
-    def confirm_delete_dialog(rows_to_del):
-        st.warning(f"Czy usunąć {len(rows_to_del)} zaznaczone wpisy?")
-        if st.button("TAK, USUŃ", type="primary", use_container_width=True):
-            st.session_state.data.loc[rows_to_del, 'Status'] = 'Usunięty'
-            save_data(st.session_state.data)
-            st.session_state.table_id = random.randint(0, 999); st.rerun()
+            st.button("2. ZERUJ HISTORIĘ (Zablokowane)", disabled=True, use_container_width=True)
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -182,7 +176,12 @@ if check_password():
         st.header("⚙️ Opcje")
         if selection.selection.rows:
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                confirm_delete_dialog(df_history.index[selection.selection.rows])
+                # Usunięcie zaznaczonych
+                idx_to_del = df_history.index[selection.selection.rows]
+                st.session_state.data.loc[idx_to_del, 'Status'] = 'Usunięty'
+                save_data(st.session_state.data)
+                st.session_state.table_id = random.randint(0, 999)
+                st.rerun()
         
         st.divider()
         if st.button("WYLOGUJ", use_container_width=True):
@@ -191,5 +190,6 @@ if check_password():
         if not df_active.empty:
             st.divider()
             if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True):
-                st.session_state.show_final_confirm = False # Reset flagi przy otwieraniu
+                st.session_state.pdf_ready_to_reset = False
+                st.session_state.show_final_ask = False
                 final_reset_dialog()
