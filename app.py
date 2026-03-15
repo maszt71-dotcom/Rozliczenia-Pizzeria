@@ -45,7 +45,6 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.set_fill_color(255, 243, 205); pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1, 0, 'L', True); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R', True)
     pdf.ln(10)
     pdf.set_font("Arial", "B", 9); pdf.set_fill_color(240, 240, 240)
-    # Szerokości w PDF dopasowane do tabeli w aplikacji
     headers = ["Data wpisu", "Typ", "Kwota", "Z dnia", "Opis"]
     cols = [30, 40, 30, 25, 65]
     for i, h in enumerate(headers): pdf.cell(cols[i], 10, h, 1, 0, 'C', True)
@@ -94,7 +93,7 @@ if check_password():
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         data_wybrana = st.date_input("Dzień zdarzenia", datetime.now())
         
-        # OGRANICZENIE ZNAKÓW DO 40 DLA ESTETYKI TABELI
+        # OGRANICZENIE ZNAKÓW DO 40 DLA ESTETYKI
         opis = st.text_input("Opis (max 40 znaków)", max_chars=40)
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
@@ -128,7 +127,7 @@ if check_password():
     
     if "table_id" not in st.session_state: st.session_state.table_id = 1
 
-    # ROZSZERZONA TABELA - KONFIGURACJA SZEROKOŚCI
+    # TABELA ROZCIĄGNIĘTA NA PEŁNĄ SZEROKOŚĆ KONTENERÓW
     selection = st.dataframe(
         df_history.style.apply(apply_row_styles, axis=1),
         use_container_width=True,
