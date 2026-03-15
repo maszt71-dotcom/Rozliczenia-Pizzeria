@@ -72,12 +72,17 @@ if check_password():
 
     st.title("🍕 Panel Rozliczeń")
 
+    # Kolory kafelków - Gotówka zmienia się na czerwoną przy minusie
+    color_gotowka = "#fff3cd" if s_gotowka >= 0 else "#f8d7da"
+    border_gotowka = "#ffc107" if s_gotowka >= 0 else "#dc3545"
+    text_gotowka = "#856404" if s_gotowka >= 0 else "#721c24"
+
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True): st.session_state.f = "Przychód ogólny"
     with c2:
-        st.markdown(f'<div style="background-color:#fff3cd; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #ffc107; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:#856404; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color:{color_gotowka}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {border_gotowka}; height: 100px;"><span style="color:{text_gotowka}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{text_gotowka}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b2", use_container_width=True): st.session_state.f = "Gotówka"
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -115,7 +120,6 @@ if check_password():
             pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%H%M')}.pdf", "application/pdf", use_container_width=True)
         
-        st.divider()
         if wybrane:
             orig_idx = df_display.index[wybrane[0]]
             if st.button("🗑️ USUŃ WPIS", type="primary", use_container_width=True):
@@ -136,6 +140,6 @@ if check_password():
                     save_data(st.session_state.data)
                     st.session_state.reset_check = False
                     st.rerun()
-                if st.button("🔙 ANULUJ RESET", use_container_width=True):
+                if st.button("🔙 ANULUJ", use_container_width=True):
                     st.session_state.reset_check = False
                     st.rerun()
