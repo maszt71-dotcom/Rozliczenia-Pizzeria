@@ -22,7 +22,7 @@ def check_password():
         return False
     return True
 
-# Funkcja PDF (Podsumowanie na górze)
+# Funkcja PDF
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -31,7 +31,7 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.ln(10)
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
+    pdf.cell(190, 10, "PODSUMOWANIE KONCOWE:", ln=True, align="L", fill=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
@@ -41,7 +41,7 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
     pdf.ln()
     pdf.set_font("Arial", "", 9)
-    for i, row in dataframe.iloc[::-1].iterrows():
+    for i, row in dataframe.iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         status = "[USUNIETO] " if row.get('Status') == 'Usunięty' else ""
@@ -63,17 +63,13 @@ if check_password():
     df_all = st.session_state.data
     if 'Status' not in df_all.columns: df_all['Status'] = 'Aktywny'
     
-    # Tylko aktywne do obliczeń
     df_active = df_all[df_all['Status'] == 'Aktywny'].copy()
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-    # OBLICZENIA LOGICZNE
+    # Obliczenia
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki']['Kwota'].sum()
-    suma_wplat_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum()
-    
-    # KLUCZOWA LINIA: Stan kasy to wpłaty minus wydatki
-    stan_gotowki = suma_wplat_gotowka - s_wydatki
+    s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
 
     st.title("🍕 Panel Rozliczeń")
 
@@ -82,7 +78,7 @@ if check_password():
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True): st.session_state.f = "Przychód ogólny"
     with c2:
-        st.markdown(f'<div style="background-color:#fff3cd; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #ffc107; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:#856404; font-size:16px;">{stan_gotowki:,.2f} zł</b></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color:#fff3cd; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #ffc107; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:#856404; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b2", use_container_width=True): st.session_state.f = "Gotówka"
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -93,8 +89,8 @@ if check_password():
     if "f" in st.session_state:
         typ = st.session_state.f
         with st.form("form_wpisu", clear_on_submit=True):
-            kwota = st.number_input(f"Wprowadź kwotę ({typ})", min_value=0.0, step=1.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
-            opis = st.text_input("Opis / Jaki wydatek?", key="o")
+            kwota = st.number_input(f"Wpisz kwotę ({typ})", min_value=0.0, step=1.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
+            opis = st.text_input("Opis / Wydatek", key="o")
             if st.form_submit_button("ZAPISZ", use_container_width=True):
                 if kwota:
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
@@ -106,26 +102,37 @@ if check_password():
                 del st.session_state.f
                 st.rerun()
 
-    st.subheader("📂 Historia (kliknij wiersz, aby wybrać)")
-    # Pokazujemy tylko aktywne
-    df_active_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
-    event = st.dataframe(df_active_display, use_container_width=True, hide_index=False, on_select="rerun", selection_mode="single-row")
-    
+    st.subheader("📂 Historia")
+    df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
+    event = st.dataframe(df_display, use_container_width=True, hide_index=False, on_select="rerun", selection_mode="single-row")
     wybrane = event.selection.rows
 
     with st.sidebar:
         st.header("⚙️ Opcje")
+        
+        # 1. USUWANIE POJEDYNCZEGO WPISU
         if wybrane:
-            # Pobieramy index z df_active_display, który pasuje do oryginalnego df_all
-            orig_idx = df_active_display.index[wybrane[0]]
+            orig_idx = df_display.index[wybrane[0]]
             if st.button("🗑️ USUŃ WPIS", type="primary", use_container_width=True):
                 st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
                 save_data(st.session_state.data)
                 st.rerun()
         
+        # 2. EKSPORT DO PDF/CSV
         if not df_all.empty:
-            pdf_data = create_pdf(df_all, s_ogolny, stan_gotowki, s_wydatki)
-            st.download_button("📄 Pobierz PDF (Pełny)", pdf_data, "raport.pdf", "application/pdf", use_container_width=True)
-        
-        csv = df_all.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Pobierz CSV (Pełny)", csv, "wszystkie_dane.csv", "text/csv", use_container_width=True)
+            pdf_data = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
+            st.download_button("📄 Pobierz Raport PDF", pdf_data, "raport.pdf", "application/pdf", use_container_width=True)
+            
+            st.divider()
+            
+            # 3. KASOWANIE WSZYSTKIEGO (RESET)
+            st.warning("Strefa Administratora")
+            if st.checkbox("Odblokuj Kasowanie Wszystkiego"):
+                if st.button("🔥 SKASUJ WSZYSTKO I ZERUJ", use_container_width=True):
+                    # Najpierw PDF jako zabezpieczenie
+                    st.toast("Generowanie raportu przed skasowaniem...")
+                    # Czyścimy bazę
+                    st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
+                    save_data(st.session_state.data)
+                    st.success("Baza wyzerowana!")
+                    st.rerun()
