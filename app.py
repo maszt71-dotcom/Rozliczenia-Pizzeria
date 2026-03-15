@@ -22,7 +22,7 @@ def check_password():
         return False
     return True
 
-# Funkcja PDF (uwzględnia usunięte wpisy)
+# Funkcja PDF (czysta i stabilna)
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -31,14 +31,14 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.ln(10)
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(190, 10, "PODSUMOWANIE AKTUALNEGO STANU:", ln=True, align="L", fill=True)
+    pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "GOTOWKA:", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "WYDATKI:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(35, 10, "Data", 1); pdf.cell(35, 10, "Typ", 1); pdf.cell(30, 10, "Kwota", 1); pdf.cell(90, 10, "Opis / Status", 1)
+    pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis / Status", 1)
     pdf.ln()
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iloc[::-1].iterrows():
@@ -46,9 +46,9 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
         o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         status = "[USUNIETO] " if row.get('Status') == 'Usunięty' else ""
         pdf.cell(35, 10, str(row['Data']), 1)
-        pdf.cell(35, 10, t, 1)
-        pdf.cell(30, 10, f"{row['Kwota']:.2f} zl", 1)
-        pdf.cell(90, 10, f"{status}{o}"[:50], 1)
+        pdf.cell(40, 10, t, 1)
+        pdf.cell(35, 10, f"{row['Kwota']:.2f} zl", 1)
+        pdf.cell(80, 10, f"{status}{o}"[:45], 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -89,22 +89,22 @@ if check_password():
 
     if "f" in st.session_state:
         typ = st.session_state.f
+        st.subheader(f"Wprowadź: {typ}")
         with st.form("form_wpisu", clear_on_submit=True):
-            kwota_raw = st.text_input(f"Wpisz kwotę ({typ})", placeholder="np. 50", key="k")
+            # UŻYWAMY number_input ale z "value=None", żeby było puste i nie wywalało błędów tekstowych
+            kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
             opis = st.text_input("Jaki wydatek?", key="o") if typ == "Wydatki" else ""
             c_s, c_c = st.columns(2)
             with c_s:
                 if st.form_submit_button("ZAPISZ", use_container_width=True):
-                    # POPRAWKA: Czyszczenie tekstu, aby akceptował liczby bez groszy
-                    txt = kwota_raw.replace(',', '.').strip()
-                    try:
-                        k = float(txt)
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': k, 'Opis': opis, 'Status': 'Aktywny'}
+                    if kwota is not None and kwota > 0:
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                         save_data(st.session_state.data)
                         del st.session_state.f
                         st.rerun()
-                    except: st.error("Wpisz poprawną kwotę (np. 50 lub 50.50)")
+                    else:
+                        st.error("Wpisz kwotę większą niż 0!")
             with c_c:
                 if st.form_submit_button("ANULUJ", use_container_width=True):
                     del st.session_state.f
