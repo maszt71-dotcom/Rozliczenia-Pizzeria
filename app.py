@@ -36,7 +36,6 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
     
-    # Funkcja usuwająca polskie znaki tylko do PDF (zapobiega UnicodeEncodeError)
     def b_t(tekst):
         return str(tekst).replace('ą','a').replace('ć','c').replace('ę','e').replace('ł','l').replace('ń','n').replace('ó','o').replace('ś','s').replace('ź','z').replace('ż','z').replace('Ą','A').replace('Ć','C').replace('Ę','E').replace('Ł','L').replace('Ń','N').replace('Ó','O').replace('Ś','S').replace('Ź','Z').replace('Ż','Z')
 
@@ -44,33 +43,26 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(190, 10, b_t(f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
     pdf.ln(10)
     
-    # --- KOLOROWE PODSUMOWANIE (IDENTYCZNE JAK KAFELKI) ---
     pdf.set_font("Courier", "B", 10)
-    
-    # Przychód (Zielony)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(95, 10, b_t("PRZYCHOD OGOLNY:"), 1, 0, 'L', True)
     pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, 1, 'R', True)
     
-    # Wydatki (Czerwony)
     pdf.set_fill_color(248, 215, 218)
     pdf.cell(95, 10, b_t("WYDATKI GOTOWKOWE:"), 1, 0, 'L', True)
     pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, 1, 'R', True)
     
-    # Gotówka (Żółty)
     pdf.set_fill_color(255, 243, 205)
     pdf.cell(95, 10, b_t("GOTOWKA (W KASIE):"), 1, 0, 'L', True)
     pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R', True)
     
     pdf.ln(10)
-    # Nagłówki tabeli głównej
     headers = ["Data", "Typ", "Kwota", "Z dnia", "Opis"]
     cols = [25, 45, 25, 15, 80]
     pdf.set_fill_color(240, 240, 240)
     for i, h in enumerate(headers): pdf.cell(cols[i], 8, b_t(h), 1, 0, 'C', True)
     pdf.ln()
     
-    # Dane tabeli
     pdf.set_font("Courier", "", 8)
     for _, row in dataframe.iterrows():
         pdf.cell(25, 8, b_t(row['Data']), 1)
@@ -82,7 +74,6 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
         
     return pdf.output(dest='S').encode('latin-1')
 
-# --- STYLE KOLORÓW DLA TABELI W APLIKACJI ---
 def apply_row_styles(row):
     color = ''
     if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda; color: #155724'
@@ -108,7 +99,6 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- LOGIKA DIALOGU RESETU ---
     @st.dialog("Pobierz raport i wyczyść")
     def final_reset_dialog():
         pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
@@ -122,8 +112,8 @@ if check_password():
         else:
             st.button("2. ZERUJ HISTORIĘ (Pobierz raport)", disabled=True, use_container_width=True)
         if st.session_state.get('pokaz_pytanie', False):
-            st.error("❗ JESTEŚ PEWIEN? Danych nie da się odzyskać!")
-            if st.button("✅ TAK, JESTEM PEWIEN - CZYŚĆ WSZYSTKO", type="primary", use_container_width=True):
+            st.error("❗ JESTEŚ PEWIEN?")
+            if st.button("✅ TAK, ZERUJ", type="primary", use_container_width=True):
                 st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                 save_data(st.session_state.data)
                 st.session_state.pdf_pobrany_final = False
@@ -133,8 +123,8 @@ if check_password():
                 st.session_state.pokaz_pytanie = False
                 st.rerun()
 
-    # --- KONTENERY DODAWANIA ---
     c1, c2, c3 = st.columns(3)
+    # [Logika kontenerów identyczna jak wcześniej...]
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True):
@@ -184,13 +174,21 @@ if check_password():
 
     with st.sidebar:
         st.header("⚙️ Opcje")
+        
+        # --- NOWY PRZYCISK ODŚWIEŻANIA ---
+        if st.button("🔄 ODŚWIEŻ DANE", use_container_width=True):
+            st.session_state.data = load_data()
+            st.rerun()
+            
+        st.divider()
         if sel.selection.rows:
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
                 st.session_state.data.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
                 save_data(st.session_state.data); st.session_state.table_id += 1; st.rerun()
-        st.divider()
+        
         if st.button("WYLOGUJ", use_container_width=True):
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
+            
         if not df_active.empty:
             pdf_s = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_s, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
