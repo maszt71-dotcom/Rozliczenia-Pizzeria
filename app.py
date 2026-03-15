@@ -84,40 +84,44 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- FINALNY RESET DNIA ---
-    @st.dialog("Zamkniecie dnia")
+    # --- NOWA LOGIKA OKNA RESETU ---
+    @st.dialog("Zamknięcie dnia")
     def final_reset_dialog():
-        # ETAP 2: Ostateczne pytanie
-        if st.session_state.get('asked_confirm_reset', False):
-            st.error("⚠️ JESTES PEWIEN?")
-            st.write("Wszystkie dane zostana usuniete bezpowrotnie!")
-            if st.button("✅ TAK, POTWIERDZAM", type="primary", use_container_width=True):
+        # ETAP 3: OSTATECZNE PYTANIE
+        if st.session_state.get('confirm_step_3', False):
+            st.error("❗ CZY NA PEWNO?")
+            st.write("Wszystkie dane z kontenerów i historia zostaną usunięte!")
+            if st.button("✅ TAK, JESTEM PEWIEN", type="primary", use_container_width=True):
                 st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                 save_data(st.session_state.data)
-                st.session_state.asked_confirm_reset = False
-                st.session_state.pdf_pobrany = False
+                # Resetujemy wszystkie flagi
+                st.session_state.pdf_pobrany_final = False
+                st.session_state.confirm_step_3 = False
                 st.rerun()
             if st.button("❌ ANULUJ", use_container_width=True):
-                st.session_state.asked_confirm_reset = False
+                st.session_state.confirm_step_3 = False
                 st.rerun()
-        
-        # ETAP 1: Pobieranie i Aktywacja
+
+        # ETAP 1 & 2: POBIERANIE I PRZYCISK ZEROWANIA
         else:
             pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.write("Krok 1: Pobierz raport PDF.")
+            
+            # Pobranie raportu ustawia flagę
             if st.download_button("📄 1. POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True):
-                st.session_state.pdf_pobrany = True
+                st.session_state.pdf_pobrany_final = True
             
             st.divider()
-            
-            if st.session_state.get('pdf_pobrany', False):
-                if st.button("🔥 2. ZERUJ HISTORIE I KONTENERY", type="primary", use_container_width=True):
-                    st.session_state.asked_confirm_reset = True
+
+            # Przycisk Zeruj uaktywnia się po pobraniu PDF
+            if st.session_state.get('pdf_pobrany_final', False):
+                if st.button("🔥 2. ZERUJ HISTORIĘ I KONTENERY", type="primary", use_container_width=True):
+                    st.session_state.confirm_step_3 = True
                     st.rerun()
             else:
-                st.button("2. ZERUJ HISTORIE (Najpierw pobierz raport)", disabled=True, use_container_width=True)
+                st.button("2. ZERUJ HISTORIĘ (Pobierz raport)", disabled=True, use_container_width=True)
 
-    # --- KONTENERY ---
+    # --- KONTENERY DODAWANIA ---
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -177,6 +181,6 @@ if check_password():
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_s, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
             st.divider()
             if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True):
-                st.session_state.pdf_pobrany = False
-                st.session_state.asked_confirm_reset = False
+                st.session_state.pdf_pobrany_final = False
+                st.session_state.confirm_step_3 = False
                 final_reset_dialog()
