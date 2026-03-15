@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import random
 from datetime import datetime
 from fpdf import FPDF
 from streamlit_cookies_manager import CookieManager
@@ -45,17 +44,18 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.set_fill_color(255, 243, 205); pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1, 0, 'L', True); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R', True)
     pdf.ln(10)
     pdf.set_font("Arial", "B", 9); pdf.set_fill_color(240, 240, 240)
-    headers = ["Data wpisu", "Typ", "Kwota", "Z dnia", "Opis"]
-    cols = [30, 35, 25, 20, 80]
+    headers = ["ID", "Data wpisu", "Typ", "Kwota", "Z dnia", "Opis"]
+    cols = [10, 30, 35, 25, 20, 70]
     for i, h in enumerate(headers): pdf.cell(cols[i], 10, h, 1, 0, 'C', True)
     pdf.ln()
     pdf.set_font("Arial", "", 8)
-    for _, row in dataframe.iterrows():
+    for idx, row in dataframe.iterrows():
+        pdf.cell(10, 10, str(idx), 1)
         pdf.cell(30, 10, str(row['Data']), 1)
         pdf.cell(35, 10, str(row['Typ']), 1)
         pdf.cell(25, 10, f"{row['Kwota']:.2f} zl", 1)
         pdf.cell(20, 10, str(row['Data zdarzenia']), 1)
-        pdf.cell(80, 10, str(row['Opis'])[:50] if str(row['Opis']) != "nan" else "", 1)
+        pdf.cell(70, 10, str(row['Opis'])[:45] if str(row['Opis']) != "nan" else "", 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -68,6 +68,8 @@ if check_password():
 
     if 'data' not in st.session_state: st.session_state.data = load_data()
     df_active = st.session_state.data[st.session_state.data['Status'] == 'Aktywny'].copy()
+    
+    # Wyświetlamy datę bez godziny w "Z dnia"
     df_active['Data zdarzenia'] = df_active['Data zdarzenia'].astype(str).str[:5]
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
@@ -90,18 +92,6 @@ if check_password():
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
 
-    @st.dialog("Pobierz i Resetuj")
-    def confirm_reset_dialog():
-        st.warning("⚠️ KROK 1: Pobierz raport PDF (inaczej dane przepadną!)")
-        pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
-        st.download_button("📥 POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
-        st.divider()
-        st.error("⚠️ KROK 2: Czy na pewno wyczyścić tabelę i kontenery?")
-        if st.button("🔥 TAK, POTWIERDZAM RESET", type="primary", use_container_width=True):
-            st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-            save_data(st.session_state.data)
-            st.rerun()
-
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -114,57 +104,59 @@ if check_password():
         if st.button("➕ Dodaj", key="b2", use_container_width=True): add_entry_dialog("Gotówka")
 
     st.divider(); st.subheader("📂 Historia")
-    
-    # --- LOGIKA WYBORU DO USUNIĘCIA (PTASZKI) ---
-    df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1].copy()
-    
-    # Renderowanie nagłówka ręcznie dla wyrównania
-    h_col = st.columns([0.5, 1.5, 2, 1.5, 1, 4])
-    h_col[0].write("**X**")
-    h_col[1].write("**Data wpisu**")
-    h_col[2].write("**Typ**")
-    h_col[3].write("**Kwota**")
-    h_col[4].write("**Z dnia**")
-    h_col[5].write("**Opis**")
 
-    to_delete = []
+    # --- TABELA HTML (IDEALNE ZAWJANIE I KOLORY) ---
+    table_style = """
+    <style>
+        .hist-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; table-layout: fixed; }
+        .hist-table th { background-color: #f0f2f6; padding: 10px; border: 1px solid #ddd; text-align: left; }
+        .hist-table td { padding: 10px; border: 1px solid #ddd; word-wrap: break-word; vertical-align: top; }
+        .row-p { background-color: #d4edda; } .row-w { background-color: #f8d7da; } .row-g { background-color: #fff3cd; }
+    </style>
+    """
+    
+    html_content = f"{table_style}<table class='hist-table'><tr><th style='width:30px'>ID</th><th style='width:80px'>Data wpisu</th><th style='width:110px'>Typ</th><th style='width:80px'>Kwota</th><th style='width:50px'>Z dnia</th><th>Opis</th></tr>"
+
+    # Wyświetlamy historię od najnowszych
+    df_h = df_active.iloc[::-1]
     for idx, row in df_h.iterrows():
-        # Kolor wiersza
-        color = "#d4edda" if row['Typ'] == 'Przychód ogólny' else "#f8d7da" if row['Typ'] == 'Wydatki gotówkowe' else "#fff3cd"
-        
-        with st.container():
-            r_col = st.columns([0.5, 1.5, 2, 1.5, 1, 4])
-            if r_col[0].checkbox("", key=f"chk_{idx}"):
-                to_delete.append(idx)
-            
-            # Każda komórka w stylizowanym divie (zapewnia tło i zawijanie)
-            for i, val in enumerate([row['Data'], row['Typ'], f"{row['Kwota']:.2f} zł", row['Data zdarzenia'], row['Opis']]):
-                r_col[i+1].markdown(f"""
-                    <div style="background-color:{color}; padding:8px; border:1px solid #ccc; 
-                    border-radius:4px; min-height:40px; word-wrap: break-word; font-size:13px;">
-                    {val if str(val) != 'nan' else ''}
-                    </div>
-                """, unsafe_allow_html=True)
+        cls = "row-p" if row['Typ']=="Przychód ogólny" else "row-w" if row['Typ']=="Wydatki gotówkowe" else "row-g"
+        desc = row['Opis'] if str(row['Opis']) != "nan" else ""
+        html_content += f"<tr class='{cls}'><td>{idx}</td><td>{row['Data']}</td><td>{row['Typ']}</td><td>{row['Kwota']:.2f} zł</td><td>{row['Data zdarzenia']}</td><td>{desc}</td></tr>"
+    
+    html_content += "</table>"
+    st.markdown(html_content, unsafe_allow_html=True)
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        if to_delete:
-            st.error(f"Zaznaczono wpisów: {len(to_delete)}")
-            @st.dialog("Jesteś pewien?")
-            def confirm_delete_sidebar(indices):
-                st.warning("Czy na pewno usunąć zaznaczone?")
-                if st.button("TAK, USUŃ", type="primary", use_container_width=True):
-                    st.session_state.data.loc[indices, 'Status'] = 'Usunięty'
-                    save_data(st.session_state.data)
-                    st.rerun()
-            
-            if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                confirm_delete_sidebar(to_delete)
         
+        # USUWANIE PO ID (najbezpieczniejsza metoda dla tabeli HTML)
+        st.subheader("🗑️ Usuwanie")
+        id_to_del = st.number_input("Podaj ID do usunięcia", min_value=0, max_value=2000, step=1, value=None)
+        if st.button("POTWIERDŹ USUNIĘCIE", type="primary", use_container_width=True):
+            if id_to_del in df_active.index:
+                st.session_state.data.at[id_to_del, 'Status'] = 'Usunięty'
+                save_data(st.session_state.data)
+                st.rerun()
+            else:
+                st.error("Nie ma wpisu o takim ID!")
+
         st.divider()
         if st.button("WYLOGUJ", use_container_width=True):
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
             
         if not df_active.empty:
+            pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+            st.download_button("📄 POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
+            
+            st.divider()
+            @st.dialog("Pobierz i Resetuj")
+            def reset_dialog():
+                st.warning("Najpierw pobierz PDF, potem resetuj!")
+                st.download_button("📥 POBIERZ RAPORT OSTATECZNY", pdf_raw, "Raport_Final.pdf", use_container_width=True)
+                if st.button("🔥 POTWIERDZAM RESET DNIA", type="primary", use_container_width=True):
+                    st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+                    save_data(st.session_state.data); st.rerun()
+            
             if st.button("💾 POBIERZ RAPORT I RESETUJ", use_container_width=True):
-                confirm_reset_dialog()
+                reset_dialog()
