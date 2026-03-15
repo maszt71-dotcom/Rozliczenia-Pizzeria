@@ -7,6 +7,7 @@ from fpdf import FPDF
 # --- KONFIGURACJA ---
 st.set_page_config(page_title="Pizzeria - Rozliczenia", layout="centered", page_icon="🍕")
 
+# Hasło dostępu
 MOJE_HASLO = "1234"
 
 def check_password():
@@ -22,7 +23,7 @@ def check_password():
         return False
     return True
 
-# Funkcja PDF
+# Funkcja PDF z datą w nagłówku
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -30,6 +31,7 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     data_gen = datetime.now().strftime("%d.%m.%Y %H:%M")
     pdf.cell(190, 10, f"RAPORT FINANSOWY PIZZERIA - {data_gen}", ln=True, align="C")
     pdf.ln(10)
+    
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
@@ -38,9 +40,11 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "SUMA WYDATKOW:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
+    
     pdf.set_font("Arial", "B", 10)
     pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
     pdf.ln()
+    
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
@@ -73,7 +77,7 @@ if check_password():
 
     st.title("🍕 Panel Rozliczeń")
 
-    # LOGIKA KOLORÓW
+    # LOGIKA KOLORÓW DLA GOTÓWKI
     if s_gotowka >= 0:
         bg_got, brd_got, txt_got = "#fff3cd", "#ffc107", "#856404"
     else:
@@ -86,7 +90,7 @@ if check_password():
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", value=None)
         opis = ""
         if typ == "Wydatki":
-            opis = st.text_input("Opis wydatku", placeholder="np. paliwo, zakupy...")
+            opis = st.text_input("Opis wydatku", placeholder="np. hurtownia, paliwo...")
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota:
@@ -102,13 +106,17 @@ if check_password():
     def delete_entry_dialog(row_idx):
         row = df_display.iloc[row_idx]
         st.warning(f"Czy na pewno chcesz usunąć: {row['Typ']} na kwotę {row['Kwota']:.2f} zł?")
-        if st.button("POTWIERDZAM: USUŃ", type="primary", use_container_width=True):
+        
+        if st.button("🔥 POTWIERDZAM: USUŃ WPIS", type="primary", use_container_width=True):
             orig_idx = df_display.index[row_idx]
             st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
             save_data(st.session_state.data)
             st.rerun()
+            
+        if st.button("🔙 NIE USUWAJ", use_container_width=True):
+            st.rerun()
 
-    # Kafelki
+    # Kafelki główne
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -124,6 +132,8 @@ if check_password():
 
     st.subheader("📂 Historia")
     df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
+    
+    # Wyświetlanie tabeli i obsługa zaznaczania
     event = st.dataframe(df_display, use_container_width=True, hide_index=False, on_select="rerun", selection_mode="single-row")
     
     if event.selection.rows:
@@ -131,12 +141,16 @@ if check_password():
 
     with st.sidebar:
         st.header("⚙️ Opcje")
+        
+        # Pobieranie PDF bez kasowania
         if not df_all.empty:
             pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
-            
+        
+        # Sekcja Resetu
+        if not df_all.empty:
             st.divider()
-            st.warning("ZAMKNIĘCIE DNIA")
+            st.warning("ZAMKNIĘCIE DNIA (ZEROWANIE)")
             pdf_res = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             if st.download_button("💾 POBIERZ I PRZYGOTUJ RESET", pdf_res, "ZAMKNIECIE.pdf", "application/pdf", use_container_width=True):
                 st.session_state.reset_check = True
