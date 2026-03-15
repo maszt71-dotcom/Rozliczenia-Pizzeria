@@ -7,7 +7,7 @@ from datetime import datetime
 st.set_page_config(page_title="Finanse Pizzeria", layout="centered")
 
 # TUTAJ WPISZ SWOJE HASŁO (zamiast 1234)
-MOJE_HASLO = "1234"
+MOJE_HASLO = "dup@"
 
 def check_password():
     if "password_correct" not in st.session_state:
