@@ -59,11 +59,12 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
+# --- STYLE KOLORÓW DLA TABELI ---
 def apply_row_styles(row):
     color = ''
-    if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda'
-    elif row['Typ'] == 'Wydatki gotówkowe': color = 'background-color: #f8d7da'
-    elif row['Typ'] == 'Gotówka': color = 'background-color: #fff3cd'
+    if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda; color: #155724'
+    elif row['Typ'] == 'Wydatki gotówkowe': color = 'background-color: #f8d7da; color: #721c24'
+    elif row['Typ'] == 'Gotówka': color = 'background-color: #fff3cd; color: #856404'
     return [color] * len(row)
 
 if check_password():
@@ -156,7 +157,22 @@ if check_password():
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     if "table_id" not in st.session_state: st.session_state.table_id = 1
-    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{st.session_state.table_id}", column_config={"Data": st.column_config.TextColumn("Data wpisu", width="small"), "Typ": st.column_config.TextColumn("Typ", width="medium"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"), "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"), "Opis": st.column_config.TextColumn("Opis", width="medium")})
+    
+    # Wyświetlanie tabeli z kolorami analogicznymi do kontenerów
+    sel = st.dataframe(
+        df_h.style.apply(apply_row_styles, axis=1), 
+        use_container_width=True, 
+        on_select="rerun", 
+        selection_mode="multi-row", 
+        key=f"t_{st.session_state.table_id}", 
+        column_config={
+            "Data": st.column_config.TextColumn("Data wpisu", width="small"), 
+            "Typ": st.column_config.TextColumn("Typ", width="medium"), 
+            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"), 
+            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"), 
+            "Opis": st.column_config.TextColumn("Opis", width="medium")
+        }
+    )
 
     with st.sidebar:
         st.header("⚙️ Opcje")
