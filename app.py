@@ -6,6 +6,7 @@ from datetime import datetime
 # --- KONFIGURACJA ---
 st.set_page_config(page_title="Pizzeria - Rozliczenia", layout="centered", page_icon="🍕")
 
+# Hasło
 MOJE_HASLO = "1234"
 
 def check_password():
@@ -51,22 +52,22 @@ if check_password():
 
     with col1:
         st.markdown(f"""<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;">
-        <span style="color:#155724; font-size:12px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br>
-        <b style="color:#155724; font-size:18px;">{suma_przychodu_ogolnego:,.2f} zł</b></div>""", unsafe_allow_html=True)
+        <span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br>
+        <b style="color:#155724; font-size:16px;">{suma_przychodu_ogolnego:,.2f} zł</b></div>""", unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="btn_ogolny", use_container_width=True):
             st.session_state.pokaz_formularz = "Przychód ogólny"
 
     with col2:
         st.markdown(f"""<div style="background-color:#fff3cd; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #ffc107; height: 100px;">
-        <span style="color:#856404; font-size:12px; font-weight:bold;">STAN KASY</span><br>
-        <b style="color:#856404; font-size:18px;">{stan_gotowki:,.2f} zł</b></div>""", unsafe_allow_html=True)
+        <span style="color:#856404; font-size:11px; font-weight:bold;">STAN KASY</span><br>
+        <b style="color:#856404; font-size:16px;">{stan_gotowki:,.2f} zł</b></div>""", unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="btn_gotowka", use_container_width=True):
             st.session_state.pokaz_formularz = "Gotówka"
 
     with col3:
         st.markdown(f"""<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;">
-        <span style="color:#721c24; font-size:12px; font-weight:bold;">WYDATKI</span><br>
-        <b style="color:#721c24; font-size:18px;">{suma_wydatkow:,.2f} zł</b></div>""", unsafe_allow_html=True)
+        <span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI</span><br>
+        <b style="color:#721c24; font-size:16px;">{suma_wydatkow:,.2f} zł</b></div>""", unsafe_allow_html=True)
         if st.button("➖ Dodaj", key="btn_wydatki", use_container_width=True):
             st.session_state.pokaz_formularz = "Wydatki"
 
@@ -75,31 +76,37 @@ if check_password():
     # --- DYNAMICZNY FORMULARZ ---
     if "pokaz_formularz" in st.session_state:
         typ_wpisu = st.session_state.pokaz_formularz
-        
-        # Nagłówek okna edycji
         st.subheader(f"Wprowadź: {typ_wpisu}")
         
         with st.form("formularz_wpisu", clear_on_submit=True):
-            kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f")
+            # Używamy text_input zamiast number_input, żeby pole było puste (placeholder)
+            kwota_raw = st.text_input("Podaj kwotę (zł)", placeholder="Wpisz kwotę...", key="input_kwota")
             
-            # Tylko dla wydatków pytamy o opis
             opis_final = ""
             if typ_wpisu == "Wydatki":
-                opis_final = st.text_input("Jaki wydatek?")
+                opis_final = st.text_input("Jaki wydatek?", key="input_opis")
             
             c_save, c_cancel = st.columns(2)
             with c_save:
                 if st.form_submit_button("ZAPISZ", use_container_width=True):
-                    nowy = {
-                        'Data': datetime.now().strftime("%d.%m %H:%M"), 
-                        'Typ': typ_wpisu, 
-                        'Kwota': kwota, 
-                        'Opis': opis_final
-                    }
-                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
-                    save_data(st.session_state.data)
-                    del st.session_state.pokaz_formularz
-                    st.rerun()
+                    # Próba zamiany tekstu na liczbę
+                    try:
+                        kwota_clean = float(kwota_raw.replace(',', '.'))
+                        if kwota_clean > 0:
+                            nowy = {
+                                'Data': datetime.now().strftime("%d.%m %H:%M"), 
+                                'Typ': typ_wpisu, 
+                                'Kwota': kwota_clean, 
+                                'Opis': opis_final
+                            }
+                            st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
+                            save_data(st.session_state.data)
+                            del st.session_state.pokaz_formularz
+                            st.rerun()
+                        else:
+                            st.error("Wpisz kwotę większą od zera!")
+                    except ValueError:
+                        st.error("Błędna kwota! Użyj tylko cyfr.")
             with c_cancel:
                 if st.form_submit_button("ANULUJ", use_container_width=True):
                     del st.session_state.pokaz_formularz
@@ -116,6 +123,3 @@ if check_password():
                 st.session_state.data = st.session_state.data.drop(st.session_state.data.index[-1])
                 save_data(st.session_state.data)
                 st.rerun()
-        
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Pobierz plik bazy (CSV)", csv, "finanse_pizzeria.csv", "text/csv")
