@@ -36,10 +36,8 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Courier", "B", 14)
-    
     def bezpieczny_tekst(tekst):
         return str(tekst).replace('ą','a').replace('ć','c').replace('ę','e').replace('ł','l').replace('ń','n').replace('ó','o').replace('ś','s').replace('ź','z').replace('ż','z').replace('Ą','A').replace('Ć','C').replace('Ę','E').replace('Ł','L').replace('Ń','N').replace('Ó','O').replace('Ś','S').replace('Ź','Z').replace('Ż','Z')
-
     pdf.cell(190, 10, bezpieczny_tekst(f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
     pdf.ln(10)
     pdf.set_font("Courier", "B", 10)
@@ -85,95 +83,102 @@ if check_password():
     s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
 
     st.title("🍕 Rozliczenie Pizzerii")
-    bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
-
-    @st.dialog("Dodaj nowy wpis")
-    def add_entry_dialog(typ):
-        st.write(f"Kategoria: **{typ}**")
-        kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
-        data_wybrana = st.date_input("Dzień zdarzenia", datetime.now())
-        opis = st.text_input("Opis (max 35 znaków)", max_chars=35) if typ == "Wydatki gotówkowe" else ""
-        if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
-            if kwota is not None and kwota > 0:
-                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny', 'Data zdarzenia': data_wybrana.strftime("%d.%m")}
-                st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
-                save_data(st.session_state.data); st.rerun()
-
-    # --- FINALNY RESET DNIA ---
-    @st.dialog("Pobierz raport i wyczyść")
+    
+    # --- LOGIKA DIALOGU RESETU ---
+    @st.dialog("Zamknięcie dnia")
     def final_reset_dialog():
-        pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+        # ETAP 2: Jesteś pewien? (pokazuje się tylko po kliknięciu Zeruj)
+        if st.session_state.get('asked_confirm_reset', False):
+            st.error("⚠️ JESTEŚ PEWIEN?")
+            st.write("Wszystkie dane z kontenerów i historia zostaną usunięte!")
+            if st.button("✅ TAK, POTWIERDZAM", type="primary", use_container_width=True):
+                st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+                save_data(st.session_state.data)
+                st.session_state.asked_confirm_reset = False
+                st.session_state.pdf_pobrany = False
+                st.rerun()
+            if st.button("❌ ANULUJ", use_container_width=True):
+                st.session_state.asked_confirm_reset = False
+                st.rerun()
         
-        # Jeśli nie jesteśmy na etapie ostatecznego pytania, pokaż kroki
-        if not st.session_state.get('asked_confirm_reset', False):
-            # KROK 1: POBIERANIE
+        # ETAP 1: Pobieranie i Aktywacja Zerowania
+        else:
+            pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+            st.write("Krok 1: Pobierz raport PDF.")
             if st.download_button("📄 1. POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True):
-                st.session_state.pdf_done_for_reset = True
+                st.session_state.pdf_pobrany = True
             
             st.divider()
-
-            # KROK 2: ZEROWANIE
-            if st.session_state.get('pdf_done_for_reset', False):
+            
+            if st.session_state.get('pdf_pobrany', False):
                 if st.button("🔥 2. ZERUJ HISTORIĘ I KONTENERY", type="primary", use_container_width=True):
                     st.session_state.asked_confirm_reset = True
                     st.rerun()
             else:
                 st.button("2. ZERUJ HISTORIĘ (Pobierz raport)", disabled=True, use_container_width=True)
-        
-        else:
-            # KROK 3: JESTEŚ PEWIEN? (Wyskakuje po kliknięciu Zeruj)
-            st.error("❗ JESTEŚ PEWIEN? Danych nie da się odzyskać!")
-            if st.button("TAK, JESTEM PEWIEN - ZERUJ", type="primary", use_container_width=True):
-                st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-                save_data(st.session_state.data)
-                st.session_state.pdf_done_for_reset = False
-                st.session_state.asked_confirm_reset = False
-                st.rerun()
-            if st.button("ANULUJ", use_container_width=True):
-                st.session_state.asked_confirm_reset = False
-                st.rerun()
 
-    @st.dialog("Potwierdź usunięcie")
-    def confirm_delete_dialog(rows_to_del):
-        st.warning(f"Czy usunąć {len(rows_to_del)} zaznaczone wpisy?")
-        if st.button("TAK, USUŃ", type="primary", use_container_width=True):
-            st.session_state.data.loc[rows_to_del, 'Status'] = 'Usunięty'
-            save_data(st.session_state.data)
-            st.session_state.table_id = random.randint(0, 999); st.rerun()
-
+    # --- KONTENERY ---
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj", key="b1", use_container_width=True): add_entry_dialog("Przychód ogólny")
+        if st.button("➕ Dodaj", key="b1", use_container_width=True):
+            @st.dialog("Dodaj Przychód")
+            def d1():
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+                da = st.date_input("Dzień", datetime.now())
+                if st.button("Zapisz"):
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+                    save_data(st.session_state.data); st.rerun()
+            d1()
+            
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➖ Dodaj", key="b3", use_container_width=True): add_entry_dialog("Wydatki gotówkowe")
+        if st.button("➖ Dodaj", key="b3", use_container_width=True):
+            @st.dialog("Dodaj Wydatek")
+            def d3():
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+                da = st.date_input("Dzień", datetime.now())
+                op = st.text_input("Opis (max 35)", max_chars=35)
+                if st.button("Zapisz"):
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+                    save_data(st.session_state.data); st.rerun()
+            d3()
+            
     with c2:
+        bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj", key="b2", use_container_width=True): add_entry_dialog("Gotówka")
+        if st.button("➕ Dodaj", key="b2", use_container_width=True):
+            @st.dialog("Dodaj Gotówkę")
+            def d2():
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+                da = st.date_input("Dzień", datetime.now())
+                if st.button("Zapisz"):
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Gotówka', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+                    save_data(st.session_state.data); st.rerun()
+            d2()
 
     st.divider(); st.subheader("📂 Historia")
-    df_history = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-    
+    df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     if "table_id" not in st.session_state: st.session_state.table_id = 1
-    selection = st.dataframe(df_history.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"historia_table_{st.session_state.table_id}", column_config={"Data": st.column_config.TextColumn("Data wpisu", width="small"), "Typ": st.column_config.TextColumn("Typ", width="medium"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"), "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"), "Opis": st.column_config.TextColumn("Opis", width="medium")})
+    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{st.session_state.table_id}", column_config={"Data": st.column_config.TextColumn("Data wpisu", width="small"), "Typ": st.column_config.TextColumn("Typ", width="medium"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"), "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"), "Opis": st.column_config.TextColumn("Opis", width="medium")})
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        if selection.selection.rows:
+        if sel.selection.rows:
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                confirm_delete_dialog(df_history.index[selection.selection.rows])
-        
+                st.session_state.data.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
+                save_data(st.session_state.data); st.session_state.table_id += 1; st.rerun()
         st.divider()
         if st.button("WYLOGUJ", use_container_width=True):
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
-            
         if not df_active.empty:
-            pdf_sidebar = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 POBIERZ RAPORT PDF", pdf_sidebar, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
-            
+            pdf_s = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+            st.download_button("📄 POBIERZ RAPORT PDF", pdf_s, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
             st.divider()
             if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True):
-                st.session_state.pdf_done_for_reset = False
+                st.session_state.pdf_pobrany = False
                 st.session_state.asked_confirm_reset = False
                 final_reset_dialog()
