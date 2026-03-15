@@ -31,7 +31,7 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.ln(10)
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(190, 10, "PODSUMOWANIE KONCOWE:", ln=True, align="L", fill=True)
+    pdf.cell(190, 10, "PODSUMOWANIE KONCOWE (ZAMKNIECIE):", ln=True, align="L", fill=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
@@ -44,11 +44,10 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     for i, row in dataframe.iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
-        status = "[USUNIETO] " if row.get('Status') == 'Usunięty' else ""
         pdf.cell(35, 10, str(row['Data']), 1)
         pdf.cell(40, 10, t, 1)
         pdf.cell(35, 10, f"{row['Kwota']:.2f} zl", 1)
-        pdf.cell(80, 10, f"{status}{o}"[:45], 1)
+        pdf.cell(80, 10, o[:45], 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -109,8 +108,6 @@ if check_password():
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        
-        # 1. USUWANIE POJEDYNCZEGO WPISU
         if wybrane:
             orig_idx = df_display.index[wybrane[0]]
             if st.button("🗑️ USUŃ WPIS", type="primary", use_container_width=True):
@@ -118,21 +115,19 @@ if check_password():
                 save_data(st.session_state.data)
                 st.rerun()
         
-        # 2. EKSPORT DO PDF/CSV
         if not df_all.empty:
-            pdf_data = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 Pobierz Raport PDF", pdf_data, "raport.pdf", "application/pdf", use_container_width=True)
-            
+            # PRZYCISK: ZAPISZ PDF I CZYŚĆ
             st.divider()
+            st.error("ZAMKNIĘCIE DNIA / RESET")
+            pdf_reset = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             
-            # 3. KASOWANIE WSZYSTKIEGO (RESET)
-            st.warning("Strefa Administratora")
-            if st.checkbox("Odblokuj Kasowanie Wszystkiego"):
-                if st.button("🔥 SKASUJ WSZYSTKO I ZERUJ", use_container_width=True):
-                    # Najpierw PDF jako zabezpieczenie
-                    st.toast("Generowanie raportu przed skasowaniem...")
-                    # Czyścimy bazę
+            # Ten przycisk pobiera plik, a po kliknięciu musisz nacisnąć "POTWIERDŹ RESET"
+            if st.download_button("💾 POBIERZ PDF I PRZYGOTUJ RESET", pdf_reset, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True):
+                st.session_state.gotowy_do_resetu = True
+            
+            if st.session_state.get('gotowy_do_resetu'):
+                if st.button("🔥 POTWIERDŹ: SKASUJ WSZYSTKO", use_container_width=True, type="primary"):
                     st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
                     save_data(st.session_state.data)
-                    st.success("Baza wyzerowana!")
+                    st.session_state.gotowy_do_resetu = False
                     st.rerun()
