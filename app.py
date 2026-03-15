@@ -4,7 +4,7 @@ import os
 import random
 from datetime import datetime
 from fpdf import FPDF
-from streamlit_cookies_manager import EncryptedCookiesManager
+from streamlit_cookies_manager import CookieManager
 
 # --- KONFIGURACJA ---
 st.set_page_config(
@@ -13,16 +13,16 @@ st.set_page_config(
     page_icon="favicon.png" 
 )
 
-# Manager ciasteczek (żeby hasło trzymało długo)
-cookies = EncryptedCookiesManager(password="pizzeria_sekret_123")
+# Manager ciasteczek (zapamiętywanie logowania)
+cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# Hasło dostępu
-MOJE_HASLO = "1234"
+# TWOJE NOWE HASŁO
+MOJE_HASLO = "dup@"
 
 def check_password():
-    # Sprawdź czy jest ciasteczko "zalogowany"
+    # Sprawdź czy ciasteczko "zalogowany" istnieje
     if cookies.get("is_logged") == "true":
         return True
 
@@ -170,5 +170,8 @@ if check_password():
                 if st.button("🔥 POTWIERDZAM: ZERUJ", type="primary", use_container_width=True):
                     st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
                     save_data(st.session_state.data)
+                    st.session_state.reset_check = False
+                    st.rerun()
+                if st.button("🔙 ANULUJ", use_container_width=True):
                     st.session_state.reset_check = False
                     st.rerun()
