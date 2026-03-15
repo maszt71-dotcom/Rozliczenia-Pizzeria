@@ -99,13 +99,23 @@ if check_password():
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
 
-    @st.dialog("Potwierdź usunięcie")
+    # --- OKNA DIALOGOWE POTWIERDZENIA ---
+    @st.dialog("Jesteś pewien?")
     def confirm_delete_dialog(rows_to_del):
         st.warning(f"Czy usunąć {len(rows_to_del)} zaznaczone wpisy?")
         if st.button("TAK, USUŃ", type="primary", use_container_width=True):
             st.session_state.data.loc[rows_to_del, 'Status'] = 'Usunięty'
             save_data(st.session_state.data)
             st.session_state.table_id = random.randint(0, 999)
+            st.rerun()
+        if st.button("ANULUJ", use_container_width=True): st.rerun()
+
+    @st.dialog("Potwierdź reset")
+    def confirm_reset_dialog():
+        st.error("UWAGA: To wyczyści wszystkie dane z tabeli i wyzeruje kontenery!")
+        if st.button("POTWIERDZAM: RESETUJ WSZYSTKO", type="primary", use_container_width=True):
+            st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+            save_data(st.session_state.data)
             st.rerun()
         if st.button("ANULUJ", use_container_width=True): st.rerun()
 
@@ -126,7 +136,7 @@ if check_password():
     
     if "table_id" not in st.session_state: st.session_state.table_id = 1
 
-    # WYŚWIETLANIE TABELI Z ZAWIDANIEM I KOLORAMI
+    # TABELA Z KOLORAMI I ZAWIDANIEM
     selection = st.dataframe(
         df_history.style.apply(apply_row_styles, axis=1),
         use_container_width=True,
@@ -137,7 +147,7 @@ if check_password():
             "Data": st.column_config.TextColumn("Data wpisu", width="small"),
             "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
             "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
-            "Opis": st.column_config.TextColumn("Opis", width="large") # Streamlit sam zawija w TextColumn przy dużej ilości tekstu
+            "Opis": st.column_config.TextColumn("Opis", width="large")
         }
     )
 
@@ -156,8 +166,6 @@ if check_password():
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
             
             st.divider()
+            # Połączona funkcja raport + reset z potwierdzeniem
             if st.button("💾 POBIERZ RAPORT I RESETUJ TABELĘ", use_container_width=True):
-                st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-                save_data(st.session_state.data)
-                st.success("Tabela wyczyszczona!")
-                st.rerun()
+                confirm_reset_dialog()
