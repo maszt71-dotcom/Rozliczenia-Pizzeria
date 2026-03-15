@@ -7,7 +7,6 @@ from fpdf import FPDF
 # --- KONFIGURACJA ---
 st.set_page_config(page_title="Pizzeria - Rozliczenia", layout="centered", page_icon="🍕")
 
-# Hasło dostępu
 MOJE_HASLO = "1234"
 
 def check_password():
@@ -23,45 +22,32 @@ def check_password():
         return False
     return True
 
-# Funkcja tworząca PDF z podsumowaniem na górze (bez nawiasów)
+# Funkcja PDF (czyste nazwy bez nawiasów)
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
     pdf.cell(190, 10, "RAPORT FINANSOWY PIZZERIA", ln=True, align="C")
     pdf.ln(10)
-    
-    # SEKCJA PODSUMOWANIA (BEZ NAWIASÓW)
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1)
-    pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
-    pdf.cell(95, 10, "GOTOWKA:", 1)
-    pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
-    pdf.cell(95, 10, "WYDATKI:", 1)
-    pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
+    pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
+    pdf.cell(95, 10, "GOTOWKA:", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
+    pdf.cell(95, 10, "WYDATKI:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
-    
-    # TABELA Z HISTORIĄ
     pdf.set_font("Arial", "B", 10)
-    pdf.set_fill_color(200, 200, 200)
-    pdf.cell(35, 10, "Data", 1, 0, 'C', True)
-    pdf.cell(40, 10, "Typ", 1, 0, 'C', True)
-    pdf.cell(35, 10, "Kwota", 1, 0, 'C', True)
-    pdf.cell(80, 10, "Opis / Wydatek", 1, 0, 'C', True)
+    pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
     pdf.ln()
-    
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iloc[::-1].iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
-        if o == "nan" or o == "": o = "-"
         pdf.cell(35, 10, str(row['Data']), 1)
         pdf.cell(40, 10, t, 1)
         pdf.cell(35, 10, f"{row['Kwota']:.2f} zl", 1)
-        pdf.cell(80, 10, o[:45], 1)
+        pdf.cell(80, 10, str(o)[:45], 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -98,50 +84,55 @@ if check_password():
 
     st.divider()
 
-    # Formularz wpisu
+    # Formularz
     if "f" in st.session_state:
         typ = st.session_state.f
         with st.form("form_wpisu", clear_on_submit=True):
-            kwota_raw = st.text_input(f"Wpisz kwotę ({typ})", placeholder="Wpisz tutaj...", key="k")
+            kwota_raw = st.text_input(f"Wpisz kwotę ({typ})", placeholder="Wpisz...", key="k")
             opis = st.text_input("Jaki wydatek?", key="o") if typ == "Wydatki" else ""
-            c_s, c_c = st.columns(2)
-            with c_s:
-                if st.form_submit_button("ZAPISZ", use_container_width=True):
-                    try:
-                        k = float(kwota_raw.replace(',', '.'))
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': k, 'Opis': opis}
-                        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
-                        save_data(st.session_state.data)
-                        del st.session_state.f
-                        st.rerun()
-                    except: st.error("Wpisz kwotę!")
-            with c_c:
-                if st.form_submit_button("ANULUJ", use_container_width=True):
+            if st.form_submit_button("ZAPISZ", use_container_width=True):
+                try:
+                    k = float(kwota_raw.replace(',', '.'))
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': k, 'Opis': opis}
+                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+                    save_data(st.session_state.data)
                     del st.session_state.f
                     st.rerun()
+                except: st.error("Błąd kwoty!")
+            if st.form_submit_button("ANULUJ", use_container_width=True):
+                del st.session_state.f
+                st.rerun()
 
-    st.subheader("📂 Historia")
-    st.dataframe(df.iloc[::-1], use_container_width=True, hide_index=True)
+    st.subheader("📂 Historia (kliknij wiersz, aby wybrać)")
+    
+    # Interaktywna tabela z wybieraniem wierszy
+    # dataframe.iloc[::-1] pokazuje najnowsze na górze, ale zachowujemy oryginalne ID do usuwania
+    event = st.dataframe(
+        df, 
+        use_container_width=True, 
+        hide_index=False, 
+        on_select="rerun", 
+        selection_mode="single-row"
+    )
 
-    # SEKCJA USUWANIA WPISU
-    if not df.empty:
-        st.divider()
-        st.subheader("🗑️ Usuń wpis")
-        opcje_usuwania = df.index.tolist()
-        wybrany_index = st.selectbox("Wybierz wpis do usunięcia (według kolejności)", 
-                                     options=opcje_usuwania[::-1], 
-                                     format_func=lambda x: f"{df.loc[x, 'Data']} | {df.loc[x, 'Typ']} | {df.loc[x, 'Kwota']} zł")
-        
-        if st.button("❌ USUŃ WYBRANY WPIS", use_container_width=True, type="primary"):
-            st.session_state.data = st.session_state.data.drop(wybrany_index).reset_index(drop=True)
-            save_data(st.session_state.data)
-            st.success("Wpis został usunięty!")
-            st.rerun()
+    wybrane_wiersze = event.selection.rows
 
     with st.sidebar:
         st.header("⚙️ Opcje")
+        
+        # Przycisk usuwania - aktywny tylko gdy coś zaznaczono
+        if wybrane_wiersze:
+            index_do_usuniecia = wybrane_wiersze[0]
+            if st.button("🗑️ USUŃ WPIS", type="primary", use_container_width=True):
+                st.session_state.data = st.session_state.data.drop(index_do_usuniecia).reset_index(drop=True)
+                save_data(st.session_state.data)
+                st.rerun()
+        else:
+            st.info("Zaznacz wiersz w tabeli, aby go usunąć.")
+
         if not df.empty:
             pdf_data = create_pdf(df, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 Pobierz Raport PDF", pdf_data, "raport_pizzeria.pdf", "application/pdf", use_container_width=True)
+            st.download_button("📄 Pobierz PDF", pdf_data, "raport.pdf", "application/pdf", use_container_width=True)
+        
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Pobierz CSV", csv, "dane.csv", "text/csv", use_container_width=True)
