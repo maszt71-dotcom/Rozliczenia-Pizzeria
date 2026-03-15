@@ -10,7 +10,7 @@ from streamlit_cookies_manager import CookieManager
 st.set_page_config(
     page_title="Rozliczenie Pizzerii", 
     layout="centered", 
-    page_icon="favicon.png" 
+    page_icon="🍕" 
 )
 
 cookies = CookieManager()
@@ -36,7 +36,7 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF (Z POPRAWIONĄ KOLEJNOŚCIĄ) ---
+# --- GENERATOR PDF ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -50,14 +50,13 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
     
     pdf.set_font("Arial", "", 11)
-    # Kolejność: Przychód ogólny -> Wydatki gotówkowe -> Gotówka w kasie
     pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "WYDATKI GOTOWKOWE:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
     
     pdf.ln(10)
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(30, 10, "Data wpisu", 1); pdf.cell(30, 10, "Typ", 1); pdf.cell(30, 10, "Kwota", 1); pdf.cell(30, 10, "Dzien", 1); pdf.cell(70, 10, "Opis", 1)
+    pdf.cell(30, 10, "Data wpisu", 1); pdf.cell(30, 10, "Typ", 1); pdf.cell(30, 10, "Kwota", 1); pdf.cell(30, 10, "Z dnia", 1); pdf.cell(70, 10, "Opis", 1)
     pdf.ln()
     
     pdf.set_font("Arial", "", 9)
@@ -97,7 +96,6 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
 
-    # Kolory kafelków
     if s_gotowka >= 0:
         bg_got, brd_got, txt_got = "#fff3cd", "#ffc107", "#856404"
     else:
@@ -126,7 +124,7 @@ if check_password():
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True): add_entry_dialog("Przychód ogólny")
-    with c3: # Zamienione miejscami dla logiki raportu
+    with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➖ Dodaj", key="b3", use_container_width=True): add_entry_dialog("Wydatki gotówkowe")
     with c2:
@@ -138,7 +136,6 @@ if check_password():
     
     df_display = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 
-    # --- KOLOROWANIE HISTORII ---
     def color_row(row):
         if row['Typ'] == 'Przychód ogólny': return ['background-color: #d4edda'] * len(row)
         if row['Typ'] == 'Wydatki gotówkowe': return ['background-color: #f8d7da'] * len(row)
@@ -159,10 +156,10 @@ if check_password():
         selection_mode="single-row",
         key=f"tabela_{st.session_state.table_id}",
         column_config={
-            "Data": st.column_config.TextColumn("Data wpisu", width="small"),
-            "Typ": st.column_config.TextColumn("Typ", width="small"),
-            "Kwota": st.column_config.NumberColumn("Kwota", width="small", format="%.2f zł"),
-            "Data zdarzenia": st.column_config.TextColumn("Dzień", width="small"),
+            "Data": st.column_config.TextColumn("Data wpisu", width="medium"),
+            "Typ": st.column_config.TextColumn("Typ", width="medium"),
+            "Kwota": st.column_config.NumberColumn("Kwota", width="medium", format="%.2f zł"),
+            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="medium"),
             "Opis": st.column_config.TextColumn("Opis", width="large"),
         }
     )
