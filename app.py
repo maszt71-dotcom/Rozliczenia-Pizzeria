@@ -18,11 +18,10 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# TWOJE NOWE HASŁO
+# HASŁO DOSTĘPU
 MOJE_HASLO = "dup@"
 
 def check_password():
-    # Sprawdź czy ciasteczko "zalogowany" istnieje
     if cookies.get("is_logged") == "true":
         return True
 
@@ -40,7 +39,7 @@ def check_password():
         return False
     return True
 
-# Funkcja PDF
+# Funkcja generowania PDF
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -73,9 +72,15 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
 
 if check_password():
     DB_FILE = 'finanse_data.csv'
+    
+    # Inicjalizacja stanu dla automatycznego czyszczenia pola kwoty
+    if 'temp_kwota' not in st.session_state:
+        st.session_state.temp_kwota = 0.0
+
     def load_data():
         if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
         return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
+    
     def save_data(df): df.to_csv(DB_FILE, index=False)
 
     if 'data' not in st.session_state: st.session_state.data = load_data()
@@ -85,28 +90,45 @@ if check_password():
     df_active = df_all[df_all['Status'] == 'Aktywny'].copy()
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
+    # Obliczenia sum
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
     s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
 
     st.title("🍕 Rozliczenie Pizzerii")
 
+    # Kolory kafli
     if s_gotowka >= 0:
         bg_got, brd_got, txt_got = "#fff3cd", "#ffc107", "#856404"
     else:
         bg_got, brd_got, txt_got = "#ff0000", "#8b0000", "#ffffff"
 
+    # OKNO DODAWANIA WPISU
     @st.dialog("Dodaj nowy wpis")
     def add_entry_dialog(typ):
         st.write(f"Kategoria: **{typ}**")
-        kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", value=None)
+        
+        # Pole kwoty powiązane z session_state (umożliwia zerowanie)
+        kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input")
+        
+        # NOWOŚĆ: Wybór daty
+        data_wybrana = st.date_input("Data przychodu", datetime.now())
+        
         opis = st.text_input("Opis wydatku") if typ == "Wydatki gotówkowe" else ""
+        
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
-            if kwota:
-                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
+            if kwota > 0:
+                # Formatowanie daty: wybrany dzień + aktualna godzina
+                czas_teraz = datetime.now().strftime("%H:%M")
+                data_finalna = f"{data_wybrana.strftime('%d.%m')} {czas_teraz}"
+                
+                n = {'Data': data_finalna, 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data)
-                st.rerun()
+                
+                st.rerun() # Przeładowanie czyści pola w dialogu
+            else:
+                st.error("Wpisz kwotę!")
 
     @st.dialog("Usuń wpis")
     def delete_entry_dialog(row_idx):
@@ -120,6 +142,7 @@ if check_password():
         if st.button("🔙 NIE USUWAJ", use_container_width=True):
             st.rerun()
 
+    # KAFELKI PODSUMOWANIA
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -152,6 +175,7 @@ if check_password():
         st.session_state.reset_table = True
         delete_entry_dialog(event.selection.rows[0])
 
+    # SIDEBAR - OPCJE I RAPORTY
     with st.sidebar:
         st.header("⚙️ Opcje")
         if st.button("WYLOGUJ", use_container_width=True):
@@ -163,9 +187,9 @@ if check_password():
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
             st.divider()
             st.warning("ZAMKNIĘCIE DNIA")
-            pdf_res = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
-            if st.download_button("💾 POBIERZ I PRZYGOTUJ RESET", pdf_res, "ZAMKNIECIE.pdf", "application/pdf", use_container_width=True):
+            if st.button("💾 PRZYGOTUJ RESET", use_container_width=True):
                 st.session_state.reset_check = True
+            
             if st.session_state.get('reset_check'):
                 if st.button("🔥 POTWIERDZAM: ZERUJ", type="primary", use_container_width=True):
                     st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
