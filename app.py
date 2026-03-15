@@ -73,10 +73,6 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
 if check_password():
     DB_FILE = 'finanse_data.csv'
     
-    # Inicjalizacja stanu dla automatycznego czyszczenia pola kwoty
-    if 'temp_kwota' not in st.session_state:
-        st.session_state.temp_kwota = 0.0
-
     def load_data():
         if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
         return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
@@ -108,17 +104,16 @@ if check_password():
     def add_entry_dialog(typ):
         st.write(f"Kategoria: **{typ}**")
         
-        # Pole kwoty powiązane z session_state (umożliwia zerowanie)
-        kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input")
+        # value=None sprawia, że pole jest puste na start
+        kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         
-        # NOWOŚĆ: Wybór daty
+        # Wybór daty
         data_wybrana = st.date_input("Data przychodu", datetime.now())
         
         opis = st.text_input("Opis wydatku") if typ == "Wydatki gotówkowe" else ""
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
-            if kwota > 0:
-                # Formatowanie daty: wybrany dzień + aktualna godzina
+            if kwota is not None and kwota > 0:
                 czas_teraz = datetime.now().strftime("%H:%M")
                 data_finalna = f"{data_wybrana.strftime('%d.%m')} {czas_teraz}"
                 
@@ -126,7 +121,7 @@ if check_password():
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data)
                 
-                st.rerun() # Przeładowanie czyści pola w dialogu
+                st.rerun()
             else:
                 st.error("Wpisz kwotę!")
 
@@ -175,7 +170,7 @@ if check_password():
         st.session_state.reset_table = True
         delete_entry_dialog(event.selection.rows[0])
 
-    # SIDEBAR - OPCJE I RAPORTY
+    # SIDEBAR
     with st.sidebar:
         st.header("⚙️ Opcje")
         if st.button("WYLOGUJ", use_container_width=True):
