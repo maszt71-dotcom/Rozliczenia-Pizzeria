@@ -84,13 +84,13 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- LOGIKA DIALOGU RESETU ---
-    @st.dialog("Zamknięcie dnia")
+    # --- FINALNY RESET DNIA ---
+    @st.dialog("Zamkniecie dnia")
     def final_reset_dialog():
-        # ETAP 2: Jesteś pewien? (pokazuje się tylko po kliknięciu Zeruj)
+        # ETAP 2: Ostateczne pytanie
         if st.session_state.get('asked_confirm_reset', False):
-            st.error("⚠️ JESTEŚ PEWIEN?")
-            st.write("Wszystkie dane z kontenerów i historia zostaną usunięte!")
+            st.error("⚠️ JESTES PEWIEN?")
+            st.write("Wszystkie dane zostana usuniete bezpowrotnie!")
             if st.button("✅ TAK, POTWIERDZAM", type="primary", use_container_width=True):
                 st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                 save_data(st.session_state.data)
@@ -101,7 +101,7 @@ if check_password():
                 st.session_state.asked_confirm_reset = False
                 st.rerun()
         
-        # ETAP 1: Pobieranie i Aktywacja Zerowania
+        # ETAP 1: Pobieranie i Aktywacja
         else:
             pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.write("Krok 1: Pobierz raport PDF.")
@@ -111,11 +111,11 @@ if check_password():
             st.divider()
             
             if st.session_state.get('pdf_pobrany', False):
-                if st.button("🔥 2. ZERUJ HISTORIĘ I KONTENERY", type="primary", use_container_width=True):
+                if st.button("🔥 2. ZERUJ HISTORIE I KONTENERY", type="primary", use_container_width=True):
                     st.session_state.asked_confirm_reset = True
                     st.rerun()
             else:
-                st.button("2. ZERUJ HISTORIĘ (Pobierz raport)", disabled=True, use_container_width=True)
+                st.button("2. ZERUJ HISTORIE (Najpierw pobierz raport)", disabled=True, use_container_width=True)
 
     # --- KONTENERY ---
     c1, c2, c3 = st.columns(3)
@@ -131,7 +131,6 @@ if check_password():
                     st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                     save_data(st.session_state.data); st.rerun()
             d1()
-            
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➖ Dodaj", key="b3", use_container_width=True):
@@ -145,7 +144,6 @@ if check_password():
                     st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                     save_data(st.session_state.data); st.rerun()
             d3()
-            
     with c2:
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
