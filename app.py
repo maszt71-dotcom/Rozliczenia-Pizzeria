@@ -99,37 +99,39 @@ if check_password():
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
 
-    # --- POPRAWIONA LOGIKA RESETU ---
+    # --- FINALNY RESET DNIA ---
     @st.dialog("Pobierz raport i wyczyść")
     def final_reset_dialog():
         pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
         
-        # 1. POBIERANIE
-        if st.download_button("📄 1. POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True):
-            st.session_state.pdf_done_for_reset = True
+        # Jeśli nie jesteśmy na etapie ostatecznego pytania, pokaż kroki
+        if not st.session_state.get('asked_confirm_reset', False):
+            # KROK 1: POBIERANIE
+            if st.download_button("📄 1. POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True):
+                st.session_state.pdf_done_for_reset = True
+            
+            st.divider()
 
-        st.divider()
-
-        # 2. PRZYCISK ZEROWANIA (Aktywny po pobraniu)
-        if st.session_state.get('pdf_done_for_reset', False):
-            if not st.session_state.get('asked_confirm_reset', False):
+            # KROK 2: ZEROWANIE
+            if st.session_state.get('pdf_done_for_reset', False):
                 if st.button("🔥 2. ZERUJ HISTORIĘ I KONTENERY", type="primary", use_container_width=True):
                     st.session_state.asked_confirm_reset = True
                     st.rerun()
             else:
-                # 3. OSTATECZNE PYTANIE
-                st.error("❗ CZY NA PEWNO? Danych nie da się odzyskać!")
-                if st.button("TAK, JESTEM PEWIEN - ZERUJ", type="primary", use_container_width=True):
-                    st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-                    save_data(st.session_state.data)
-                    st.session_state.pdf_done_for_reset = False
-                    st.session_state.asked_confirm_reset = False
-                    st.rerun()
-                if st.button("ANULUJ", use_container_width=True):
-                    st.session_state.asked_confirm_reset = False
-                    st.rerun()
+                st.button("2. ZERUJ HISTORIĘ (Pobierz raport)", disabled=True, use_container_width=True)
+        
         else:
-            st.button("2. ZERUJ HISTORIĘ (Zablokowane - pobierz raport)", disabled=True, use_container_width=True)
+            # KROK 3: JESTEŚ PEWIEN? (Wyskakuje po kliknięciu Zeruj)
+            st.error("❗ JESTEŚ PEWIEN? Danych nie da się odzyskać!")
+            if st.button("TAK, JESTEM PEWIEN - ZERUJ", type="primary", use_container_width=True):
+                st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+                save_data(st.session_state.data)
+                st.session_state.pdf_done_for_reset = False
+                st.session_state.asked_confirm_reset = False
+                st.rerun()
+            if st.button("ANULUJ", use_container_width=True):
+                st.session_state.asked_confirm_reset = False
+                st.rerun()
 
     @st.dialog("Potwierdź usunięcie")
     def confirm_delete_dialog(rows_to_del):
@@ -154,20 +156,7 @@ if check_password():
     df_history = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     
     if "table_id" not in st.session_state: st.session_state.table_id = 1
-    selection = st.dataframe(
-        df_history.style.apply(apply_row_styles, axis=1),
-        use_container_width=True,
-        on_select="rerun",
-        selection_mode="multi-row",
-        key=f"historia_table_{st.session_state.table_id}",
-        column_config={
-            "Data": st.column_config.TextColumn("Data wpisu", width="small"),
-            "Typ": st.column_config.TextColumn("Typ", width="medium"),
-            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
-            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
-            "Opis": st.column_config.TextColumn("Opis", width="medium")
-        }
-    )
+    selection = st.dataframe(df_history.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"historia_table_{st.session_state.table_id}", column_config={"Data": st.column_config.TextColumn("Data wpisu", width="small"), "Typ": st.column_config.TextColumn("Typ", width="medium"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"), "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"), "Opis": st.column_config.TextColumn("Opis", width="medium")})
 
     with st.sidebar:
         st.header("⚙️ Opcje")
@@ -180,12 +169,10 @@ if check_password():
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
             
         if not df_active.empty:
-            # NOWY KAFFEL: SZYBKI POBIERZ RAPORT
-            pdf_for_sidebar = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 POBIERZ RAPORT PDF", pdf_for_sidebar, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
+            pdf_sidebar = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+            st.download_button("📄 POBIERZ RAPORT PDF", pdf_sidebar, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
             
             st.divider()
-            # PRZYCISK RESETU
             if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True):
                 st.session_state.pdf_done_for_reset = False
                 st.session_state.asked_confirm_reset = False
