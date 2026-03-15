@@ -22,12 +22,15 @@ def check_password():
         return False
     return True
 
+# Funkcja PDF z DATĄ W NAGŁÓWKU
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 16)
-    pdf.cell(190, 10, "RAPORT FINANSOWY PIZZERIA", ln=True, align="C")
+    data_gen = datetime.now().strftime("%d.%m.%Y %H:%M")
+    pdf.cell(190, 10, f"RAPORT FINANSOWY PIZZERIA - {data_gen}", ln=True, align="C")
     pdf.ln(10)
+    
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
@@ -36,9 +39,11 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "SUMA WYDATKOW:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
+    
     pdf.set_font("Arial", "B", 10)
     pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
     pdf.ln()
+    
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
@@ -73,13 +78,9 @@ if check_password():
 
     # LOGIKA KOLORÓW DLA GOTÓWKI
     if s_gotowka >= 0:
-        bg_gotowka = "#fff3cd"    # Żółty
-        brd_gotowka = "#ffc107"   # Złoty
-        txt_gotowka = "#856404"   # Ciemny brąz
+        bg_gotowka, brd_gotowka, txt_gotowka = "#fff3cd", "#ffc107", "#856404"
     else:
-        bg_gotowka = "#ff0000"    # OSTRY CZERWONY
-        brd_gotowka = "#8b0000"   # Bordowy brzeg
-        txt_gotowka = "#ffffff"   # BIAŁY TEKST (żeby był czytelny)
+        bg_gotowka, brd_gotowka, txt_gotowka = "#ff0000", "#8b0000", "#ffffff"
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -94,14 +95,15 @@ if check_password():
 
     st.divider()
 
+    # Formularz
     if "f" in st.session_state:
         typ = st.session_state.f
         with st.form("form_wpisu", clear_on_submit=True):
-            kwota = st.number_input(f"Dodaj: {typ}", min_value=0.0, step=1.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
+            kwota = st.number_input(f"Dodaj: {typ}", min_value=0.0, step=1.0, format="%.2f", value=None)
             opis = st.text_input("Na co wydano?", key="o") if typ == "Wydatki" else ""
             cz, ca = st.columns(2)
             with cz:
-                if st.form_submit_button("ZAPISZ", use_container_width=True):
+                if st.form_submit_button("ZAPISZ"):
                     if kwota:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
@@ -109,7 +111,7 @@ if check_password():
                         del st.session_state.f
                         st.rerun()
             with ca:
-                if st.form_submit_button("ANULUJ", use_container_width=True):
+                if st.form_submit_button("ANULUJ"):
                     del st.session_state.f
                     st.rerun()
 
@@ -122,7 +124,7 @@ if check_password():
         st.header("⚙️ Opcje")
         if not df_all.empty:
             pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%H%M')}.pdf", "application/pdf", use_container_width=True)
+            st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
         
         if wybrane:
             orig_idx = df_display.index[wybrane[0]]
@@ -133,7 +135,7 @@ if check_password():
 
         if not df_all.empty:
             st.divider()
-            st.warning("ZAMKNIĘCIE (ZEROWANIE)")
+            st.warning("ZAMKNIĘCIE DNIA")
             pdf_res = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             if st.download_button("💾 POBIERZ I PRZYGOTUJ RESET", pdf_res, "ZAMKNIECIE.pdf", "application/pdf", use_container_width=True):
                 st.session_state.reset_check = True
