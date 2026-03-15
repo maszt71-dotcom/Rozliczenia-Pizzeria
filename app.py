@@ -59,12 +59,13 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
-# --- FUNKCJA KOLOROWANIA TABELI ---
-def color_rows(row):
-    if row['Typ'] == 'Przychód ogólny': return ['background-color: #d4edda'] * len(row)
-    if row['Typ'] == 'Wydatki gotówkowe': return ['background-color: #f8d7da'] * len(row)
-    if row['Typ'] == 'Gotówka': return ['background-color: #fff3cd'] * len(row)
-    return [''] * len(row)
+# --- STYLE KOLORÓW ---
+def apply_row_styles(row):
+    color = ''
+    if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda'
+    elif row['Typ'] == 'Wydatki gotówkowe': color = 'background-color: #f8d7da'
+    elif row['Typ'] == 'Gotówka': color = 'background-color: #fff3cd'
+    return [color] * len(row)
 
 if check_password():
     DB_FILE = 'finanse_data.csv'
@@ -98,17 +99,17 @@ if check_password():
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
 
-    # --- OKNO DIALOGOWE POTWIERDZENIA USUNIĘCIA ---
-    @st.dialog("Jesteś pewien?")
-    def confirm_delete_dialog(rows_to_del_indices):
-        st.warning(f"Czy na pewno chcesz usunąć {len(rows_to_del_indices)} zaznaczone wpisy?")
+    @st.dialog("Potwierdź usunięcie")
+    def confirm_delete_dialog(rows_to_del):
+        st.warning(f"Czy usunąć {len(rows_to_del)} zaznaczone wpisy?")
         if st.button("TAK, USUŃ", type="primary", use_container_width=True):
-            st.session_state.data.loc[rows_to_del_indices, 'Status'] = 'Usunięty'
+            st.session_state.data.loc[rows_to_del, 'Status'] = 'Usunięty'
             save_data(st.session_state.data)
-            st.session_state.table_id = random.randint(0, 1000)
+            st.session_state.table_id = random.randint(0, 999)
             st.rerun()
         if st.button("ANULUJ", use_container_width=True): st.rerun()
 
+    # Kafelki
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -121,21 +122,22 @@ if check_password():
         if st.button("➕ Dodaj", key="b2", use_container_width=True): add_entry_dialog("Gotówka")
 
     st.divider(); st.subheader("📂 Historia")
-    df_display = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
+    df_history = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     
     if "table_id" not in st.session_state: st.session_state.table_id = 1
-    
-    # Wyświetlanie tabeli z kolorowaniem komórek
+
+    # WYŚWIETLANIE TABELI Z ZAWIDANIEM I KOLORAMI
     selection = st.dataframe(
-        df_display.style.apply(color_rows, axis=1),
+        df_history.style.apply(apply_row_styles, axis=1),
         use_container_width=True,
         on_select="rerun",
         selection_mode="multi-row",
         key=f"historia_table_{st.session_state.table_id}",
         column_config={
-            "Data": st.column_config.TextColumn("Data wpisu"),
-            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
-            "Data zdarzenia": st.column_config.TextColumn("Z dnia"),
+            "Data": st.column_config.TextColumn("Data wpisu", width="small"),
+            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
+            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
+            "Opis": st.column_config.TextColumn("Opis", width="large") # Streamlit sam zawija w TextColumn przy dużej ilości tekstu
         }
     )
 
@@ -143,20 +145,19 @@ if check_password():
         st.header("⚙️ Opcje")
         if selection.selection.rows:
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                confirm_delete_dialog(df_display.index[selection.selection.rows])
+                confirm_delete_dialog(df_history.index[selection.selection.rows])
         
         st.divider()
         if st.button("WYLOGUJ", use_container_width=True):
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
             
         if not df_active.empty:
-            pdf_data = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 POBIERZ RAPORT PDF", pdf_data, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
+            pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+            st.download_button("📄 POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
             
             st.divider()
             if st.button("💾 POBIERZ RAPORT I RESETUJ TABELĘ", use_container_width=True):
-                # Zapisujemy kopię PDF przed resetem
                 st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                 save_data(st.session_state.data)
-                st.success("Tabela i kontenery wyzerowane!")
+                st.success("Tabela wyczyszczona!")
                 st.rerun()
