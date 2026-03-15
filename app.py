@@ -86,6 +86,9 @@ if check_password():
     if 'data' not in st.session_state: st.session_state.data = load_data()
     df_all = st.session_state.data
     df_active = df_all[df_all['Status'] == 'Aktywny'].copy()
+    
+    # Naprawa widoku dla starych danych (ucinanie godziny w "Z dnia")
+    df_active['Data zdarzenia'] = df_active['Data zdarzenia'].astype(str).str[:5]
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
@@ -103,15 +106,10 @@ if check_password():
         opis = st.text_input("Opis")
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
-                # KONKRETNA POPRAWKA: Formatujemy datę zdarzenia BEZ godziny
-                data_bez_godziny = data_wybrana.strftime("%d.%m")
                 n = {
                     'Data': datetime.now().strftime("%d.%m %H:%M"), 
-                    'Typ': typ, 
-                    'Kwota': float(kwota), 
-                    'Opis': opis, 
-                    'Status': 'Aktywny', 
-                    'Data zdarzenia': data_bez_godziny
+                    'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny', 
+                    'Data zdarzenia': data_wybrana.strftime("%d.%m")
                 }
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
