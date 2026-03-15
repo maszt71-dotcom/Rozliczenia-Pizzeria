@@ -35,34 +35,27 @@ def check_password():
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
-    
     def b_t(tekst):
         return str(tekst).replace('ą','a').replace('ć','c').replace('ę','e').replace('ł','l').replace('ń','n').replace('ó','o').replace('ś','s').replace('ź','z').replace('ż','z').replace('Ą','A').replace('Ć','C').replace('Ę','E').replace('Ł','L').replace('Ń','N').replace('Ó','O').replace('Ś','S').replace('Ź','Z').replace('Ż','Z')
-
     pdf.set_font("Courier", "B", 14)
     pdf.cell(190, 10, b_t(f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
     pdf.ln(10)
-    
     pdf.set_font("Courier", "B", 10)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(95, 10, b_t("PRZYCHOD OGOLNY:"), 1, 0, 'L', True)
     pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, 1, 'R', True)
-    
     pdf.set_fill_color(248, 215, 218)
     pdf.cell(95, 10, b_t("WYDATKI GOTOWKOWE:"), 1, 0, 'L', True)
     pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, 1, 'R', True)
-    
     pdf.set_fill_color(255, 243, 205)
     pdf.cell(95, 10, b_t("GOTOWKA (W KASIE):"), 1, 0, 'L', True)
     pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R', True)
-    
     pdf.ln(10)
     headers = ["Data", "Typ", "Kwota", "Z dnia", "Opis"]
     cols = [25, 45, 25, 15, 80]
     pdf.set_fill_color(240, 240, 240)
     for i, h in enumerate(headers): pdf.cell(cols[i], 8, b_t(h), 1, 0, 'C', True)
     pdf.ln()
-    
     pdf.set_font("Courier", "", 8)
     for _, row in dataframe.iterrows():
         pdf.cell(25, 8, b_t(row['Data']), 1)
@@ -71,7 +64,6 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
         pdf.cell(15, 8, b_t(row['Data zdarzenia']), 1)
         pdf.cell(80, 8, b_t(row['Opis'])[:45], 1)
         pdf.ln()
-        
     return pdf.output(dest='S').encode('latin-1')
 
 def apply_row_styles(row):
@@ -99,6 +91,7 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
+    # --- LOGIKA DIALOGU RESETU ---
     @st.dialog("Pobierz raport i wyczyść")
     def final_reset_dialog():
         pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
@@ -123,8 +116,19 @@ if check_password():
                 st.session_state.pokaz_pytanie = False
                 st.rerun()
 
+    # --- DIALOG POTWIERDZENIA USUNIĘCIA WPISU ---
+    @st.dialog("Jesteś pewien?")
+    def confirm_delete_dialog(rows_indices):
+        st.warning(f"Czy na pewno chcesz usunąć zaznaczone wpisy ({len(rows_indices)} szt.)?")
+        if st.button("✅ TAK, USUŃ", type="primary", use_container_width=True):
+            st.session_state.data.loc[rows_indices, 'Status'] = 'Usunięty'
+            save_data(st.session_state.data)
+            st.session_state.table_id = random.randint(0, 999)
+            st.rerun()
+        if st.button("❌ ANULUJ", use_container_width=True):
+            st.rerun()
+
     c1, c2, c3 = st.columns(3)
-    # [Logika kontenerów identyczna jak wcześniej...]
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True):
@@ -174,17 +178,13 @@ if check_password():
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        
-        # --- NOWY PRZYCISK ODŚWIEŻANIA ---
         if st.button("🔄 ODŚWIEŻ DANE", use_container_width=True):
             st.session_state.data = load_data()
             st.rerun()
-            
         st.divider()
         if sel.selection.rows:
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                st.session_state.data.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
-                save_data(st.session_state.data); st.session_state.table_id += 1; st.rerun()
+                confirm_delete_dialog(df_h.index[sel.selection.rows])
         
         if st.button("WYLOGUJ", use_container_width=True):
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
