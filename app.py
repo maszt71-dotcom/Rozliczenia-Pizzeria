@@ -138,23 +138,30 @@ if check_password():
     st.divider()
     st.subheader("📂 Historia")
     
-    # Wyświetlenie tabeli z nową kolumną na końcu
-    df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis', 'Data zdarzenia']].iloc[::-1]
+    # Ustalona kolejność kolumn
+    df_display = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     
     if "table_id" not in st.session_state or st.session_state.get('reset_table', False):
         st.session_state.table_id = random.randint(0, 100000)
         st.session_state.reset_table = False
 
+    # Konfiguracja kolumn: szerokości i nazwy
     event = st.dataframe(
         df_display, 
         use_container_width=True, 
-        hide_index=False, 
+        hide_index=True, 
         on_select="rerun", 
         selection_mode="single-row",
-        key=f"tabela_{st.session_state.table_id}"
+        key=f"tabela_{st.session_state.table_id}",
+        column_config={
+            "Data": st.column_config.TextColumn("Data", width="small"),
+            "Typ": st.column_config.TextColumn("Typ", width="small"),
+            "Kwota": st.column_config.NumberColumn("Kwota", width="small", format="%.2f zł"),
+            "Data zdarzenia": st.column_config.TextColumn("Dzień utargu", width="small"),
+            "Opis": st.column_config.TextColumn("Opis", width="large"),
+        }
     )
     
-    # Logika usuwania (została zachowana)
     if event.selection.rows:
         row_idx = event.selection.rows[0]
         row = df_display.iloc[row_idx]
