@@ -26,7 +26,7 @@ def check_password():
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", "B", 16)
+    pdf.set_font("Arial", "B", 14)
     data_gen = datetime.now().strftime("%d.%m.%Y %H:%M")
     pdf.cell(190, 10, f"RAPORT FINANSOWY PIZZERIA - {data_gen}", ln=True, align="C")
     pdf.ln(10)
@@ -76,7 +76,7 @@ if check_password():
 
     st.title("🍕 Panel Rozliczeń")
 
-    # LOGIKA KOLORÓW DLA GOTÓWKI
+    # Kolory kafelka Gotówka
     if s_gotowka >= 0:
         bg_gotowka, brd_gotowka, txt_gotowka = "#fff3cd", "#ffc107", "#856404"
     else:
@@ -95,7 +95,6 @@ if check_password():
 
     st.divider()
 
-    # Formularz
     if "f" in st.session_state:
         typ = st.session_state.f
         with st.form("form_wpisu", clear_on_submit=True):
@@ -103,7 +102,7 @@ if check_password():
             opis = st.text_input("Na co wydano?", key="o") if typ == "Wydatki" else ""
             cz, ca = st.columns(2)
             with cz:
-                if st.form_submit_button("ZAPISZ"):
+                if st.form_submit_button("ZAPISZ", use_container_width=True):
                     if kwota:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
@@ -111,7 +110,7 @@ if check_password():
                         del st.session_state.f
                         st.rerun()
             with ca:
-                if st.form_submit_button("ANULUJ"):
+                if st.form_submit_button("ANULUJ", use_container_width=True):
                     del st.session_state.f
                     st.rerun()
 
@@ -122,10 +121,15 @@ if check_password():
 
     with st.sidebar:
         st.header("⚙️ Opcje")
+        
+        # 1. Pobieranie raportu (zostaje jak było)
         if not df_all.empty:
             pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
         
+        st.divider()
+        
+        # 2. Usuwanie (zostaje jak było)
         if wybrane:
             orig_idx = df_display.index[wybrane[0]]
             if st.button("🗑️ USUŃ WPIS", type="primary", use_container_width=True):
@@ -133,6 +137,7 @@ if check_password():
                 save_data(st.session_state.data)
                 st.rerun()
 
+        # 3. Sekcja resetu (zostaje jak było z funkcją anuluj)
         if not df_all.empty:
             st.divider()
             st.warning("ZAMKNIĘCIE DNIA")
@@ -146,6 +151,6 @@ if check_password():
                     save_data(st.session_state.data)
                     st.session_state.reset_check = False
                     st.rerun()
-                if st.button("🔙 ANULUJ", use_container_width=True):
+                if st.button("🔙 ANULUJ RESET", use_container_width=True):
                     st.session_state.reset_check = False
                     st.rerun()
