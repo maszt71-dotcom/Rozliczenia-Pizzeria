@@ -31,31 +31,67 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF (BEZPIECZNE ZNAKI) ---
+# --- GENERATOR PDF (NAPRAWIONE POLSKIE ZNAKI + KOLORY) ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
+    # Używamy wbudowanej czcionki Courier
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Courier", "B", 14)
+    
+    # Funkcja do usuwania polskich znaków (aby uniknąć błędu)
     def bezpieczny_tekst(tekst):
         return str(tekst).replace('ą','a').replace('ć','c').replace('ę','e').replace('ł','l').replace('ń','n').replace('ó','o').replace('ś','s').replace('ź','z').replace('ż','z').replace('Ą','A').replace('Ć','C').replace('Ę','E').replace('Ł','L').replace('Ń','N').replace('Ó','O').replace('Ś','S').replace('Ź','Z').replace('Ż','Z')
+
+    # Tytuł
+    pdf.set_font("Courier", "B", 14)
     pdf.cell(190, 10, bezpieczny_tekst(f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
     pdf.ln(10)
+    
+    # --- KOLOROWE PODSUMOWANIE ---
     pdf.set_font("Courier", "B", 10)
-    pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, 1, 'R')
-    pdf.cell(95, 10, "WYDATKI GOTOWKOWE:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, 1, 'R')
-    pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R')
+    
+    # Przychód (Zielony jak kontener)
+    pdf.set_fill_color(212, 237, 218) # Tło
+    pdf.set_text_color(21, 87, 36)    # Ciemnozielony tekst
+    pdf.cell(95, 10, "PRZYCHÓD OGÓLNY:", 1, 0, 'L', True)
+    pdf.cell(95, 10, f"{s_ogolny:.2f} zł", 1, 1, 'R', True)
+    
+    # Wydatki (Czerwony jak kontener)
+    pdf.set_fill_color(248, 215, 218) # Tło
+    pdf.set_text_color(114, 28, 36)   # Ciemnoczerwony tekst
+    pdf.cell(95, 10, "WYDATKI GOTÓWKOWE:", 1, 0, 'L', True)
+    pdf.cell(95, 10, f"{s_wydatki:.2f} zł", 1, 1, 'R', True)
+    
+    # Gotówka (Żółty jak kontener)
+    pdf.set_fill_color(255, 243, 205) # Tło
+    pdf.set_text_color(133, 100, 4)   # Ciemnożółty tekst
+    pdf.cell(95, 10, "GOTÓWKA (W KASIE):", 1, 0, 'L', True)
+    pdf.cell(95, 10, f"{s_gotowka:.2f} zł", 1, 1, 'R', True)
+    
+    # Reset koloru tekstu dla głównej tabeli
+    pdf.set_text_color(0, 0, 0)
     pdf.ln(10)
+    
+    # Nagłówki tabeli
     headers = ["Data", "Typ", "Kwota", "Z dnia", "Opis"]
     cols = [25, 45, 25, 15, 80]
-    for i, h in enumerate(headers): pdf.cell(cols[i], 8, h, 1)
+    # Szare tło dla nagłówków
+    pdf.set_fill_color(240, 240, 240)
+    for i, h in enumerate(headers): pdf.cell(cols[i], 8, bezpieczny_tekst(h), 1, 0, 'C', True)
     pdf.ln()
+    
+    # Dane tabeli (BEZ kolorów wierszy, tylko tło ogólne)
     pdf.set_font("Courier", "", 8)
     for _, row in dataframe.iterrows():
-        pdf.cell(25, 8, bezpieczny_tekst(row['Data']), 1)
-        pdf.cell(45, 8, bezpieczny_tekst(row['Typ']), 1)
-        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1)
-        pdf.cell(15, 8, bezpieczny_tekst(row['Data zdarzenia']), 1)
-        pdf.cell(80, 8, bezpieczny_tekst(row['Opis'])[:45], 1)
+        # Kolor wiersza zależy od typu wpisu (jasne odcienie jak w kontenerach)
+        if row['Typ'] == 'Przychód ogólny': pdf.set_fill_color(230, 255, 235)
+        elif row['Typ'] == 'Wydatki gotówkowe': pdf.set_fill_color(255, 235, 240)
+        else: pdf.set_fill_color(255, 250, 220) # Gotówka i inne
+        
+        pdf.cell(25, 8, bezpieczny_tekst(row['Data']), 1, 0, 'L', True)
+        pdf.cell(45, 8, bezpieczny_tekst(row['Typ']), 1, 0, 'L', True)
+        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1, 0, 'R', True)
+        pdf.cell(15, 8, bezpieczny_tekst(row['Data zdarzenia']), 1, 0, 'C', True)
+        pdf.cell(80, 8, bezpieczny_tekst(row['Opis'])[:45], 1, 0, 'L', True)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -85,7 +121,7 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- LOGIKA OKNA RESETU ---
+    # --- LOGIKA DIALOGU RESETU ---
     @st.dialog("Pobierz raport i wyczyść")
     def final_reset_dialog():
         pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
@@ -158,7 +194,7 @@ if check_password():
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     if "table_id" not in st.session_state: st.session_state.table_id = 1
     
-    # Wyświetlanie tabeli z kolorami analogicznymi do kontenerów
+    # Wyświetlanie tabeli historii Z KOLORAMI WIERSZY
     sel = st.dataframe(
         df_h.style.apply(apply_row_styles, axis=1), 
         use_container_width=True, 
