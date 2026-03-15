@@ -23,36 +23,28 @@ def check_password():
         return False
     return True
 
-# Funkcja tworząca PDF z podsumowaniem na górze
+# Funkcja tworząca PDF z podsumowaniem na górze (bez nawiasów)
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
-    
-    # Nagłówek
     pdf.set_font("Arial", "B", 16)
     pdf.cell(190, 10, "RAPORT FINANSOWY PIZZERIA", ln=True, align="C")
-    pdf.set_font("Arial", "", 10)
-    pdf.cell(190, 7, f"Data wygenerowania: {datetime.now().strftime('%d.%m.%Y %H:%M')}", ln=True, align="C")
     pdf.ln(10)
     
-    # SEKCJA PODSUMOWANIA NA GÓRZE PDF
+    # SEKCJA PODSUMOWANIA (BEZ NAWIASÓW)
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(190, 10, "PODSUMOWANIE STANU:", ln=True, align="L", fill=True)
+    pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
     pdf.set_font("Arial", "", 11)
-    pdf.cell(95, 10, f"PRZYCHOD OGOLNY (Terminal/Inne):", 1)
+    pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1)
     pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
-    pdf.cell(95, 10, f"STAN GOTOWKI (W kasie):", 1)
+    pdf.cell(95, 10, "GOTOWKA:", 1)
     pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
-    pdf.cell(95, 10, f"SUMA WYDATKOW:", 1)
+    pdf.cell(95, 10, "WYDATKI:", 1)
     pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
     
     # TABELA Z HISTORIĄ
-    pdf.set_font("Arial", "B", 12)
-    pdf.cell(190, 10, "HISTORIA WSZYSTKICH WPISOW:", ln=True, align="L")
-    
-    # Nagłówki tabeli
     pdf.set_font("Arial", "B", 10)
     pdf.set_fill_color(200, 200, 200)
     pdf.cell(35, 10, "Data", 1, 0, 'C', True)
@@ -61,19 +53,16 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(80, 10, "Opis / Wydatek", 1, 0, 'C', True)
     pdf.ln()
     
-    # Dane (bez polskich znaków dla PDF)
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iloc[::-1].iterrows():
-        t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ó','o').replace('ł','l')
-        o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ó','o').replace('ł','l')
+        t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
+        o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         if o == "nan" or o == "": o = "-"
-        
         pdf.cell(35, 10, str(row['Data']), 1)
         pdf.cell(40, 10, t, 1)
         pdf.cell(35, 10, f"{row['Kwota']:.2f} zl", 1)
         pdf.cell(80, 10, o[:45], 1)
         pdf.ln()
-    
     return pdf.output(dest='S').encode('latin-1')
 
 if check_password():
@@ -87,7 +76,7 @@ if check_password():
     df = st.session_state.data
     df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
 
-    # Obliczenia do kafelków i raportu
+    # Obliczenia
     s_ogolny = df[df['Typ'] == 'Przychód ogólny']['Kwota'].sum()
     s_wydatki = df[df['Typ'] == 'Wydatki']['Kwota'].sum()
     w_gotowka = df[df['Typ'] == 'Gotówka']['Kwota'].sum()
@@ -95,7 +84,7 @@ if check_password():
 
     st.title("🍕 Panel Rozliczeń")
 
-    # Kafelki na górze aplikacji
+    # Kafelki
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -125,7 +114,7 @@ if check_password():
                         save_data(st.session_state.data)
                         del st.session_state.f
                         st.rerun()
-                    except: st.error("Wpisz poprawną kwotę!")
+                    except: st.error("Wpisz kwotę!")
             with c_c:
                 if st.form_submit_button("ANULUJ", use_container_width=True):
                     del st.session_state.f
@@ -134,18 +123,25 @@ if check_password():
     st.subheader("📂 Historia")
     st.dataframe(df.iloc[::-1], use_container_width=True, hide_index=True)
 
+    # SEKCJA USUWANIA WPISU
+    if not df.empty:
+        st.divider()
+        st.subheader("🗑️ Usuń wpis")
+        opcje_usuwania = df.index.tolist()
+        wybrany_index = st.selectbox("Wybierz wpis do usunięcia (według kolejności)", 
+                                     options=opcje_usuwania[::-1], 
+                                     format_func=lambda x: f"{df.loc[x, 'Data']} | {df.loc[x, 'Typ']} | {df.loc[x, 'Kwota']} zł")
+        
+        if st.button("❌ USUŃ WYBRANY WPIS", use_container_width=True, type="primary"):
+            st.session_state.data = st.session_state.data.drop(wybrany_index).reset_index(drop=True)
+            save_data(st.session_state.data)
+            st.success("Wpis został usunięty!")
+            st.rerun()
+
     with st.sidebar:
         st.header("⚙️ Opcje")
         if not df.empty:
-            # Przycisk PDF z wyliczonymi sumami
             pdf_data = create_pdf(df, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 Pobierz Raport PDF", pdf_data, "raport_pizzeria.pdf", "application/pdf", use_container_width=True)
-        
         csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Pobierz Plik CSV", csv, "dane.csv", "text/csv", use_container_width=True)
-        
-        if st.button("Cofnij ostatni wpis"):
-            if not st.session_state.data.empty:
-                st.session_state.data = st.session_state.data.drop(st.session_state.data.index[-1])
-                save_data(st.session_state.data)
-                st.rerun()
+        st.download_button("📥 Pobierz CSV", csv, "dane.csv", "text/csv", use_container_width=True)
