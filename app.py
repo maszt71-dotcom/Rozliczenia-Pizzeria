@@ -66,14 +66,12 @@ if check_password():
     df_active = df_all[df_all['Status'] == 'Aktywny'].copy()
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-    # Obliczenia
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki']['Kwota'].sum()
     s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
 
     st.title("🍕 Panel Rozliczeń")
 
-    # Kafelki
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -87,20 +85,13 @@ if check_password():
 
     st.divider()
 
-    # Formularz wpisowy
     if "f" in st.session_state:
         typ = st.session_state.f
         with st.form("form_wpisu", clear_on_submit=True):
-            st.subheader(f"Dodajesz: {typ}")
-            kwota = st.number_input("Kwota (zł)", min_value=0.0, step=1.0, format="%.2f", value=None, placeholder="Wpisz...")
-            
-            # OPIS TYLKO DLA WYDATKÓW
-            opis = ""
-            if typ == "Wydatki":
-                opis = st.text_input("Na co wydano?", placeholder="np. hurtownia, paliwo...")
-            
-            col_z, col_a = st.columns(2)
-            with col_z:
+            kwota = st.number_input(f"Dodaj: {typ}", min_value=0.0, step=1.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
+            opis = st.text_input("Na co wydano?", key="o") if typ == "Wydatki" else ""
+            cz, ca = st.columns(2)
+            with cz:
                 if st.form_submit_button("ZAPISZ", use_container_width=True):
                     if kwota:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
@@ -108,7 +99,7 @@ if check_password():
                         save_data(st.session_state.data)
                         del st.session_state.f
                         st.rerun()
-            with col_a:
+            with ca:
                 if st.form_submit_button("ANULUJ", use_container_width=True):
                     del st.session_state.f
                     st.rerun()
@@ -120,32 +111,31 @@ if check_password():
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        
-        # Pobieranie PDF bez kasowania
         if not df_all.empty:
-            pdf_normal = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 POBIERZ RAPORT PDF", pdf_normal, f"Raport_{datetime.now().strftime('%H%M')}.pdf", "application/pdf", use_container_width=True)
+            pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
+            st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%H%M')}.pdf", "application/pdf", use_container_width=True)
         
         st.divider()
-        
         if wybrane:
             orig_idx = df_display.index[wybrane[0]]
-            if st.button("🗑️ USUŃ ZAZNACZONY", type="primary", use_container_width=True):
+            if st.button("🗑️ USUŃ WPIS", type="primary", use_container_width=True):
                 st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
                 save_data(st.session_state.data)
                 st.rerun()
-        
-        # Sekcja Resetu
+
         if not df_all.empty:
             st.divider()
-            st.warning("ZAMKNIĘCIE DNIA (ZEROWANIE)")
-            pdf_reset = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
-            if st.download_button("💾 POBIERZ I PRZYGOTUJ RESET", pdf_reset, f"ZAMKNIECIE_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True):
-                st.session_state.allow_reset = True
+            st.warning("ZAMKNIĘCIE (ZEROWANIE)")
+            pdf_res = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
+            if st.download_button("💾 POBIERZ I PRZYGOTUJ RESET", pdf_res, "ZAMKNIECIE.pdf", "application/pdf", use_container_width=True):
+                st.session_state.reset_check = True
             
-            if st.session_state.get('allow_reset'):
-                if st.button("🔥 POTWIERDZAM: ZERUJ LICZNIKI", type="primary", use_container_width=True):
+            if st.session_state.get('reset_check'):
+                if st.button("🔥 POTWIERDZAM: ZERUJ", type="primary", use_container_width=True):
                     st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
                     save_data(st.session_state.data)
-                    st.session_state.allow_reset = False
+                    st.session_state.reset_check = False
+                    st.rerun()
+                if st.button("🔙 ANULUJ RESET", use_container_width=True):
+                    st.session_state.reset_check = False
                     st.rerun()
