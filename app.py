@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import os
-import random
 from datetime import datetime
 from fpdf import FPDF
 from streamlit_cookies_manager import CookieManager
@@ -36,7 +35,7 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF (Z KOLOROWYM PODSUMOWANIEM) ---
+# --- GENERATOR PDF (KOLOROWE PODSUMOWANIE) ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -85,7 +84,8 @@ if check_password():
     def save_data(df): df.to_csv(DB_FILE, index=False)
 
     if 'data' not in st.session_state: st.session_state.data = load_data()
-    df_active = st.session_state.data[st.session_state.data['Status'] == 'Aktywny'].copy()
+    df_all = st.session_state.data
+    df_active = df_all[df_all['Status'] == 'Aktywny'].copy()
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
@@ -103,7 +103,15 @@ if check_password():
         opis = st.text_input("Opis")
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
-                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny', 'Data zdarzenia': data_wybrana.strftime("%d.%m")}
+                # TUTAJ POPRAWKA: 'Data zdarzenia' to tylko dzień i miesiąc z kalendarza
+                n = {
+                    'Data': datetime.now().strftime("%d.%m %H:%M"), 
+                    'Typ': typ, 
+                    'Kwota': float(kwota), 
+                    'Opis': opis, 
+                    'Status': 'Aktywny', 
+                    'Data zdarzenia': data_wybrana.strftime("%d.%m")
+                }
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
 
