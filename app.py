@@ -103,14 +103,15 @@ if check_password():
         opis = st.text_input("Opis")
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
-                # TUTAJ POPRAWKA: 'Data zdarzenia' to tylko dzień i miesiąc z kalendarza
+                # KONKRETNA POPRAWKA: Formatujemy datę zdarzenia BEZ godziny
+                data_bez_godziny = data_wybrana.strftime("%d.%m")
                 n = {
                     'Data': datetime.now().strftime("%d.%m %H:%M"), 
                     'Typ': typ, 
                     'Kwota': float(kwota), 
                     'Opis': opis, 
                     'Status': 'Aktywny', 
-                    'Data zdarzenia': data_wybrana.strftime("%d.%m")
+                    'Data zdarzenia': data_bez_godziny
                 }
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
