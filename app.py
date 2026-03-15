@@ -85,7 +85,6 @@ if check_password():
     df_active = df_all[df_all['Status'] == 'Aktywny'].copy()
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-    # Obliczenia
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
     s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
@@ -129,7 +128,7 @@ if check_password():
     st.divider()
     st.subheader("📂 Historia")
 
-    # --- TABELA HTML DOPASOWANA DO SZEROKOŚCI KONTENERA ---
+    # --- TABELA HTML Z WYMUSZENIEM JEDNEJ LINII DLA DATY ---
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1].copy()
     
     table_style = """
@@ -137,11 +136,11 @@ if check_password():
         .pizzeria-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; table-layout: fixed; }
         .pizzeria-table th { background-color: #f0f2f6; padding: 8px; border: 1px solid #ddd; text-align: left; }
         .pizzeria-table td { padding: 8px; border: 1px solid #ddd; word-wrap: break-word; vertical-align: top; overflow: hidden; }
-        .col-data { width: 15%; }
+        .col-data { width: 16%; white-space: nowrap; }
         .col-typ { width: 20%; }
-        .col-kwota { width: 15%; }
-        .col-zdnia { width: 12%; }
-        .col-opis { width: 38%; }
+        .col-kwota { width: 14%; white-space: nowrap; }
+        .col-zdnia { width: 13%; white-space: nowrap; } /* Wymuszenie jednej linii */
+        .col-opis { width: 37%; }
         .row-przychod { background-color: #d4edda; }
         .row-wydatek { background-color: #f8d7da; }
         .row-gotowka { background-color: #fff3cd; }
