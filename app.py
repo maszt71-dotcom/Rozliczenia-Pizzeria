@@ -4,16 +4,15 @@ import os
 from datetime import datetime
 
 # --- KONFIGURACJA ---
-st.set_page_config(page_title="Finanse Pizzeria", layout="centered")
+st.set_page_config(page_title="Pizzeria - Rozliczenia", layout="centered", page_icon="🍕")
 
-# TUTAJ WPISZ SWOJE HASŁO (zamiast 1234)
-MOJE_HASLO = "dup@"
+MOJE_HASLO = "1234"
 
 def check_password():
     if "password_correct" not in st.session_state:
-        st.subheader("Zaloguj się do systemu")
-        wpisane_haslo = st.text_input("Hasło", type="password")
-        if st.button("Wejdź"):
+        st.title("🍕 System Pizzerii")
+        wpisane_haslo = st.text_input("Podaj hasło dostępu", type="password")
+        if st.button("ZALOGUJ SIĘ", use_container_width=True):
             if wpisane_haslo == MOJE_HASLO:
                 st.session_state["password_correct"] = True
                 st.rerun()
@@ -23,7 +22,6 @@ def check_password():
     return True
 
 if check_password():
-    # --- PROGRAM GŁÓWNY ---
     DB_FILE = 'finanse_data.csv'
 
     def load_data():
@@ -40,44 +38,73 @@ if check_password():
     df = st.session_state.data
     df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
 
-    # OBLICZENIA
-    przychody_ogolne = df[df['Typ'].isin(['Gotówka', 'Konto'])]['Kwota'].sum()
-    koszty_ogolne = df[df['Typ'] == 'Koszt']['Kwota'].sum()
+    # Logika obliczeń
+    suma_przychodu_ogolnego = df[df['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+    suma_wydatkow = df[df['Typ'] == 'Wydatki']['Kwota'].sum()
     wplaty_gotowka = df[df['Typ'] == 'Gotówka']['Kwota'].sum()
-    stan_gotowki = wplaty_gotowka - koszty_ogolne
+    stan_gotowki = wplaty_gotowka - suma_wydatkow
 
-    st.title("🍕 Rozliczenia Pizzeria")
+    st.title("🍕 Panel Rozliczeń")
 
-    # LICZNIKI
-    c1, c2 = st.columns(2)
-    c1.metric("PRZYCHÓD OGÓLNY", f"{przychody_ogolne:,.2f} zł".replace(',', ' '))
-    c2.metric("SUMA KOSZTÓW", f"{koszty_ogolne:,.2f} zł".replace(',', ' '))
-    st.warning(f"💰 **STAN GOTÓWKI W KASIE: {stan_gotowki:,.2f} zł**".replace(',', ' '))
+    # --- KAFELKI NA GÓRZE ---
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown(f"""<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745;">
+        <span style="color:#155724; font-size:14px;">PRZYCHÓD OGÓLNY</span><br>
+        <b style="color:#155724; font-size:18px;">{suma_przychodu_ogolnego:,.2f} zł</b></div>""", unsafe_allow_html=True)
+        if st.button("➕ Dodaj Ogólny", use_container_width=True):
+            st.session_state.pokaz_formularz = "Przychód ogólny"
+
+    with col2:
+        st.markdown(f"""<div style="background-color:#fff3cd; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #ffc107;">
+        <span style="color:#856404; font-size:14px;">STAN KASY</span><br>
+        <b style="color:#856404; font-size:18px;">{stan_gotowki:,.2f} zł</b></div>""", unsafe_allow_html=True)
+        if st.button("➕ Dodaj Gotówkę", use_container_width=True):
+            st.session_state.pokaz_formularz = "Gotówka"
+
+    with col3:
+        st.markdown(f"""<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545;">
+        <span style="color:#721c24; font-size:14px;">WYDATKI</span><br>
+        <b style="color:#721c24; font-size:18px;">{suma_wydatkow:,.2f} zł</b></div>""", unsafe_allow_html=True)
+        if st.button("➖ Dodaj Wydatek", use_container_width=True):
+            st.session_state.pokaz_formularz = "Wydatki"
 
     st.divider()
 
-    # FORMULARZ
-    with st.form("nowy_wpis", clear_on_submit=True):
-        st.subheader("Dodaj transakcję")
-        kwota = st.number_input("Kwota (zł)", min_value=0.0, step=1.0, format="%.2f")
-        typ = st.selectbox("Rodzaj", ["Gotówka", "Konto", "Koszt"])
-        opis = st.text_input("Opis (np. Klient, Dostawca, Paliwo)")
-        submit = st.form_submit_button("ZAPISZ I PRZELICZ", use_container_width=True)
+    # --- OKNO EDYCJI (FORMULARZ PO KLIKNIĘCIU) ---
+    if "pokaz_formularz" in st.session_state:
+        typ_wpisu = st.session_state.pokaz_formularz
+        st.info(f"Edytujesz: **{typ_wpisu}**")
+        
+        with st.form("nowy_wpis", clear_on_submit=True):
+            kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f")
+            
+            # Dynamiczne pytanie o opis
+            if typ_wpisu == "Wydatki":
+                opis = st.text_input("Jaki wydatek? (np. towar, paliwo, wypłata)")
+            else:
+                opis = st.text_input("Opis (opcjonalnie)")
 
-    if submit:
-        nowy = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': typ, 'Kwota': kwota, 'Opis': opis}
-        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
-        save_data(st.session_state.data)
-        st.success("Zapisano!")
-        st.rerun()
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.form_submit_button("ZAPISZ", use_container_width=True):
+                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ_wpisu, 'Kwota': kwota, 'Opis': opis}
+                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
+                    save_data(st.session_state.data)
+                    del st.session_state.pokaz_formularz
+                    st.rerun()
+            with col_b:
+                if st.form_submit_button("ANULUJ", use_container_width=True):
+                    del st.session_state.pokaz_formularz
+                    st.rerun()
 
-    # ARCHIWUM
-    st.divider()
+    # --- ARCHIWUM ---
     st.subheader("📂 Historia wpisów")
     st.dataframe(df.iloc[::-1], use_container_width=True, hide_index=True)
 
-    # USUWANIE
-    if st.checkbox("Opcje administratora"):
+    with st.sidebar:
+        st.header("⚙️ Opcje")
         if st.button("Usuń ostatni wpis"):
             if not st.session_state.data.empty:
                 st.session_state.data = st.session_state.data.drop(st.session_state.data.index[-1])
