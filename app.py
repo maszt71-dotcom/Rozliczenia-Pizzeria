@@ -46,20 +46,19 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.ln(10)
     pdf.set_font("Arial", "B", 9); pdf.set_fill_color(240, 240, 240)
     headers = ["Data wpisu", "Typ", "Kwota", "Z dnia", "Opis"]
-    cols = [30, 40, 30, 25, 65]
+    cols = [30, 45, 30, 25, 60]
     for i, h in enumerate(headers): pdf.cell(cols[i], 10, h, 1, 0, 'C', True)
     pdf.ln()
     pdf.set_font("Arial", "", 8)
     for _, row in dataframe.iterrows():
         pdf.cell(30, 10, str(row['Data']), 1)
-        pdf.cell(40, 10, str(row['Typ']), 1)
+        pdf.cell(45, 10, str(row['Typ']), 1)
         pdf.cell(30, 10, f"{row['Kwota']:.2f} zl", 1)
         pdf.cell(25, 10, str(row['Data zdarzenia']), 1)
-        pdf.cell(65, 10, str(row['Opis']) if str(row['Opis']) != 'nan' else "", 1)
+        pdf.cell(60, 10, str(row['Opis']) if str(row['Opis']) != 'nan' else "", 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
-# --- STYLE KOLORÓW ---
 def apply_row_styles(row):
     color = ''
     if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda'
@@ -93,10 +92,9 @@ if check_password():
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         data_wybrana = st.date_input("Dzień zdarzenia", datetime.now())
         
-        # OPIS TYLKO DLA WYDATKÓW
         opis = ""
         if typ == "Wydatki gotówkowe":
-            opis = st.text_input("Opis (max 40 znaków)", max_chars=40)
+            opis = st.text_input("Opis (max 35 znaków)", max_chars=35)
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
@@ -129,7 +127,7 @@ if check_password():
     
     if "table_id" not in st.session_state: st.session_state.table_id = 1
 
-    # TABELA Z DOPASOWANYMI SZEROKOŚCIAMI
+    # --- KONFIGURACJA ESTETYCZNA TABELI ---
     selection = st.dataframe(
         df_history.style.apply(apply_row_styles, axis=1),
         use_container_width=True,
@@ -137,11 +135,11 @@ if check_password():
         selection_mode="multi-row",
         key=f"historia_table_{st.session_state.table_id}",
         column_config={
-            "Data": st.column_config.TextColumn("Data wpisu", width="medium"),
+            "Data": st.column_config.TextColumn("Data wpisu", width="small"),
             "Typ": st.column_config.TextColumn("Typ", width="medium"),
-            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="medium"),
-            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="medium"),
-            "Opis": st.column_config.TextColumn("Opis", width="large")
+            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
+            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
+            "Opis": st.column_config.TextColumn("Opis", width="medium") # Szerokość zbalansowana
         }
     )
 
