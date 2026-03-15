@@ -50,63 +50,72 @@ if check_password():
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown(f"""<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745;">
-        <span style="color:#155724; font-size:14px;">PRZYCHÓD OGÓLNY</span><br>
+        st.markdown(f"""<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;">
+        <span style="color:#155724; font-size:12px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br>
         <b style="color:#155724; font-size:18px;">{suma_przychodu_ogolnego:,.2f} zł</b></div>""", unsafe_allow_html=True)
-        if st.button("➕ Dodaj Ogólny", use_container_width=True):
+        if st.button("➕ Dodaj", key="btn_ogolny", use_container_width=True):
             st.session_state.pokaz_formularz = "Przychód ogólny"
 
     with col2:
-        st.markdown(f"""<div style="background-color:#fff3cd; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #ffc107;">
-        <span style="color:#856404; font-size:14px;">STAN KASY</span><br>
+        st.markdown(f"""<div style="background-color:#fff3cd; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #ffc107; height: 100px;">
+        <span style="color:#856404; font-size:12px; font-weight:bold;">STAN KASY</span><br>
         <b style="color:#856404; font-size:18px;">{stan_gotowki:,.2f} zł</b></div>""", unsafe_allow_html=True)
-        if st.button("➕ Dodaj Gotówkę", use_container_width=True):
+        if st.button("➕ Dodaj", key="btn_gotowka", use_container_width=True):
             st.session_state.pokaz_formularz = "Gotówka"
 
     with col3:
-        st.markdown(f"""<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545;">
-        <span style="color:#721c24; font-size:14px;">WYDATKI</span><br>
+        st.markdown(f"""<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;">
+        <span style="color:#721c24; font-size:12px; font-weight:bold;">WYDATKI</span><br>
         <b style="color:#721c24; font-size:18px;">{suma_wydatkow:,.2f} zł</b></div>""", unsafe_allow_html=True)
-        if st.button("➖ Dodaj Wydatek", use_container_width=True):
+        if st.button("➖ Dodaj", key="btn_wydatki", use_container_width=True):
             st.session_state.pokaz_formularz = "Wydatki"
 
     st.divider()
 
-    # --- OKNO EDYCJI (FORMULARZ PO KLIKNIĘCIU) ---
+    # --- DYNAMICZNY FORMULARZ ---
     if "pokaz_formularz" in st.session_state:
         typ_wpisu = st.session_state.pokaz_formularz
-        st.info(f"Edytujesz: **{typ_wpisu}**")
         
-        with st.form("nowy_wpis", clear_on_submit=True):
+        # Nagłówek okna edycji
+        st.subheader(f"Wprowadź: {typ_wpisu}")
+        
+        with st.form("formularz_wpisu", clear_on_submit=True):
             kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f")
             
-            # Dynamiczne pytanie o opis
+            # Tylko dla wydatków pytamy o opis
+            opis_final = ""
             if typ_wpisu == "Wydatki":
-                opis = st.text_input("Jaki wydatek? (np. towar, paliwo, wypłata)")
-            else:
-                opis = st.text_input("Opis (opcjonalnie)")
-
-            col_a, col_b = st.columns(2)
-            with col_a:
+                opis_final = st.text_input("Jaki wydatek?")
+            
+            c_save, c_cancel = st.columns(2)
+            with c_save:
                 if st.form_submit_button("ZAPISZ", use_container_width=True):
-                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ_wpisu, 'Kwota': kwota, 'Opis': opis}
+                    nowy = {
+                        'Data': datetime.now().strftime("%d.%m %H:%M"), 
+                        'Typ': typ_wpisu, 
+                        'Kwota': kwota, 
+                        'Opis': opis_final
+                    }
                     st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
                     save_data(st.session_state.data)
                     del st.session_state.pokaz_formularz
                     st.rerun()
-            with col_b:
+            with c_cancel:
                 if st.form_submit_button("ANULUJ", use_container_width=True):
                     del st.session_state.pokaz_formularz
                     st.rerun()
 
-    # --- ARCHIWUM ---
+    # --- HISTORIA ---
     st.subheader("📂 Historia wpisów")
     st.dataframe(df.iloc[::-1], use_container_width=True, hide_index=True)
 
     with st.sidebar:
-        st.header("⚙️ Opcje")
-        if st.button("Usuń ostatni wpis"):
+        st.header("⚙️ Ustawienia")
+        if st.button("Cofnij ostatni wpis"):
             if not st.session_state.data.empty:
                 st.session_state.data = st.session_state.data.drop(st.session_state.data.index[-1])
                 save_data(st.session_state.data)
                 st.rerun()
+        
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Pobierz plik bazy (CSV)", csv, "finanse_pizzeria.csv", "text/csv")
