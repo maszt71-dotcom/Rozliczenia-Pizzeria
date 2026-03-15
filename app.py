@@ -13,18 +13,15 @@ st.set_page_config(
     page_icon="favicon.png" 
 )
 
-# Manager ciasteczek (zapamiętywanie logowania)
 cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# HASŁO DOSTĘPU
 MOJE_HASLO = "dup@"
 
 def check_password():
     if cookies.get("is_logged") == "true":
         return True
-
     if "password_correct" not in st.session_state:
         st.title("🍕 Rozliczenie Pizzerii")
         wpisane_haslo = st.text_input("Podaj hasło dostępu", type="password")
@@ -39,7 +36,6 @@ def check_password():
         return False
     return True
 
-# Funkcja generowania PDF
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -75,69 +71,59 @@ if check_password():
     
     def load_data():
         if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
-        return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
+        return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
     
     def save_data(df): df.to_csv(DB_FILE, index=False)
 
     if 'data' not in st.session_state: st.session_state.data = load_data()
     df_all = st.session_state.data
+    
     if 'Status' not in df_all.columns: df_all['Status'] = 'Aktywny'
+    if 'Data zdarzenia' not in df_all.columns: df_all['Data zdarzenia'] = df_all['Data']
     
     df_active = df_all[df_all['Status'] == 'Aktywny'].copy()
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-    # Obliczenia sum
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
     s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
 
     st.title("🍕 Rozliczenie Pizzerii")
 
-    # Kolory kafli
     if s_gotowka >= 0:
         bg_got, brd_got, txt_got = "#fff3cd", "#ffc107", "#856404"
     else:
         bg_got, brd_got, txt_got = "#ff0000", "#8b0000", "#ffffff"
 
-    # OKNO DODAWANIA WPISU
     @st.dialog("Dodaj nowy wpis")
     def add_entry_dialog(typ):
         st.write(f"Kategoria: **{typ}**")
-        
-        # value=None sprawia, że pole jest puste na start
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         
-        # Wybór daty
-        data_wybrana = st.date_input("Data przychodu", datetime.now())
+        etykieta_daty = "Data wydatku" if typ == "Wydatki gotówkowe" else "Data przychodu"
+        data_wybrana = st.date_input(etykieta_daty, datetime.now())
         
         opis = st.text_input("Opis wydatku") if typ == "Wydatki gotówkowe" else ""
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
-                czas_teraz = datetime.now().strftime("%H:%M")
-                data_finalna = f"{data_wybrana.strftime('%d.%m')} {czas_teraz}"
+                data_systemowa = datetime.now().strftime("%d.%m %H:%M")
+                data_zdarzenia = data_wybrana.strftime("%d.%m")
                 
-                n = {'Data': data_finalna, 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
+                n = {
+                    'Data': data_systemowa, 
+                    'Typ': typ, 
+                    'Kwota': float(kwota), 
+                    'Opis': opis, 
+                    'Status': 'Aktywny',
+                    'Data zdarzenia': data_zdarzenia
+                }
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data)
-                
                 st.rerun()
             else:
                 st.error("Wpisz kwotę!")
 
-    @st.dialog("Usuń wpis")
-    def delete_entry_dialog(row_idx):
-        row = df_display.iloc[row_idx]
-        st.warning(f"Czy usunąć: {row['Typ']} - {row['Kwota']:.2f} zł?")
-        if st.button("🔥 POTWIERDZAM: USUŃ", type="primary", use_container_width=True):
-            orig_idx = df_display.index[row_idx]
-            st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
-            save_data(st.session_state.data)
-            st.rerun()
-        if st.button("🔙 NIE USUWAJ", use_container_width=True):
-            st.rerun()
-
-    # KAFELKI PODSUMOWANIA
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -151,7 +137,9 @@ if check_password():
 
     st.divider()
     st.subheader("📂 Historia")
-    df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
+    
+    # Wyświetlenie tabeli z nową kolumną na końcu
+    df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis', 'Data zdarzenia']].iloc[::-1]
     
     if "table_id" not in st.session_state or st.session_state.get('reset_table', False):
         st.session_state.table_id = random.randint(0, 100000)
@@ -166,11 +154,25 @@ if check_password():
         key=f"tabela_{st.session_state.table_id}"
     )
     
+    # Logika usuwania (została zachowana)
     if event.selection.rows:
+        row_idx = event.selection.rows[0]
+        row = df_display.iloc[row_idx]
         st.session_state.reset_table = True
-        delete_entry_dialog(event.selection.rows[0])
+        
+        @st.dialog("Usuń wpis")
+        def delete_entry_dialog(row_info, idx_in_display):
+            st.warning(f"Czy usunąć: {row_info['Typ']} - {row_info['Kwota']:.2f} zł?")
+            if st.button("🔥 POTWIERDZAM: USUŃ", type="primary", use_container_width=True):
+                orig_idx = df_display.index[idx_in_display]
+                st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
+                save_data(st.session_state.data)
+                st.rerun()
+            if st.button("🔙 NIE USUWAJ", use_container_width=True):
+                st.rerun()
+        
+        delete_entry_dialog(row, row_idx)
 
-    # SIDEBAR
     with st.sidebar:
         st.header("⚙️ Opcje")
         if st.button("WYLOGUJ", use_container_width=True):
@@ -184,13 +186,9 @@ if check_password():
             st.warning("ZAMKNIĘCIE DNIA")
             if st.button("💾 PRZYGOTUJ RESET", use_container_width=True):
                 st.session_state.reset_check = True
-            
             if st.session_state.get('reset_check'):
                 if st.button("🔥 POTWIERDZAM: ZERUJ", type="primary", use_container_width=True):
-                    st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
+                    st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                     save_data(st.session_state.data)
-                    st.session_state.reset_check = False
-                    st.rerun()
-                if st.button("🔙 ANULUJ", use_container_width=True):
                     st.session_state.reset_check = False
                     st.rerun()
