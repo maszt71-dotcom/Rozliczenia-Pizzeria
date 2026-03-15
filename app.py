@@ -101,7 +101,7 @@ if check_password():
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         etykieta_daty = "Data wydatku" if typ == "Wydatki gotówkowe" else "Data przychodu"
         data_wybrana = st.date_input(etykieta_daty, datetime.now())
-        opis = st.text_input("Opis wydatku")
+        opis = st.text_input("Opis")
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
@@ -129,18 +129,19 @@ if check_password():
     st.divider()
     st.subheader("📂 Historia")
 
-    # --- TABELA HTML (SZEROKOŚCI I ZAWJANIE) ---
+    # --- TABELA HTML DOPASOWANA DO SZEROKOŚCI KONTENERA ---
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1].copy()
     
     table_style = """
     <style>
-        .pizzeria-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; }
+        .pizzeria-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; table-layout: fixed; }
         .pizzeria-table th { background-color: #f0f2f6; padding: 8px; border: 1px solid #ddd; text-align: left; }
-        .pizzeria-table td { padding: 8px; border: 1px solid #ddd; word-wrap: break-word; vertical-align: top; }
-        .col-data { width: 90px; }
-        .col-typ { width: 125px; }
-        .col-kwota { width: 100px; }
-        .col-zdnia { width: 75px; }
+        .pizzeria-table td { padding: 8px; border: 1px solid #ddd; word-wrap: break-word; vertical-align: top; overflow: hidden; }
+        .col-data { width: 15%; }
+        .col-typ { width: 20%; }
+        .col-kwota { width: 15%; }
+        .col-zdnia { width: 12%; }
+        .col-opis { width: 38%; }
         .row-przychod { background-color: #d4edda; }
         .row-wydatek { background-color: #f8d7da; }
         .row-gotowka { background-color: #fff3cd; }
@@ -148,7 +149,7 @@ if check_password():
     """
 
     html_table = f'{table_style}<table class="pizzeria-table"><tr>'
-    html_table += '<th class="col-data">Data wpisu</th><th class="col-typ">Typ</th><th class="col-kwota">Kwota</th><th class="col-zdnia">Z dnia</th><th>Opis</th></tr>'
+    html_table += '<th class="col-data">Data wpisu</th><th class="col-typ">Typ</th><th class="col-kwota">Kwota</th><th class="col-zdnia">Z dnia</th><th class="col-opis">Opis</th></tr>'
 
     for _, row in df_h.iterrows():
         r_c = "row-przychod" if row['Typ'] == "Przychód ogólny" else "row-wydatek" if row['Typ'] == "Wydatki gotówkowe" else "row-gotowka"
