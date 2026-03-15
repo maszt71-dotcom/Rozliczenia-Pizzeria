@@ -103,7 +103,7 @@ if check_password():
 
     # OKNO DIALOGOWE DLA USUWANIA
     @st.dialog("Usuń wpis")
-    def delete_entry_dialog(row_idx):
+    def delete_entry_dialog(row_idx, selection_key):
         row = df_display.iloc[row_idx]
         st.warning(f"Czy na pewno chcesz usunąć: {row['Typ']} na kwotę {row['Kwota']:.2f} zł?")
         
@@ -111,9 +111,13 @@ if check_password():
             orig_idx = df_display.index[row_idx]
             st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
             save_data(st.session_state.data)
+            # Resetujemy zaznaczenie w sesji
+            st.session_state[selection_key] = {"selection": {"rows": [], "columns": []}}
             st.rerun()
             
         if st.button("🔙 NIE USUWAJ", use_container_width=True):
+            # Resetujemy zaznaczenie w sesji, żeby okno nie wyskoczyło ponownie
+            st.session_state[selection_key] = {"selection": {"rows": [], "columns": []}}
             st.rerun()
 
     # Kafelki główne
@@ -133,21 +137,26 @@ if check_password():
     st.subheader("📂 Historia")
     df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
     
-    # Wyświetlanie tabeli i obsługa zaznaczania
-    event = st.dataframe(df_display, use_container_width=True, hide_index=False, on_select="rerun", selection_mode="single-row")
+    # Używamy unikalnego klucza dla tabeli, aby móc go resetować
+    table_key = "history_table"
+    event = st.dataframe(
+        df_display, 
+        use_container_width=True, 
+        hide_index=False, 
+        on_select="rerun", 
+        selection_mode="single-row",
+        key=table_key
+    )
     
     if event.selection.rows:
-        delete_entry_dialog(event.selection.rows[0])
+        delete_entry_dialog(event.selection.rows[0], table_key)
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        
-        # Pobieranie PDF bez kasowania
         if not df_all.empty:
             pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
         
-        # Sekcja Resetu
         if not df_all.empty:
             st.divider()
             st.warning("ZAMKNIĘCIE DNIA (ZEROWANIE)")
