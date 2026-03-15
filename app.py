@@ -31,7 +31,7 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF ---
+# --- GENERATOR PDF (KOLOROWE PODSUMOWANIE) ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -90,14 +90,14 @@ if check_password():
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data); st.rerun()
 
-    @st.dialog("Potwierdź reset tabeli")
+    @st.dialog("Pobierz i Resetuj")
     def confirm_reset_dialog():
-        st.warning("1. Najpierw pobierz raport (jeśli potrzebujesz).")
+        st.warning("⚠️ KROK 1: Pobierz raport PDF (inaczej dane przepadną!)")
         pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
-        st.download_button("📥 POBIERZ RAPORT PRZED RESETEM", pdf_raw, f"Raport_Final_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
+        st.download_button("📥 POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
         st.divider()
-        st.error("2. Czy na pewno wyzerować wszystkie dane?")
-        if st.button("TAK, RESETUJ WSZYSTKO", type="primary", use_container_width=True):
+        st.error("⚠️ KROK 2: Czy na pewno wyczyścić tabelę i kontenery?")
+        if st.button("🔥 TAK, POTWIERDZAM RESET", type="primary", use_container_width=True):
             st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
             save_data(st.session_state.data)
             st.rerun()
@@ -115,61 +115,56 @@ if check_password():
 
     st.divider(); st.subheader("📂 Historia")
     
-    # --- TABELA HTML Z ZAWJANIEM I WYBOREM ---
+    # --- LOGIKA WYBORU DO USUNIĘCIA (PTASZKI) ---
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1].copy()
     
-    table_html = """
-    <style>
-        .p-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
-        .p-table th, .p-table td { border: 1px solid #ddd; padding: 8px; vertical-align: top; word-wrap: break-word; }
-        .p-table th { background-color: #f0f2f6; }
-        .col-sel { width: 40px; text-align: center; }
-        .col-d { width: 15%; } .col-t { width: 18%; } .col-k { width: 15%; } .col-z { width: 12%; }
-        .row-p { background-color: #d4edda; } .row-w { background-color: #f8d7da; } .row-g { background-color: #fff3cd; }
-    </style>
-    """
-    
-    # Przycisk usuwania w Sidebarze wymaga śledzenia zaznaczeń
-    to_delete = []
-    
-    st.markdown(table_html, unsafe_allow_html=True)
-    
-    # Nagłówek tabeli
-    cols = st.columns([0.5, 1.5, 2, 1.5, 1.2, 4])
-    cols[0].write("X")
-    cols[1].write("**Data wpisu**")
-    cols[2].write("**Typ**")
-    cols[3].write("**Kwota**")
-    cols[4].write("**Z dnia**")
-    cols[5].write("**Opis**")
+    # Renderowanie nagłówka ręcznie dla wyrównania
+    h_col = st.columns([0.5, 1.5, 2, 1.5, 1, 4])
+    h_col[0].write("**X**")
+    h_col[1].write("**Data wpisu**")
+    h_col[2].write("**Typ**")
+    h_col[3].write("**Kwota**")
+    h_col[4].write("**Z dnia**")
+    h_col[5].write("**Opis**")
 
+    to_delete = []
     for idx, row in df_h.iterrows():
-        bg = "#d4edda" if row['Typ']=="Przychód ogólny" else "#f8d7da" if row['Typ']=="Wydatki gotówkowe" else "#fff3cd"
+        # Kolor wiersza
+        color = "#d4edda" if row['Typ'] == 'Przychód ogólny' else "#f8d7da" if row['Typ'] == 'Wydatki gotówkowe' else "#fff3cd"
+        
         with st.container():
-            c = st.columns([0.5, 1.5, 2, 1.5, 1.2, 4])
-            if c[0].checkbox("", key=f"del_{idx}"):
+            r_col = st.columns([0.5, 1.5, 2, 1.5, 1, 4])
+            if r_col[0].checkbox("", key=f"chk_{idx}"):
                 to_delete.append(idx)
             
-            # Stylizowane kontenery dla danych
+            # Każda komórka w stylizowanym divie (zapewnia tło i zawijanie)
             for i, val in enumerate([row['Data'], row['Typ'], f"{row['Kwota']:.2f} zł", row['Data zdarzenia'], row['Opis']]):
-                c[i+1].markdown(f'<div style="background-color:{bg}; padding:5px; border-radius:3px; height:100%; min-height:40px; border: 1px solid #ccc; font-size:12px;">{val if str(val)!="nan" else ""}</div>', unsafe_allow_html=True)
+                r_col[i+1].markdown(f"""
+                    <div style="background-color:{color}; padding:8px; border:1px solid #ccc; 
+                    border-radius:4px; min-height:40px; word-wrap: break-word; font-size:13px;">
+                    {val if str(val) != 'nan' else ''}
+                    </div>
+                """, unsafe_allow_html=True)
 
     with st.sidebar:
         st.header("⚙️ Opcje")
         if to_delete:
-            st.error(f"Zaznaczono: {len(to_delete)}")
+            st.error(f"Zaznaczono wpisów: {len(to_delete)}")
+            @st.dialog("Jesteś pewien?")
+            def confirm_delete_sidebar(indices):
+                st.warning("Czy na pewno usunąć zaznaczone?")
+                if st.button("TAK, USUŃ", type="primary", use_container_width=True):
+                    st.session_state.data.loc[indices, 'Status'] = 'Usunięty'
+                    save_data(st.session_state.data)
+                    st.rerun()
+            
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                st.session_state.data.loc[to_delete, 'Status'] = 'Usunięty'
-                save_data(st.session_state.data)
-                st.rerun()
+                confirm_delete_sidebar(to_delete)
         
         st.divider()
         if st.button("WYLOGUJ", use_container_width=True):
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
             
         if not df_active.empty:
-            pdf_now = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
-            st.divider()
-            if st.button("💾 POBIERZ RAPORT I RESETUJ TABELĘ", use_container_width=True):
+            if st.button("💾 POBIERZ RAPORT I RESETUJ", use_container_width=True):
                 confirm_reset_dialog()
