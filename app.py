@@ -22,7 +22,7 @@ def check_password():
         return False
     return True
 
-# Funkcja PDF (czyste nazwy bez nawiasów)
+# Funkcja PDF (uwzględnia usunięte wpisy)
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -31,23 +31,24 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.ln(10)
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
-    pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
+    pdf.cell(190, 10, "PODSUMOWANIE AKTUALNEGO STANU:", ln=True, align="L", fill=True)
     pdf.set_font("Arial", "", 11)
     pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "GOTOWKA:", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "WYDATKI:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
+    pdf.cell(35, 10, "Data", 1); pdf.cell(35, 10, "Typ", 1); pdf.cell(30, 10, "Kwota", 1); pdf.cell(90, 10, "Opis / Status", 1)
     pdf.ln()
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iloc[::-1].iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
+        status = "[USUNIETO] " if row.get('Status') == 'Usunięty' else ""
         pdf.cell(35, 10, str(row['Data']), 1)
-        pdf.cell(40, 10, t, 1)
-        pdf.cell(35, 10, f"{row['Kwota']:.2f} zl", 1)
-        pdf.cell(80, 10, str(o)[:45], 1)
+        pdf.cell(35, 10, t, 1)
+        pdf.cell(30, 10, f"{row['Kwota']:.2f} zl", 1)
+        pdf.cell(90, 10, f"{status}{o}"[:50], 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -55,22 +56,24 @@ if check_password():
     DB_FILE = 'finanse_data.csv'
     def load_data():
         if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
-        return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis'])
+        return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
     def save_data(df): df.to_csv(DB_FILE, index=False)
 
     if 'data' not in st.session_state: st.session_state.data = load_data()
-    df = st.session_state.data
-    df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
+    df_all = st.session_state.data
+    if 'Status' not in df_all.columns: df_all['Status'] = 'Aktywny'
+    
+    df_active = df_all[df_all['Status'] != 'Usunięty'].copy()
+    df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
     # Obliczenia
-    s_ogolny = df[df['Typ'] == 'Przychód ogólny']['Kwota'].sum()
-    s_wydatki = df[df['Typ'] == 'Wydatki']['Kwota'].sum()
-    w_gotowka = df[df['Typ'] == 'Gotówka']['Kwota'].sum()
+    s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+    s_wydatki = df_active[df_active['Typ'] == 'Wydatki']['Kwota'].sum()
+    w_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum()
     s_gotowka = w_gotowka - s_wydatki
 
     st.title("🍕 Panel Rozliczeń")
 
-    # Kafelki
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -84,55 +87,43 @@ if check_password():
 
     st.divider()
 
-    # Formularz
     if "f" in st.session_state:
         typ = st.session_state.f
         with st.form("form_wpisu", clear_on_submit=True):
-            kwota_raw = st.text_input(f"Wpisz kwotę ({typ})", placeholder="Wpisz...", key="k")
+            kwota_raw = st.text_input(f"Wpisz kwotę ({typ})", placeholder="np. 50", key="k")
             opis = st.text_input("Jaki wydatek?", key="o") if typ == "Wydatki" else ""
-            if st.form_submit_button("ZAPISZ", use_container_width=True):
-                try:
-                    k = float(kwota_raw.replace(',', '.'))
-                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': k, 'Opis': opis}
-                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
-                    save_data(st.session_state.data)
+            c_s, c_c = st.columns(2)
+            with c_s:
+                if st.form_submit_button("ZAPISZ", use_container_width=True):
+                    # POPRAWKA: Czyszczenie tekstu, aby akceptował liczby bez groszy
+                    txt = kwota_raw.replace(',', '.').strip()
+                    try:
+                        k = float(txt)
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': k, 'Opis': opis, 'Status': 'Aktywny'}
+                        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+                        save_data(st.session_state.data)
+                        del st.session_state.f
+                        st.rerun()
+                    except: st.error("Wpisz poprawną kwotę (np. 50 lub 50.50)")
+            with c_c:
+                if st.form_submit_button("ANULUJ", use_container_width=True):
                     del st.session_state.f
                     st.rerun()
-                except: st.error("Błąd kwoty!")
-            if st.form_submit_button("ANULUJ", use_container_width=True):
-                del st.session_state.f
-                st.rerun()
 
     st.subheader("📂 Historia (kliknij wiersz, aby wybrać)")
-    
-    # Interaktywna tabela z wybieraniem wierszy
-    # dataframe.iloc[::-1] pokazuje najnowsze na górze, ale zachowujemy oryginalne ID do usuwania
-    event = st.dataframe(
-        df, 
-        use_container_width=True, 
-        hide_index=False, 
-        on_select="rerun", 
-        selection_mode="single-row"
-    )
-
-    wybrane_wiersze = event.selection.rows
+    event = st.dataframe(df_active, use_container_width=True, hide_index=False, on_select="rerun", selection_mode="single-row")
+    wybrane = event.selection.rows
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        
-        # Przycisk usuwania - aktywny tylko gdy coś zaznaczono
-        if wybrane_wiersze:
-            index_do_usuniecia = wybrane_wiersze[0]
+        if wybrane:
+            idx = df_active.index[wybrane[0]]
             if st.button("🗑️ USUŃ WPIS", type="primary", use_container_width=True):
-                st.session_state.data = st.session_state.data.drop(index_do_usuniecia).reset_index(drop=True)
+                st.session_state.data.at[idx, 'Status'] = 'Usunięty'
                 save_data(st.session_state.data)
                 st.rerun()
-        else:
-            st.info("Zaznacz wiersz w tabeli, aby go usunąć.")
-
-        if not df.empty:
-            pdf_data = create_pdf(df, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 Pobierz PDF", pdf_data, "raport.pdf", "application/pdf", use_container_width=True)
-        
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Pobierz CSV", csv, "dane.csv", "text/csv", use_container_width=True)
+        if not df_all.empty:
+            pdf_data = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
+            st.download_button("📄 Pobierz PDF (Pełny)", pdf_data, "raport.pdf", "application/pdf", use_container_width=True)
+        csv = df_all.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Pobierz CSV (Pełny)", csv, "dane.csv", "text/csv", use_container_width=True)
