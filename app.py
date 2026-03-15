@@ -6,13 +6,14 @@ from datetime import datetime
 from fpdf import FPDF
 
 # --- KONFIGURACJA ---
-st.set_page_config(page_title="Pizzeria - Rozliczenia", layout="centered", page_icon="🍕")
+st.set_page_config(page_title="Rozliczenie Pizzerii", layout="centered", page_icon="🍕")
 
+# Hasło dostępu
 MOJE_HASLO = "1234"
 
 def check_password():
     if "password_correct" not in st.session_state:
-        st.title("🍕 System Pizzerii")
+        st.title("🍕 Rozliczenie Pizzerii")
         wpisane_haslo = st.text_input("Podaj hasło dostępu", type="password")
         if st.button("ZALOGUJ SIĘ", use_container_width=True):
             if wpisane_haslo == MOJE_HASLO:
@@ -23,13 +24,15 @@ def check_password():
         return False
     return True
 
+# Funkcja PDF z datą w nagłówku
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
     data_gen = datetime.now().strftime("%d.%m.%Y %H:%M")
-    pdf.cell(190, 10, f"RAPORT FINANSOWY PIZZERIA - {data_gen}", ln=True, align="C")
+    pdf.cell(190, 10, f"RAPORT FINANSOWY - {data_gen}", ln=True, align="C")
     pdf.ln(10)
+    
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
@@ -38,9 +41,11 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "SUMA WYDATKOW:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
+    
     pdf.set_font("Arial", "B", 10)
     pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
     pdf.ln()
+    
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
@@ -71,13 +76,15 @@ if check_password():
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki']['Kwota'].sum()
     s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
 
-    st.title("🍕 Panel Rozliczeń")
+    st.title("🍕 Rozliczenie Pizzerii")
 
+    # Kolory kafelków
     if s_gotowka >= 0:
         bg_got, brd_got, txt_got = "#fff3cd", "#ffc107", "#856404"
     else:
         bg_got, brd_got, txt_got = "#ff0000", "#8b0000", "#ffffff"
 
+    # Dialogi
     @st.dialog("Dodaj nowy wpis")
     def add_entry_dialog(typ):
         st.write(f"Kategoria: **{typ}**")
@@ -100,9 +107,9 @@ if check_password():
             save_data(st.session_state.data)
             st.rerun()
         if st.button("🔙 NIE USUWAJ", use_container_width=True):
-            # Kluczowy moment: wymuszamy odświeżenie całej aplikacji
             st.rerun()
 
+    # Kafelki
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -118,8 +125,7 @@ if check_password():
     st.subheader("📂 Historia")
     df_display = df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1]
     
-    # --- NOWA LOGIKA TABELI ---
-    # Generujemy losowy klucz, aby tabela "zapomniała" o zaznaczeniu po każdym odświeżeniu
+    # Mechanizm odświeżania tabeli
     if "table_id" not in st.session_state or st.session_state.get('reset_table', False):
         st.session_state.table_id = random.randint(0, 100000)
         st.session_state.reset_table = False
@@ -134,7 +140,7 @@ if check_password():
     )
     
     if event.selection.rows:
-        st.session_state.reset_table = True # Przy następnym rerun tabela dostanie nowy klucz
+        st.session_state.reset_table = True
         delete_entry_dialog(event.selection.rows[0])
 
     with st.sidebar:
