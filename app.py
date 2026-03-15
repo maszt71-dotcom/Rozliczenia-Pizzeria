@@ -36,6 +36,7 @@ def check_password():
         return False
     return True
 
+# --- GENERATOR PDF (Z POPRAWIONĄ KOLEJNOŚCIĄ) ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -43,26 +44,32 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     data_gen = datetime.now().strftime("%d.%m.%Y %H:%M")
     pdf.cell(190, 10, f"RAPORT FINANSOWY - {data_gen}", ln=True, align="C")
     pdf.ln(10)
+    
     pdf.set_font("Arial", "B", 12)
     pdf.set_fill_color(240, 240, 240)
     pdf.cell(190, 10, "PODSUMOWANIE:", ln=True, align="L", fill=True)
+    
     pdf.set_font("Arial", "", 11)
+    # Kolejność: Przychód ogólny -> Wydatki gotówkowe -> Gotówka w kasie
     pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
-    pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "WYDATKI GOTOWKOWE:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
+    pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
+    
     pdf.ln(10)
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
+    pdf.cell(30, 10, "Data wpisu", 1); pdf.cell(30, 10, "Typ", 1); pdf.cell(30, 10, "Kwota", 1); pdf.cell(30, 10, "Dzien", 1); pdf.cell(70, 10, "Opis", 1)
     pdf.ln()
+    
     pdf.set_font("Arial", "", 9)
     for i, row in dataframe.iterrows():
         t = str(row['Typ']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         o = str(row['Opis']).replace('ó','o').replace('ś','s').replace('ą','a').replace('ę','e').replace('ł','l')
         if o == "nan": o = ""
-        pdf.cell(35, 10, str(row['Data']), 1)
-        pdf.cell(40, 10, t, 1)
-        pdf.cell(35, 10, f"{row['Kwota']:.2f} zl", 1)
-        pdf.cell(80, 10, o[:45], 1)
+        pdf.cell(30, 10, str(row['Data']), 1)
+        pdf.cell(30, 10, t, 1)
+        pdf.cell(30, 10, f"{row['Kwota']:.2f} zl", 1)
+        pdf.cell(30, 10, str(row['Data zdarzenia']), 1)
+        pdf.cell(70, 10, o[:40], 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -90,6 +97,7 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
 
+    # Kolory kafelków
     if s_gotowka >= 0:
         bg_got, brd_got, txt_got = "#fff3cd", "#ffc107", "#856404"
     else:
@@ -99,25 +107,15 @@ if check_password():
     def add_entry_dialog(typ):
         st.write(f"Kategoria: **{typ}**")
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
-        
         etykieta_daty = "Data wydatku" if typ == "Wydatki gotówkowe" else "Data przychodu"
         data_wybrana = st.date_input(etykieta_daty, datetime.now())
-        
         opis = st.text_input("Opis wydatku") if typ == "Wydatki gotówkowe" else ""
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
                 data_systemowa = datetime.now().strftime("%d.%m %H:%M")
                 data_zdarzenia = data_wybrana.strftime("%d.%m")
-                
-                n = {
-                    'Data': data_systemowa, 
-                    'Typ': typ, 
-                    'Kwota': float(kwota), 
-                    'Opis': opis, 
-                    'Status': 'Aktywny',
-                    'Data zdarzenia': data_zdarzenia
-                }
+                n = {'Data': data_systemowa, 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny', 'Data zdarzenia': data_zdarzenia}
                 st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                 save_data(st.session_state.data)
                 st.rerun()
@@ -128,57 +126,62 @@ if check_password():
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True): add_entry_dialog("Przychód ogólny")
+    with c3: # Zamienione miejscami dla logiki raportu
+        st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
+        if st.button("➖ Dodaj", key="b3", use_container_width=True): add_entry_dialog("Wydatki gotówkowe")
     with c2:
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b2", use_container_width=True): add_entry_dialog("Gotówka")
-    with c3:
-        st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➖ Dodaj", key="b3", use_container_width=True): add_entry_dialog("Wydatki gotówkowe")
 
     st.divider()
     st.subheader("📂 Historia")
     
-    # Ustalona kolejność kolumn
     df_display = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-    
+
+    # --- KOLOROWANIE HISTORII ---
+    def color_row(row):
+        if row['Typ'] == 'Przychód ogólny': return ['background-color: #d4edda'] * len(row)
+        if row['Typ'] == 'Wydatki gotówkowe': return ['background-color: #f8d7da'] * len(row)
+        if row['Typ'] == 'Gotówka': return ['background-color: #fff3cd'] * len(row)
+        return [''] * len(row)
+
+    styled_df = df_display.style.apply(color_row, axis=1)
+
     if "table_id" not in st.session_state or st.session_state.get('reset_table', False):
         st.session_state.table_id = random.randint(0, 100000)
         st.session_state.reset_table = False
 
-    # Konfiguracja kolumn: szerokości i nazwy
     event = st.dataframe(
-        df_display, 
+        styled_df, 
         use_container_width=True, 
         hide_index=True, 
         on_select="rerun", 
         selection_mode="single-row",
         key=f"tabela_{st.session_state.table_id}",
         column_config={
-            "Data": st.column_config.TextColumn("Data", width="small"),
+            "Data": st.column_config.TextColumn("Data wpisu", width="small"),
             "Typ": st.column_config.TextColumn("Typ", width="small"),
             "Kwota": st.column_config.NumberColumn("Kwota", width="small", format="%.2f zł"),
-            "Data zdarzenia": st.column_config.TextColumn("Dzień utargu", width="small"),
+            "Data zdarzenia": st.column_config.TextColumn("Dzień", width="small"),
             "Opis": st.column_config.TextColumn("Opis", width="large"),
         }
     )
     
     if event.selection.rows:
         row_idx = event.selection.rows[0]
-        row = df_display.iloc[row_idx]
+        row_info = df_display.iloc[row_idx]
         st.session_state.reset_table = True
         
         @st.dialog("Usuń wpis")
-        def delete_entry_dialog(row_info, idx_in_display):
-            st.warning(f"Czy usunąć: {row_info['Typ']} - {row_info['Kwota']:.2f} zł?")
+        def delete_entry_dialog(r, idx):
+            st.warning(f"Czy usunąć: {r['Typ']} - {r['Kwota']:.2f} zł?")
             if st.button("🔥 POTWIERDZAM: USUŃ", type="primary", use_container_width=True):
-                orig_idx = df_display.index[idx_in_display]
+                orig_idx = df_display.index[idx]
                 st.session_state.data.at[orig_idx, 'Status'] = 'Usunięty'
                 save_data(st.session_state.data)
                 st.rerun()
-            if st.button("🔙 NIE USUWAJ", use_container_width=True):
-                st.rerun()
-        
-        delete_entry_dialog(row, row_idx)
+            if st.button("🔙 NIE USUWAJ", use_container_width=True): st.rerun()
+        delete_entry_dialog(row_info, row_idx)
 
     with st.sidebar:
         st.header("⚙️ Opcje")
@@ -187,12 +190,11 @@ if check_password():
             cookies.save()
             st.rerun()
         if not df_all.empty:
-            pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
+            pdf_now = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
             st.divider()
             st.warning("ZAMKNIĘCIE DNIA")
-            if st.button("💾 PRZYGOTUJ RESET", use_container_width=True):
-                st.session_state.reset_check = True
+            if st.button("💾 PRZYGOTUJ RESET", use_container_width=True): st.session_state.reset_check = True
             if st.session_state.get('reset_check'):
                 if st.button("🔥 POTWIERDZAM: ZERUJ", type="primary", use_container_width=True):
                     st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
