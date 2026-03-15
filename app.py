@@ -4,6 +4,7 @@ import os
 import random
 from datetime import datetime
 from fpdf import FPDF
+from streamlit_cookies_manager import EncryptedCookiesManager
 
 # --- KONFIGURACJA ---
 st.set_page_config(
@@ -12,16 +13,27 @@ st.set_page_config(
     page_icon="favicon.png" 
 )
 
+# Manager ciasteczek (żeby hasło trzymało długo)
+cookies = EncryptedCookiesManager(password="pizzeria_sekret_123")
+if not cookies.ready():
+    st.stop()
+
 # Hasło dostępu
-MOJE_HASLO = "dup@"
+MOJE_HASLO = "1234"
 
 def check_password():
+    # Sprawdź czy jest ciasteczko "zalogowany"
+    if cookies.get("is_logged") == "true":
+        return True
+
     if "password_correct" not in st.session_state:
         st.title("🍕 Rozliczenie Pizzerii")
         wpisane_haslo = st.text_input("Podaj hasło dostępu", type="password")
         if st.button("ZALOGUJ SIĘ", use_container_width=True):
             if wpisane_haslo == MOJE_HASLO:
                 st.session_state["password_correct"] = True
+                cookies["is_logged"] = "true"
+                cookies.save()
                 st.rerun()
             else:
                 st.error("❌ Błędne hasło")
@@ -142,6 +154,10 @@ if check_password():
 
     with st.sidebar:
         st.header("⚙️ Opcje")
+        if st.button("WYLOGUJ", use_container_width=True):
+            cookies["is_logged"] = "false"
+            cookies.save()
+            st.rerun()
         if not df_all.empty:
             pdf_now = create_pdf(df_all, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_now, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", "application/pdf", use_container_width=True)
@@ -154,8 +170,5 @@ if check_password():
                 if st.button("🔥 POTWIERDZAM: ZERUJ", type="primary", use_container_width=True):
                     st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status'])
                     save_data(st.session_state.data)
-                    st.session_state.reset_check = False
-                    st.rerun()
-                if st.button("🔙 ANULUJ", use_container_width=True):
                     st.session_state.reset_check = False
                     st.rerun()
