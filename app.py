@@ -22,7 +22,6 @@ def check_password():
         return False
     return True
 
-# Funkcja PDF
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -72,17 +71,22 @@ if check_password():
 
     st.title("🍕 Panel Rozliczeń")
 
-    # Kolory kafelków - Gotówka zmienia się na czerwoną przy minusie
-    color_gotowka = "#fff3cd" if s_gotowka >= 0 else "#f8d7da"
-    border_gotowka = "#ffc107" if s_gotowka >= 0 else "#dc3545"
-    text_gotowka = "#856404" if s_gotowka >= 0 else "#721c24"
+    # LOGIKA KOLORÓW DLA GOTÓWKI
+    if s_gotowka >= 0:
+        bg_gotowka = "#fff3cd"    # Żółty
+        brd_gotowka = "#ffc107"   # Złoty
+        txt_gotowka = "#856404"   # Ciemny brąz
+    else:
+        bg_gotowka = "#ff0000"    # OSTRY CZERWONY
+        brd_gotowka = "#8b0000"   # Bordowy brzeg
+        txt_gotowka = "#ffffff"   # BIAŁY TEKST (żeby był czytelny)
 
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True): st.session_state.f = "Przychód ogólny"
     with c2:
-        st.markdown(f'<div style="background-color:{color_gotowka}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {border_gotowka}; height: 100px;"><span style="color:{text_gotowka}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{text_gotowka}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color:{bg_gotowka}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_gotowka}; height: 100px;"><span style="color:{txt_gotowka}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{txt_gotowka}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b2", use_container_width=True): st.session_state.f = "Gotówka"
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
