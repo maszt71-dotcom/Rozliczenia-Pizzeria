@@ -55,7 +55,7 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
         pdf.cell(35, 10, str(row['Typ']), 1)
         pdf.cell(25, 10, f"{row['Kwota']:.2f} zl", 1)
         pdf.cell(20, 10, str(row['Data zdarzenia']), 1)
-        pdf.cell(80, 10, str(row['Opis'])[:50] if str(row['Opis']) != "nan" else "", 1)
+        pdf.cell(80, 10, str(row['Opis']), 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -92,7 +92,10 @@ if check_password():
         st.write(f"Kategoria: **{typ}**")
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         data_wybrana = st.date_input("Dzień zdarzenia", datetime.now())
-        opis = st.text_input("Opis")
+        
+        # OGRANICZENIE ZNAKÓW W OPISIE
+        opis = st.text_input("Opis (max 50 znaków)", max_chars=50)
+        
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny', 'Data zdarzenia': data_wybrana.strftime("%d.%m")}
@@ -124,7 +127,6 @@ if check_password():
     
     if "table_id" not in st.session_state: st.session_state.table_id = 1
 
-    # TABELA Z PTASZKAMI I KOLORAMI (Stylized)
     selection = st.dataframe(
         df_history.style.apply(apply_row_styles, axis=1),
         use_container_width=True,
@@ -153,11 +155,9 @@ if check_password():
             st.subheader("🏁 Zamknięcie dnia")
             pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             
-            # KROK 1: Pobranie raportu
             if st.download_button("📄 1. POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True):
                 st.session_state.pdf_pobrany = True
 
-            # KROK 2: Reset (Zablokowany do czasu pobrania raportu)
             if not st.session_state.get('pdf_pobrany', False):
                 st.info("Pobierz raport, aby odblokować reset.")
                 st.button("💾 2. RESETUJ TABELĘ (Zablokowane)", disabled=True, use_container_width=True)
