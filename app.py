@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import os
@@ -93,8 +92,6 @@ if check_password():
         st.write(f"Kategoria: **{typ}**")
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         data_wybrana = st.date_input("Dzień zdarzenia", datetime.now())
-        
-        # OGRANICZENIE ZNAKÓW DO 40 DLA ESTETYKI
         opis = st.text_input("Opis (max 40 znaków)", max_chars=40)
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
@@ -128,7 +125,7 @@ if check_password():
     
     if "table_id" not in st.session_state: st.session_state.table_id = 1
 
-    # ZWĘŻONE PIERWSZE 4 POLA DLA LEPSZEJ ESTETYKI
+    # KONFIGURACJA KOLUMNY TYP DO NAJDŁUŻSZEGO WPISU
     selection = st.dataframe(
         df_history.style.apply(apply_row_styles, axis=1),
         use_container_width=True,
@@ -137,7 +134,7 @@ if check_password():
         key=f"historia_table_{st.session_state.table_id}",
         column_config={
             "Data": st.column_config.TextColumn("Data wpisu", width="small"),
-            "Typ": st.column_config.TextColumn("Typ", width="small"),
+            "Typ": st.column_config.TextColumn("Typ", width="medium"), # Zmienione na medium, by zmieścić "Wydatki gotówkowe"
             "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
             "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
             "Opis": st.column_config.TextColumn("Opis", width="large")
