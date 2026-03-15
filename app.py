@@ -6,7 +6,7 @@ from datetime import datetime
 # --- KONFIGURACJA ---
 st.set_page_config(page_title="Pizzeria - Rozliczenia", layout="centered", page_icon="🍕")
 
-# Hasło
+# Hasło dostępu
 MOJE_HASLO = "1234"
 
 def check_password():
@@ -59,7 +59,7 @@ if check_password():
 
     with col2:
         st.markdown(f"""<div style="background-color:#fff3cd; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #ffc107; height: 100px;">
-        <span style="color:#856404; font-size:11px; font-weight:bold;">STAN KASY</span><br>
+        <span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA</span><br>
         <b style="color:#856404; font-size:16px;">{stan_gotowki:,.2f} zł</b></div>""", unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="btn_gotowka", use_container_width=True):
             st.session_state.pokaz_formularz = "Gotówka"
@@ -79,7 +79,7 @@ if check_password():
         st.subheader(f"Wprowadź: {typ_wpisu}")
         
         with st.form("formularz_wpisu", clear_on_submit=True):
-            # Używamy text_input zamiast number_input, żeby pole było puste (placeholder)
+            # Text_input zamiast number_input, aby pole było puste przy kliknięciu
             kwota_raw = st.text_input("Podaj kwotę (zł)", placeholder="Wpisz kwotę...", key="input_kwota")
             
             opis_final = ""
@@ -89,7 +89,6 @@ if check_password():
             c_save, c_cancel = st.columns(2)
             with c_save:
                 if st.form_submit_button("ZAPISZ", use_container_width=True):
-                    # Próba zamiany tekstu na liczbę
                     try:
                         kwota_clean = float(kwota_raw.replace(',', '.'))
                         if kwota_clean > 0:
@@ -123,3 +122,6 @@ if check_password():
                 st.session_state.data = st.session_state.data.drop(st.session_state.data.index[-1])
                 save_data(st.session_state.data)
                 st.rerun()
+        
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Pobierz plik bazy (CSV)", csv, "finanse_pizzeria.csv", "text/csv")
