@@ -6,8 +6,10 @@ from datetime import datetime
 from fpdf import FPDF
 
 # --- KONFIGURACJA ---
-st.set_page_config(page_title="Rozliczenie Pizzerii", layout="centered", page_icon="🍕")
-
+st.set_page_config(
+    page_title="Rozliczenie Pizzerii",
+    page_icon="favicon.png"  # To musi tu być!
+)
 # Hasło dostępu
 MOJE_HASLO = "dup@"
 
