@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 # Hasło dostępu
-MOJE_HASLO = "dup@"
+MOJE_HASLO = "1234"
 
 def check_password():
     if "password_correct" not in st.session_state:
@@ -42,7 +42,7 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.set_font("Arial", "", 11)
     pdf.cell(95, 10, "PRZYCHOD OGOLNY:", 1); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, ln=True)
     pdf.cell(95, 10, "GOTOWKA (W KASIE):", 1); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, ln=True)
-    pdf.cell(95, 10, "SUMA WYDATKOW:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
+    pdf.cell(95, 10, "WYDATKI GOTOWKOWE:", 1); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, ln=True)
     pdf.ln(10)
     pdf.set_font("Arial", "B", 10)
     pdf.cell(35, 10, "Data", 1); pdf.cell(40, 10, "Typ", 1); pdf.cell(35, 10, "Kwota", 1); pdf.cell(80, 10, "Opis", 1)
@@ -74,7 +74,7 @@ if check_password():
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
-    s_wydatki = df_active[df_active['Typ'] == 'Wydatki']['Kwota'].sum()
+    s_wydatki = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
     s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
 
     st.title("🍕 Rozliczenie Pizzerii")
@@ -88,7 +88,7 @@ if check_password():
     def add_entry_dialog(typ):
         st.write(f"Kategoria: **{typ}**")
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", value=None)
-        opis = st.text_input("Opis wydatku") if typ == "Wydatki" else ""
+        opis = st.text_input("Opis wydatku") if typ == "Wydatki gotówkowe" else ""
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota:
                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': typ, 'Kwota': float(kwota), 'Opis': opis, 'Status': 'Aktywny'}
@@ -116,8 +116,8 @@ if check_password():
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b2", use_container_width=True): add_entry_dialog("Gotówka")
     with c3:
-        st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➖ Dodaj", key="b3", use_container_width=True): add_entry_dialog("Wydatki")
+        st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
+        if st.button("➖ Dodaj", key="b3", use_container_width=True): add_entry_dialog("Wydatki gotówkowe")
 
     st.divider()
     st.subheader("📂 Historia")
