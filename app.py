@@ -55,7 +55,7 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
         pdf.cell(40, 10, str(row['Typ']), 1)
         pdf.cell(30, 10, f"{row['Kwota']:.2f} zl", 1)
         pdf.cell(25, 10, str(row['Data zdarzenia']), 1)
-        pdf.cell(65, 10, str(row['Opis']), 1)
+        pdf.cell(65, 10, str(row['Opis']) if str(row['Opis']) != 'nan' else "", 1)
         pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
@@ -92,7 +92,11 @@ if check_password():
         st.write(f"Kategoria: **{typ}**")
         kwota = st.number_input("Podaj kwotę (zł)", min_value=0.0, step=1.0, format="%.2f", key="nowa_kwota_input", value=None)
         data_wybrana = st.date_input("Dzień zdarzenia", datetime.now())
-        opis = st.text_input("Opis (max 40 znaków)", max_chars=40)
+        
+        # OPIS TYLKO DLA WYDATKÓW
+        opis = ""
+        if typ == "Wydatki gotówkowe":
+            opis = st.text_input("Opis (max 40 znaków)", max_chars=40)
         
         if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
             if kwota is not None and kwota > 0:
@@ -125,7 +129,7 @@ if check_password():
     
     if "table_id" not in st.session_state: st.session_state.table_id = 1
 
-    # KONFIGURACJA KOLUMNY TYP DO NAJDŁUŻSZEGO WPISU
+    # TABELA Z DOPASOWANYMI SZEROKOŚCIAMI
     selection = st.dataframe(
         df_history.style.apply(apply_row_styles, axis=1),
         use_container_width=True,
@@ -133,10 +137,10 @@ if check_password():
         selection_mode="multi-row",
         key=f"historia_table_{st.session_state.table_id}",
         column_config={
-            "Data": st.column_config.TextColumn("Data wpisu", width="small"),
-            "Typ": st.column_config.TextColumn("Typ", width="medium"), # Zmienione na medium, by zmieścić "Wydatki gotówkowe"
-            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
-            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
+            "Data": st.column_config.TextColumn("Data wpisu", width="medium"),
+            "Typ": st.column_config.TextColumn("Typ", width="medium"),
+            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="medium"),
+            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="medium"),
             "Opis": st.column_config.TextColumn("Opis", width="large")
         }
     )
