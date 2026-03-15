@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 # Hasło dostępu
-MOJE_HASLO = "1234"
+MOJE_HASLO = "dup@"
 
 def check_password():
     if "password_correct" not in st.session_state:
