@@ -31,7 +31,7 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF (Z KOLORAMI I BEZPIECZNYMI ZNAKAMI) ---
+# --- GENERATOR PDF (KOLORY I BEZPIECZNE ZNAKI) ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -85,39 +85,32 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- STYLE CSS DLA KOLOROWYCH PRZYCISKÓW ---
-    st.markdown("""
-        <style>
-        div.stButton > button { border-radius: 10px; font-weight: bold; }
-        /* Style dla kafelków wewnątrz dialogu */
-        .st-emotion-cache-1cvow48 { flex-direction: column; }
-        </style>
-    """, unsafe_allow_html=True)
+    # --- LOGIKA WYBORU Z MOŻLIWOŚCIĄ COFNIĘCIA (TOGGLE) ---
+    def set_selection(val):
+        if st.session_state.get('sel_k') == val:
+            st.session_state.sel_k = None  # Kliknięcie drugi raz zamyka
+        else:
+            st.session_state.sel_k = val   # Wybór nowej opcji
 
-    # --- OKNO GOTÓWKI (KAFELKI + FORMULARZ W JEDNYM) ---
+    # --- OKNO GOTÓWKI (Z KOLOROWYMI KAFELKAMI I FORMULARZEM) ---
     @st.dialog("Dodaj wpis gotówkowy")
     def d_gotowka_fixed():
-        st.write("Wybierz źródło:")
-        # Przyciski jeden pod drugim
-        bufet = st.button("🏠 BUFET", use_container_width=True, key="btn_buf")
-        k1 = st.button("🚚 KIEROWCA 1", use_container_width=True, key="btn_k1")
-        k2 = st.button("🚚 KIEROWCA 2", use_container_width=True, key="btn_k2")
-        k3 = st.button("🚚 KIEROWCA 3", use_container_width=True, key="btn_k3")
-        k4 = st.button("🚚 KIEROWCA 4", use_container_width=True, key="btn_k4")
+        st.write("Wybierz źródło (kliknij ponownie, aby zamknąć):")
+        
+        # Przyciski jeden pod drugim - stylizowane przez emoji
+        if st.button("🏠 BUFET", use_container_width=True): set_selection("Bufet"); st.rerun()
+        if st.button("🟡 KIEROWCA 1", use_container_width=True): set_selection("Kierowca 1"); st.rerun()
+        if st.button("🟡 KIEROWCA 2", use_container_width=True): set_selection("Kierowca 2"); st.rerun()
+        if st.button("🟡 KIEROWCA 3", use_container_width=True): set_selection("Kierowca 3"); st.rerun()
+        if st.button("🟡 KIEROWCA 4", use_container_width=True): set_selection("Kierowca 4"); st.rerun()
 
-        # Logika wyboru bez przeładowania całego okna
-        if bufet: st.session_state.sel_k = "Bufet"
-        if k1: st.session_state.sel_k = "Kierowca 1"
-        if k2: st.session_state.sel_k = "Kierowca 2"
-        if k3: st.session_state.sel_k = "Kierowca 3"
-        if k4: st.session_state.sel_k = "Kierowca 4"
-
+        # Rozwinięcie formularza pod kafelkami
         if st.session_state.get('sel_k'):
-            st.success(f"Wybrano: {st.session_state.sel_k}")
+            st.markdown(f"### ✏️ Wpis: {st.session_state.sel_k}")
             kw_g = st.number_input("Wpisz kwotę (zł)", min_value=0.0, format="%.2f", value=None, key="kw_g_val")
             da_g = st.date_input("Z dnia", datetime.now(), key="da_g_val")
             
-            if st.button("✅ ZAPISZ I ZAMKNIJ", type="primary", use_container_width=True):
+            if st.button("✅ ZAPISZ", type="primary", use_container_width=True):
                 if kw_g:
                     nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.sel_k}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_g.strftime("%d.%m")}
                     st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
