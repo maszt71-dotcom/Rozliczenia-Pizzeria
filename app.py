@@ -41,15 +41,9 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.cell(190, 10, b_t(f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
     pdf.ln(10)
     pdf.set_font("Courier", "B", 10)
-    pdf.set_fill_color(212, 237, 218)
-    pdf.cell(95, 10, b_t("PRZYCHOD OGOLNY:"), 1, 0, 'L', True)
-    pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, 1, 'R', True)
-    pdf.set_fill_color(248, 215, 218)
-    pdf.cell(95, 10, b_t("WYDATKI GOTOWKOWE:"), 1, 0, 'L', True)
-    pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, 1, 'R', True)
-    pdf.set_fill_color(255, 243, 205)
-    pdf.cell(95, 10, b_t("GOTOWKA (W KASIE):"), 1, 0, 'L', True)
-    pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R', True)
+    pdf.set_fill_color(212, 237, 218); pdf.cell(95, 10, b_t("PRZYCHOD OGOLNY:"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, 1, 'R', True)
+    pdf.set_fill_color(248, 215, 218); pdf.cell(95, 10, b_t("WYDATKI GOTOWKOWE:"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, 1, 'R', True)
+    pdf.set_fill_color(255, 243, 205); pdf.cell(95, 10, b_t("GOTOWKA (SUMA):"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R', True)
     pdf.ln(10)
     headers = ["Data", "Typ", "Kwota", "Z dnia", "Opis"]
     cols = [25, 45, 25, 15, 80]
@@ -70,7 +64,7 @@ def apply_row_styles(row):
     color = ''
     if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda; color: #155724'
     elif row['Typ'] == 'Wydatki gotówkowe': color = 'background-color: #f8d7da; color: #721c24'
-    elif row['Typ'] == 'Gotówka': color = 'background-color: #fff3cd; color: #856404'
+    elif 'Gotówka' in row['Typ']: color = 'background-color: #fff3cd; color: #856404'
     return [color] * len(row)
 
 if check_password():
@@ -87,11 +81,12 @@ if check_password():
 
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
-    s_gotowka = df_active[df_active['Typ'] == 'Gotówka']['Kwota'].sum() - s_wydatki
+    # Sumujemy wszystkie typy zaczynające się od "Gotówka"
+    s_gotowka = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wydatki
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- LOGIKA DIALOGU RESETU ---
+    # --- LOGIKA DIALOGÓW ---
     @st.dialog("Pobierz raport i wyczyść")
     def final_reset_dialog():
         pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
@@ -102,32 +97,21 @@ if check_password():
         if st.session_state.get('pdf_pobrany_final', False):
             if st.button("🔥 2. ZERUJ HISTORIĘ I KONTENERY", type="primary", use_container_width=True):
                 st.session_state.pokaz_pytanie = True
-        else:
-            st.button("2. ZERUJ HISTORIĘ (Pobierz raport)", disabled=True, use_container_width=True)
         if st.session_state.get('pokaz_pytanie', False):
             st.error("❗ JESTEŚ PEWIEN?")
             if st.button("✅ TAK, ZERUJ", type="primary", use_container_width=True):
                 st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                 save_data(st.session_state.data)
-                st.session_state.pdf_pobrany_final = False
-                st.session_state.pokaz_pytanie = False
-                st.rerun()
-            if st.button("❌ ANULUJ"):
-                st.session_state.pokaz_pytanie = False
-                st.rerun()
+                st.session_state.pdf_pobrany_final = False; st.session_state.pokaz_pytanie = False; st.rerun()
 
-    # --- DIALOG POTWIERDZENIA USUNIĘCIA WPISU ---
     @st.dialog("Jesteś pewien?")
     def confirm_delete_dialog(rows_indices):
-        st.warning(f"Czy na pewno chcesz usunąć zaznaczone wpisy ({len(rows_indices)} szt.)?")
+        st.warning(f"Usunąć zaznaczone wpisy ({len(rows_indices)} szt.)?")
         if st.button("✅ TAK, USUŃ", type="primary", use_container_width=True):
             st.session_state.data.loc[rows_indices, 'Status'] = 'Usunięty'
-            save_data(st.session_state.data)
-            st.session_state.table_id = random.randint(0, 999)
-            st.rerun()
-        if st.button("❌ ANULUJ", use_container_width=True):
-            st.rerun()
+            save_data(st.session_state.data); st.session_state.table_id = random.randint(0, 999); st.rerun()
 
+    # --- KAFELKI GŁÓWNE ---
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -158,15 +142,17 @@ if check_password():
             d3()
     with c2:
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
-        st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b2", use_container_width=True):
             @st.dialog("Dodaj Gotówkę")
             def d2():
+                # PODZIAŁ GOTÓWKI
+                podmiot = st.selectbox("Wybierz źródło", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
                 da = st.date_input("Z dnia", datetime.now())
                 if st.button("Zapisz"):
                     if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Gotówka', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f'Gotówka - {podmiot}', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                         save_data(st.session_state.data); st.rerun()
             d2()
@@ -179,21 +165,16 @@ if check_password():
     with st.sidebar:
         st.header("⚙️ Opcje")
         if st.button("🔄 ODŚWIEŻ DANE", use_container_width=True):
-            st.session_state.data = load_data()
-            st.rerun()
+            st.session_state.data = load_data(); st.rerun()
         st.divider()
         if sel.selection.rows:
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
                 confirm_delete_dialog(df_h.index[sel.selection.rows])
-        
         if st.button("WYLOGUJ", use_container_width=True):
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
-            
         if not df_active.empty:
             pdf_s = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_s, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
             st.divider()
             if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True):
-                st.session_state.pdf_pobrany_final = False
-                st.session_state.pokaz_pytanie = False
-                final_reset_dialog()
+                st.session_state.pdf_pobrany_final = False; st.session_state.pokaz_pytanie = False; final_reset_dialog()
