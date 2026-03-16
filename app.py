@@ -85,35 +85,48 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- OKNO GOTÓWKI (ROZWIJANE SEKCJE + PODŚWIETLONY PRZYCISK) ---
-    @st.dialog("Dodaj wpis gotówkowy")
-    def d_gotowka_fixed():
-        st.write("Wybierz kogo rozliczasz:")
-        opcje = [("🏠 Bufet", "Bufet"), ("🚗 Kierowca 1", "Kierowca 1"), ("🚗 Kierowca 2", "Kierowca 2"), ("🚗 Kierowca 3", "Kierowca 3"), ("🚗 Kierowca 4", "Kierowca 4")]
+    # --- NOWA LOGIKA RESETU (TRZY ETAPY) ---
+    @st.dialog("Zamknięcie dnia i reset")
+    def final_reset_flow():
+        st.warning("⚠️ Uwaga: Resetowanie wyczyści wszystkie kafelki i historię!")
+        
+        # 1. POBIERANIE (Wymuszane)
+        pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+        if st.download_button("📄 KROK 1: POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
+            st.session_state.reset_step = 2
+            st.rerun()
 
-        for label, nazwa in opcje:
-            with st.expander(label):
-                kw_val = st.number_input(f"Kwota ({nazwa})", min_value=0.0, format="%.2f", value=None, key=f"kw_{nazwa}")
-                da_val = st.date_input("Z dnia", datetime.now(), key=f"da_{nazwa}")
-                
-                # Podświetlony przycisk zapisu (primary)
-                if st.button(f"ZAPISZ {nazwa.upper()}", type="primary", use_container_width=True, key=f"save_{nazwa}"):
-                    if kw_val:
-                        nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {nazwa}", 'Kwota': float(kw_val), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_val.strftime("%d.%m")}
-                        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
-                        save_data(st.session_state.data)
-                        st.rerun()
+        # 2. PRZYCISK RESETUJ (Aktywny tylko po kroku 1)
+        if st.session_state.get('reset_step', 0) >= 2:
+            st.divider()
+            if st.button("🔥 KROK 2: RESETUJ DANE", use_container_width=True):
+                st.session_state.reset_step = 3
+                st.rerun()
+        else:
+            st.button("KROK 2: RESETUJ DANE (Najpierw pobierz raport)", use_container_width=True, disabled=True)
+
+        # 3. POTWIERDZENIE (Rozwija się po kroku 2)
+        if st.session_state.get('reset_step', 0) == 3:
+            st.error("❗ JESTEŚ PEWIEN? Danych nie da się odzyskać!")
+            if st.button("✅ TAK, JESTEM PEWIEN - CZYŚĆ WSZYSTKO", type="primary", use_container_width=True):
+                st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+                save_data(st.session_state.data)
+                st.session_state.reset_step = 0
+                st.rerun()
+            if st.button("❌ ANULUJ", use_container_width=True):
+                st.session_state.reset_step = 0
+                st.rerun()
 
     # --- KAFELKI GŁÓWNE ---
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj ", key="b1", use_container_width=True):
+        if st.button("➕ Dodaj", key="b1", use_container_width=True):
             @st.dialog("Dodaj Przychód")
             def d1():
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
                 da = st.date_input("Z dnia", datetime.now())
-                if st.button("ZAPISZ PRZYCHÓD", type="primary", use_container_width=True):
+                if st.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
@@ -122,13 +135,13 @@ if check_password():
 
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➖ Dodaj  ", key="b3", use_container_width=True):
+        if st.button("➖ Dodaj", key="b3", use_container_width=True):
             @st.dialog("Dodaj Wydatek")
             def d3():
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
                 da = st.date_input("Z dnia", datetime.now())
                 op = st.text_input("Opis")
-                if st.button("ZAPISZ WYDATEK", type="primary", use_container_width=True):
+                if st.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
@@ -139,37 +152,31 @@ if check_password():
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj   ", key="b2", use_container_width=True):
-            d_gotowka_fixed()
+            @st.dialog("Wybierz kogo rozliczasz")
+            def d_got():
+                opcje = [("🏠 Bufet", "Bufet"), ("🚗 Kierowca 1", "Kierowca 1"), ("🚗 Kierowca 2", "Kierowca 2"), ("🚗 Kierowca 3", "Kierowca 3"), ("🚗 Kierowca 4", "Kierowca 4")]
+                for label, nazwa in opcje:
+                    with st.expander(label):
+                        kw_v = st.number_input(f"Kwota ({nazwa})", min_value=0.0, format="%.2f", value=None, key=f"k_{nazwa}")
+                        da_v = st.date_input("Z dnia", datetime.now(), key=f"d_{nazwa}")
+                        if st.button(f"ZAPISZ {nazwa.upper()}", type="primary", use_container_width=True, key=f"s_{nazwa}"):
+                            if kw_v:
+                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {nazwa}", 'Kwota': float(kw_v), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_v.strftime("%d.%m")}
+                                st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+                                save_data(st.session_state.data); st.rerun()
+            d_got()
 
     # --- HISTORIA I SIDEBAR ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-    if "table_id" not in st.session_state: st.session_state.table_id = 1
-    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{st.session_state.table_id}")
+    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{random.randint(0,999)}")
 
     with st.sidebar:
         st.header("⚙️ Opcje")
         if st.button("🔄 ODŚWIEŻ DANE", use_container_width=True):
             st.session_state.data = load_data(); st.rerun()
         st.divider()
-        if sel.selection.rows:
-            if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                @st.dialog("Jesteś pewien?")
-                def confirm_del(idx):
-                    st.warning(f"Usunąć {len(idx)} wpisów?")
-                    if st.button("✅ TAK, USUŃ", type="primary", use_container_width=True):
-                        st.session_state.data.loc[idx, 'Status'] = 'Usunięty'
-                        save_data(st.session_state.data); st.session_state.table_id = random.randint(0,999); st.rerun()
-                confirm_del(df_h.index[sel.selection.rows])
-        
         if not df_active.empty:
-            pdf_s = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
-            st.download_button("📄 POBIERZ RAPORT PDF", pdf_s, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
-            if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True):
-                @st.dialog("Zamknięcie dnia")
-                def d_res():
-                    st.write("1. Pobierz raport PDF.")
-                    if st.button("🔥 2. ZERUJ DANE", type="primary", use_container_width=True):
-                        st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-                        save_data(st.session_state.data); st.rerun()
-                d_res()
+            if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True, type="primary"):
+                st.session_state.reset_step = 0 # Resetowanie etapów przy nowym otwarciu
+                final_reset_flow()
