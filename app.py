@@ -85,38 +85,25 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- LOGIKA WYBORU Z MOŻLIWOŚCIĄ COFNIĘCIA (TOGGLE) ---
-    def set_selection(val):
-        if st.session_state.get('sel_k') == val:
-            st.session_state.sel_k = None  # Kliknięcie drugi raz zamyka
-        else:
-            st.session_state.sel_k = val   # Wybór nowej opcji
-
-    # --- OKNO GOTÓWKI (Z KOLOROWYMI KAFELKAMI I FORMULARZEM) ---
+    # --- NOWE OKNO GOTÓWKI (NIEZAWODNE ROZWIJANIE) ---
     @st.dialog("Dodaj wpis gotówkowy")
-    def d_gotowka_fixed():
-        st.write("Wybierz źródło (kliknij ponownie, aby zamknąć):")
+    def d_gotowka_expander():
+        st.write("Kliknij w odpowiednią sekcję:")
         
-        # Przyciski jeden pod drugim - stylizowane przez emoji
-        if st.button("🏠 BUFET", use_container_width=True): set_selection("Bufet"); st.rerun()
-        if st.button("🟡 KIEROWCA 1", use_container_width=True): set_selection("Kierowca 1"); st.rerun()
-        if st.button("🟡 KIEROWCA 2", use_container_width=True): set_selection("Kierowca 2"); st.rerun()
-        if st.button("🟡 KIEROWCA 3", use_container_width=True): set_selection("Kierowca 3"); st.rerun()
-        if st.button("🟡 KIEROWCA 4", use_container_width=True): set_selection("Kierowca 4"); st.rerun()
+        # Lista podmiotów z ikonami
+        opcje = [("🏠 Bufet", "Bufet"), ("🚗 Kierowca 1", "Kierowca 1"), ("🚗 Kierowca 2", "Kierowca 2"), ("🚗 Kierowca 3", "Kierowca 3"), ("🚗 Kierowca 4", "Kierowca 4")]
 
-        # Rozwinięcie formularza pod kafelkami
-        if st.session_state.get('sel_k'):
-            st.markdown(f"### ✏️ Wpis: {st.session_state.sel_k}")
-            kw_g = st.number_input("Wpisz kwotę (zł)", min_value=0.0, format="%.2f", value=None, key="kw_g_val")
-            da_g = st.date_input("Z dnia", datetime.now(), key="da_g_val")
-            
-            if st.button("✅ ZAPISZ", type="primary", use_container_width=True):
-                if kw_g:
-                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.sel_k}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_g.strftime("%d.%m")}
-                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
-                    save_data(st.session_state.data)
-                    st.session_state.sel_k = None
-                    st.rerun()
+        for label, nazwa in opcje:
+            with st.expander(label):
+                kw_val = st.number_input(f"Kwota - {nazwa}", min_value=0.0, format="%.2f", value=None, key=f"kw_{nazwa}")
+                da_val = st.date_input("Z dnia", datetime.now(), key=f"da_{nazwa}")
+                
+                if st.button(f"Zapisz {nazwa}", use_container_width=True, key=f"save_{nazwa}"):
+                    if kw_val:
+                        nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {nazwa}", 'Kwota': float(kw_val), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_val.strftime("%d.%m")}
+                        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
+                        save_data(st.session_state.data)
+                        st.rerun()
 
     # --- KAFELKI GŁÓWNE ---
     c1, c2, c3 = st.columns(3)
@@ -153,8 +140,7 @@ if check_password():
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b2", use_container_width=True):
-            st.session_state.sel_k = None
-            d_gotowka_fixed()
+            d_gotowka_expander()
 
     # --- HISTORIA ---
     st.divider(); st.subheader("📂 Historia")
