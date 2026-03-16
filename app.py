@@ -85,37 +85,39 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- NOWA LOGIKA RESETU (TRZY ETAPY) ---
+    # --- LOGIKA RESETU (TRZY ETAPY - STABILNA) ---
     @st.dialog("Zamknięcie dnia i reset")
     def final_reset_flow():
-        st.warning("⚠️ Uwaga: Resetowanie wyczyści wszystkie kafelki i historię!")
+        st.write("Podążaj za krokami, aby wyczyścić dane.")
         
         # 1. POBIERANIE (Wymuszane)
         pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
-        if st.download_button("📄 KROK 1: POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
-            st.session_state.reset_step = 2
-            st.rerun()
+        # Przycisk pobierania zawsze dostępny jako pierwszy krok
+        st.download_button("📄 KROK 1: POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary", key="download_reset_btn")
+        
+        # Mała informacja pod przyciskiem
+        st.info("Po pobraniu raportu, przycisk resetu pod spodem stanie się aktywny.")
 
-        # 2. PRZYCISK RESETUJ (Aktywny tylko po kroku 1)
-        if st.session_state.get('reset_step', 0) >= 2:
+        # Używamy prostego checkboxa "Pobrałem raport", który odblokuje reset (bo Streamlit gubi stan przy download_button)
+        pobrane = st.checkbox("Zatwierdzam, że raport został pobrany na urządzenie")
+
+        if pobrane:
             st.divider()
-            if st.button("🔥 KROK 2: RESETUJ DANE", use_container_width=True):
-                st.session_state.reset_step = 3
-                st.rerun()
-        else:
-            st.button("KROK 2: RESETUJ DANE (Najpierw pobierz raport)", use_container_width=True, disabled=True)
-
-        # 3. POTWIERDZENIE (Rozwija się po kroku 2)
-        if st.session_state.get('reset_step', 0) == 3:
-            st.error("❗ JESTEŚ PEWIEN? Danych nie da się odzyskać!")
-            if st.button("✅ TAK, JESTEM PEWIEN - CZYŚĆ WSZYSTKO", type="primary", use_container_width=True):
-                st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-                save_data(st.session_state.data)
-                st.session_state.reset_step = 0
-                st.rerun()
-            if st.button("❌ ANULUJ", use_container_width=True):
-                st.session_state.reset_step = 0
-                st.rerun()
+            if st.session_state.get('reset_confirm_view', False) == False:
+                if st.button("🔥 KROK 2: RESETUJ DANE", use_container_width=True):
+                    st.session_state.reset_confirm_view = True
+                    st.rerun()
+            
+            if st.session_state.get('reset_confirm_view', False):
+                st.error("❗ JESTEŚ PEWIEN? Danych nie da się odzyskać!")
+                if st.button("✅ TAK, JESTEM PEWIEN - CZYŚĆ", type="primary", use_container_width=True):
+                    st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+                    save_data(st.session_state.data)
+                    st.session_state.reset_confirm_view = False
+                    st.rerun()
+                if st.button("❌ ANULUJ", use_container_width=True):
+                    st.session_state.reset_confirm_view = False
+                    st.rerun()
 
     # --- KAFELKI GŁÓWNE ---
     c1, c2, c3 = st.columns(3)
@@ -169,14 +171,32 @@ if check_password():
     # --- HISTORIA I SIDEBAR ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{random.randint(0,999)}")
+    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"hist_{random.randint(0,999)}")
 
     with st.sidebar:
         st.header("⚙️ Opcje")
+        
+        # NOWY PRZYCISK: TYLKO POBRANIE (BEZ RESETU)
+        if not df_active.empty:
+            pdf_copy = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+            st.download_button("📄 POBIERZ RAPORT (KOPIA)", pdf_copy, f"Kopia_Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
+        
+        st.divider()
         if st.button("🔄 ODŚWIEŻ DANE", use_container_width=True):
             st.session_state.data = load_data(); st.rerun()
+        
+        if sel.selection.rows:
+            if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
+                @st.dialog("Jesteś pewien?")
+                def confirm_del(idx):
+                    st.warning(f"Usunąć {len(idx)} wpisów?")
+                    if st.button("✅ TAK, USUŃ", type="primary", use_container_width=True):
+                        st.session_state.data.loc[idx, 'Status'] = 'Usunięty'
+                        save_data(st.session_state.data); st.rerun()
+                confirm_del(df_h.index[sel.selection.rows])
+        
         st.divider()
         if not df_active.empty:
-            if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True, type="primary"):
-                st.session_state.reset_step = 0 # Resetowanie etapów przy nowym otwarciu
+            if st.button("💾 ZAMKNIJ DZIEŃ (RESET)", use_container_width=True, type="primary"):
+                st.session_state.reset_confirm_view = False # Reset widoku przy nowym otwarciu
                 final_reset_flow()
