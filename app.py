@@ -85,41 +85,51 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- LOGIKA RESETU (AUTOMATYCZNA) ---
+    # --- LOGIKA RESETU Z FLAGAMI ---
     @st.dialog("Pobierz raport i resetuj dane")
     def final_reset_flow():
-        # Etap 1: Pobieranie
+        # KROK 1: POBIERANIE
         if st.session_state.get('reset_step', 0) == 0:
             pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.write("Krok 1: Pobierz plik raportu.")
+            # Flaga jest ustawiana przy kliknięciu download_button
             if st.download_button("📄 POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
                 st.session_state.reset_step = 1
+                st.session_state.show_reset_dialog = True
                 st.rerun()
 
-        # Etap 2: Przycisk Resetuj
+        # KROK 2: PRZYCISK RESETUJ
         elif st.session_state.reset_step == 1:
-            st.success("✅ Raport wygenerowany!")
+            st.success("✅ Raport pobrany. Teraz możesz zresetować dane.")
             if st.button("🔥 RESETUJ DANE", use_container_width=True, type="primary"):
                 st.session_state.reset_step = 2
                 st.rerun()
-            if st.button("⬅️ WRÓĆ / ANULUJ", use_container_width=True):
+            if st.button("❌ PRZERWIJ OPERACJĘ", use_container_width=True):
                 st.session_state.reset_step = 0
+                st.session_state.show_reset_dialog = False
                 st.rerun()
 
-        # Etap 3: Potwierdzenie
+        # KROK 3: POTWIERDZENIE "JESTEŚ PEWIEN"
         elif st.session_state.reset_step == 2:
             st.error("❗ JESTEŚ PEWIEN? To wyczyści wszystkie kafelki!")
             if st.button("✅ TAK, JESTEM PEWIEN", use_container_width=True, type="primary"):
                 st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                 save_data(st.session_state.data)
                 st.session_state.reset_step = 0
+                st.session_state.show_reset_dialog = False
                 st.rerun()
-            if st.button("❌ PRZERWIJ OPERACJĘ", use_container_width=True):
+            if st.button("❌ PRZERWIJ I WRÓĆ", use_container_width=True):
                 st.session_state.reset_step = 0
+                st.session_state.show_reset_dialog = False
                 st.rerun()
+
+    # WYMUSZENIE OTWARCIA OKNA PO REŚCIE STRONY (jeśli flaga aktywna)
+    if st.session_state.get('show_reset_dialog', False):
+        final_reset_flow()
 
     # --- KAFELKI GŁÓWNE ---
     c1, c2, c3 = st.columns(3)
+    # [Reszta kodu pozostaje bez zmian dla przychodów i wydatków]
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True):
@@ -133,7 +143,6 @@ if check_password():
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                         save_data(st.session_state.data); st.rerun()
             d1()
-
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➖ Dodaj", key="b3", use_container_width=True):
@@ -148,7 +157,6 @@ if check_password():
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                         save_data(st.session_state.data); st.rerun()
             d3()
-
     with c2:
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -174,17 +182,15 @@ if check_password():
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        # Przycisk pobrania kopii (zawsze dostępny)
         if not df_active.empty:
             pdf_copy = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT (KOPIA)", pdf_copy, f"Kopia_Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
-        
         st.divider()
         if st.button("🔄 ODŚWIEŻ DANE", use_container_width=True):
             st.session_state.data = load_data(); st.rerun()
-        
         st.divider()
         if not df_active.empty:
-            if st.button("💾 POBIERZ RAPORT I RESETUJ DANE", use_container_width=True, type="primary"):
+            if st.button("💾 POBIERZ I RESETUJ DANE", use_container_width=True, type="primary"):
                 st.session_state.reset_step = 0
-                final_reset_flow()
+                st.session_state.show_reset_dialog = True
+                st.rerun()
