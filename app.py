@@ -85,7 +85,7 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- LOGIKA RESETU Z FLAGAMI ---
+    # --- LOGIKA RESETU ---
     @st.dialog("Pobierz raport i resetuj dane")
     def final_reset_flow():
         if st.session_state.get('reset_step', 0) == 0:
@@ -95,9 +95,8 @@ if check_password():
                 st.session_state.reset_step = 1
                 st.session_state.show_reset_dialog = True
                 st.rerun()
-
         elif st.session_state.reset_step == 1:
-            st.success("✅ Raport pobrany. Teraz możesz zresetować dane.")
+            st.success("✅ Raport pobrany.")
             if st.button("🔥 RESETUJ DANE", use_container_width=True, type="primary"):
                 st.session_state.reset_step = 2
                 st.rerun()
@@ -105,16 +104,15 @@ if check_password():
                 st.session_state.reset_step = 0
                 st.session_state.show_reset_dialog = False
                 st.rerun()
-
         elif st.session_state.reset_step == 2:
-            st.error("❗ JESTEŚ PEWIEN? To wyczyści wszystkie kafelki!")
+            st.error("❗ JESTEŚ PEWIEN?")
             if st.button("✅ TAK, JESTEM PEWIEN", use_container_width=True, type="primary"):
                 st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                 save_data(st.session_state.data)
                 st.session_state.reset_step = 0
                 st.session_state.show_reset_dialog = False
                 st.rerun()
-            if st.button("❌ PRZERWIJ I WRÓĆ", use_container_width=True):
+            if st.button("❌ PRZERWIJ", use_container_width=True):
                 st.session_state.reset_step = 0
                 st.session_state.show_reset_dialog = False
                 st.rerun()
@@ -122,7 +120,7 @@ if check_password():
     if st.session_state.get('show_reset_dialog', False):
         final_reset_flow()
 
-    # --- KAFELKI GŁÓWNE ---
+    # --- KAFELKI ---
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -169,21 +167,38 @@ if check_password():
                                 save_data(st.session_state.data); st.rerun()
             d_got()
 
-    # --- HISTORIA Z FORMATAOWANIEM KWOT ---
+    # --- HISTORIA Z WYBOREM WIERSZY ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     
-    # FORMATOWANIE: Dwa miejsca po przecinku w kolumnie Kwota
-    st.dataframe(
+    # Tabela z włączonym wyborem (on_select="rerun")
+    selection = st.dataframe(
         df_h.style.apply(apply_row_styles, axis=1), 
         use_container_width=True,
-        column_config={
-            "Kwota": st.column_config.NumberColumn(format="%.2f zł")
-        }
+        column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")},
+        on_select="rerun",
+        selection_mode="multi-row"
     )
 
     with st.sidebar:
         st.header("⚙️ Opcje")
+        
+        # PRZYCISK USUWANIA (pojawia się tylko gdy coś zaznaczono)
+        if selection.selection.rows:
+            st.error(f"Zaznaczono: {len(selection.selection.rows)}")
+            if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
+                @st.dialog("Potwierdź usunięcie")
+                def confirm_delete():
+                    st.warning("Czy na pewno chcesz usunąć zaznaczone wpisy?")
+                    if st.button("TAK, USUŃ NA STAŁE", type="primary", use_container_width=True):
+                        # Pobieramy indeksy z oryginalnego DataFrame na podstawie zaznaczenia
+                        indices_to_hide = df_h.index[selection.selection.rows]
+                        st.session_state.data.loc[indices_to_hide, 'Status'] = 'Usunięty'
+                        save_data(st.session_state.data)
+                        st.rerun()
+                confirm_delete()
+            st.divider()
+
         if not df_active.empty:
             pdf_copy = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT (KOPIA)", pdf_copy, f"Kopia_Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
