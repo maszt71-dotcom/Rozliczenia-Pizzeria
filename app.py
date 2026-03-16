@@ -7,7 +7,7 @@ from fpdf import FPDF
 from streamlit_cookies_manager import CookieManager
 
 # --- KONFIGURACJA STRONY ---
-st.set_page_config(page_title="Rozliczenie Pizzerii", layout="centered", page_icon="🍕")
+st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕") # Zmieniono na wide dla lepszej tabeli
 
 cookies = CookieManager()
 if not cookies.ready():
@@ -167,23 +167,26 @@ if check_password():
                                 save_data(st.session_state.data); st.rerun()
             d_got()
 
-    # --- HISTORIA Z WYBOREM WIERSZY ---
+    # --- HISTORIA Z SZERSZYM OPISEM ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     
-    # Tabela z włączonym wyborem (on_select="rerun")
     selection = st.dataframe(
         df_h.style.apply(apply_row_styles, axis=1), 
         use_container_width=True,
-        column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")},
         on_select="rerun",
-        selection_mode="multi-row"
+        selection_mode="multi-row",
+        column_config={
+            "Data": st.column_config.TextColumn("Data wpisu", width="small"),
+            "Typ": st.column_config.TextColumn("Typ", width="medium"),
+            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
+            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
+            "Opis": st.column_config.TextColumn("Opis", width="large"), # Rozszerzona kolumna opisu
+        }
     )
 
     with st.sidebar:
         st.header("⚙️ Opcje")
-        
-        # PRZYCISK USUWANIA (pojawia się tylko gdy coś zaznaczono)
         if selection.selection.rows:
             st.error(f"Zaznaczono: {len(selection.selection.rows)}")
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
@@ -191,7 +194,6 @@ if check_password():
                 def confirm_delete():
                     st.warning("Czy na pewno chcesz usunąć zaznaczone wpisy?")
                     if st.button("TAK, USUŃ NA STAŁE", type="primary", use_container_width=True):
-                        # Pobieramy indeksy z oryginalnego DataFrame na podstawie zaznaczenia
                         indices_to_hide = df_h.index[selection.selection.rows]
                         st.session_state.data.loc[indices_to_hide, 'Status'] = 'Usunięty'
                         save_data(st.session_state.data)
