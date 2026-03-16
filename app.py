@@ -31,7 +31,7 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF (POLSKIE KOLORY + BEZPIECZNE ZNAKI) ---
+# --- GENERATOR PDF ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -81,7 +81,6 @@ if check_password():
 
     s_ogolny = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
-    # Sumujemy wszystkie typy zaczynające się od "Gotówka"
     s_gotowka = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wydatki
 
     st.title("🍕 Rozliczenie Pizzerii")
@@ -104,12 +103,37 @@ if check_password():
                 save_data(st.session_state.data)
                 st.session_state.pdf_pobrany_final = False; st.session_state.pokaz_pytanie = False; st.rerun()
 
-    @st.dialog("Jesteś pewien?")
-    def confirm_delete_dialog(rows_indices):
-        st.warning(f"Usunąć zaznaczone wpisy ({len(rows_indices)} szt.)?")
-        if st.button("✅ TAK, USUŃ", type="primary", use_container_width=True):
-            st.session_state.data.loc[rows_indices, 'Status'] = 'Usunięty'
-            save_data(st.session_state.data); st.session_state.table_id = random.randint(0, 999); st.rerun()
+    # --- NOWA LOGIKA DODAWANIA GOTÓWKI PRZEZ KAFELKI ---
+    @st.dialog("Dodaj Gotówkę")
+    def d_gotowka():
+        if 'wybrany_podmiot' not in st.session_state:
+            st.session_state.wybrany_podmiot = None
+
+        if st.session_state.wybrany_podmiot is None:
+            st.write("Wybierz źródło gotówki:")
+            col_a, col_b = st.columns(2)
+            opcje = ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"]
+            for i, opcja in enumerate(opcje):
+                target_col = col_a if i % 2 == 0 else col_b
+                if target_col.button(opcja, use_container_width=True):
+                    st.session_state.wybrany_podmiot = opcja
+                    st.rerun()
+        else:
+            st.subheader(f"Wpis dla: {st.session_state.wybrany_podmiot}")
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
+            da = st.date_input("Z dnia", datetime.now())
+            
+            c_save, c_back = st.columns(2)
+            if c_save.button("✅ Zapisz", use_container_width=True):
+                if kw:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f'Gotówka - {st.session_state.wybrany_podmiot}', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+                    save_data(st.session_state.data)
+                    st.session_state.wybrany_podmiot = None
+                    st.rerun()
+            if c_back.button("⬅️ Wróć", use_container_width=True):
+                st.session_state.wybrany_podmiot = None
+                st.rerun()
 
     # --- KAFELKI GŁÓWNE ---
     c1, c2, c3 = st.columns(3)
@@ -144,19 +168,10 @@ if check_password():
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b2", use_container_width=True):
-            @st.dialog("Dodaj Gotówkę")
-            def d2():
-                # PODZIAŁ GOTÓWKI
-                podmiot = st.selectbox("Wybierz źródło", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwotę...")
-                da = st.date_input("Z dnia", datetime.now())
-                if st.button("Zapisz"):
-                    if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f'Gotówka - {podmiot}', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
-                        save_data(st.session_state.data); st.rerun()
-            d2()
+            st.session_state.wybrany_podmiot = None # Reset wyboru przy otwieraniu
+            d_gotowka()
 
+    # --- HISTORIA I SIDEBAR ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     if "table_id" not in st.session_state: st.session_state.table_id = 1
@@ -169,12 +184,17 @@ if check_password():
         st.divider()
         if sel.selection.rows:
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
+                @st.dialog("Jesteś pewien?")
+                def confirm_delete_dialog(rows_indices):
+                    st.warning(f"Usunąć zaznaczone wpisy ({len(rows_indices)} szt.)?")
+                    if st.button("✅ TAK, USUŃ", type="primary", use_container_width=True):
+                        st.session_state.data.loc[rows_indices, 'Status'] = 'Usunięty'
+                        save_data(st.session_state.data); st.session_state.table_id = random.randint(0, 999); st.rerun()
                 confirm_delete_dialog(df_h.index[sel.selection.rows])
         if st.button("WYLOGUJ", use_container_width=True):
             cookies["is_logged"] = "false"; cookies.save(); st.rerun()
         if not df_active.empty:
             pdf_s = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_s, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
-            st.divider()
             if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True):
                 st.session_state.pdf_pobrany_final = False; st.session_state.pokaz_pytanie = False; final_reset_dialog()
