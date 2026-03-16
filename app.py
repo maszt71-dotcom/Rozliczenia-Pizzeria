@@ -31,7 +31,7 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF (POLSKIE KOLORY + BEZPIECZNE ZNAKI) ---
+# --- GENERATOR PDF (BEZPIECZNE ZNAKI + KOLORY) ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -83,86 +83,93 @@ if check_password():
     s_wydatki = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
     s_gotowka = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wydatki
 
-    st.title("🍕 Rozliczenie Pizzerii")
-    
-    # --- NOWE OKNO GOTÓWKI ---
-    @st.dialog("Wybierz źródło gotówki")
-    def d_gotowka_final():
-        # Używamy klucza w session_state, żeby Streamlit nie gubił wyboru
-        if "tmp_kierowca" not in st.session_state:
-            st.session_state.tmp_kierowca = None
+    # --- OKNO WYBORU GOTÓWKI ---
+    @st.dialog("Dodaj wpis gotówkowy")
+    def d_gotowka_tiles():
+        if "wybor_kafelka" not in st.session_state:
+            st.session_state.wybor_kafelka = None
 
-        if st.session_state.tmp_kierowca is None:
-            st.write("Wybierz kafel:")
-            if st.button("🏠 BUFET", use_container_width=True):
-                st.session_state.tmp_kierowca = "Bufet"; st.rerun()
-            if st.button("🚚 KIEROWCA 1", use_container_width=True):
-                st.session_state.tmp_kierowca = "Kierowca 1"; st.rerun()
-            if st.button("🚚 KIEROWCA 2", use_container_width=True):
-                st.session_state.tmp_kierowca = "Kierowca 2"; st.rerun()
-            if st.button("🚚 KIEROWCA 3", use_container_width=True):
-                st.session_state.tmp_kierowca = "Kierowca 3"; st.rerun()
-            if st.button("🚚 KIEROWCA 4", use_container_width=True):
-                st.session_state.tmp_kierowca = "Kierowca 4"; st.rerun()
+        if st.session_state.wybor_kafelka is None:
+            st.write("Wybierz źródło:")
+            # KAFELKI Z KOLORAMI (CSS)
+            st.markdown("""
+                <style>
+                div.stButton > button { height: 60px; font-weight: bold; font-size: 18px; margin-bottom: 10px; border-radius: 10px; }
+                /* Bufet - Niebieski */
+                div.stButton > button[key*="bufet_btn"] { background-color: #e7f3ff; color: #004085; border: 2px solid #b8daff; }
+                /* Kierowcy - Żółty */
+                div.stButton > button[key*="kier_btn"] { background-color: #fff3cd; color: #856404; border: 2px solid #ffeeba; }
+                </style>
+            """, unsafe_allow_html=True)
+
+            if st.button("🏠 BUFET", key="bufet_btn", use_container_width=True):
+                st.session_state.wybor_kafelka = "Bufet"; st.rerun()
+            if st.button("🚚 KIEROWCA 1", key="kier_btn_1", use_container_width=True):
+                st.session_state.wybor_kafelka = "Kierowca 1"; st.rerun()
+            if st.button("🚚 KIEROWCA 2", key="kier_btn_2", use_container_width=True):
+                st.session_state.wybor_kafelka = "Kierowca 2"; st.rerun()
+            if st.button("🚚 KIEROWCA 3", key="kier_btn_3", use_container_width=True):
+                st.session_state.wybor_kafelka = "Kierowca 3"; st.rerun()
+            if st.button("🚚 KIEROWCA 4", key="kier_btn_4", use_container_width=True):
+                st.session_state.wybor_kafelka = "Kierowca 4"; st.rerun()
         else:
-            st.subheader(f"Wpis: {st.session_state.tmp_kierowca}")
-            kw = st.number_input("Podaj kwotę (zł)", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
-            da = st.date_input("Z dnia", datetime.now())
+            st.subheader(f"Kwota dla: {st.session_state.wybor_kafelka}")
+            kw_in = st.number_input("Wpisz kwotę (zł)", min_value=0.0, format="%.2f", value=None)
+            da_in = st.date_input("Z dnia", datetime.now())
             
-            if st.button("✅ ZAPISZ", type="primary", use_container_width=True):
-                if kw:
-                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f'Gotówka - {st.session_state.tmp_kierowca}', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
+            if st.button("💾 ZAPISZ", type="primary", use_container_width=True):
+                if kw_in:
+                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybor_kafelka}", 'Kwota': float(kw_in), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_in.strftime("%d.%m")}
+                    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
                     save_data(st.session_state.data)
-                    st.session_state.tmp_kierowca = None # Reset na przyszłość
+                    st.session_state.wybor_kafelka = None
                     st.rerun()
-            if st.button("⬅️ WRÓĆ"):
-                st.session_state.tmp_kierowca = None
-                st.rerun()
+            if st.button("⬅️ WRÓĆ DO WYBORU", use_container_width=True):
+                st.session_state.wybor_kafelka = None; st.rerun()
 
     # --- KAFELKI GŁÓWNE ---
-    c1, c2, c3 = st.columns(3)
-    with c1:
+    col1, col2, col3 = st.columns(3)
+    with col1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj", key="b1", use_container_width=True):
+        if st.button("➕ Dodaj", key="add_przych", use_container_width=True):
             @st.dialog("Dodaj Przychód")
-            def d1():
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
+            def d_p():
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
                 da = st.date_input("Z dnia", datetime.now())
                 if st.button("Zapisz", use_container_width=True):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                         save_data(st.session_state.data); st.rerun()
-            d1()
+            d_p()
 
-    with c3:
+    with col3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➖ Dodaj", key="b3", use_container_width=True):
+        if st.button("➖ Dodaj", key="add_wyd", use_container_width=True):
             @st.dialog("Dodaj Wydatek")
-            def d3():
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
+            def d_w():
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
                 da = st.date_input("Z dnia", datetime.now())
-                op = st.text_input("Opis", max_chars=35)
+                op = st.text_input("Opis")
                 if st.button("Zapisz", use_container_width=True):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
                         save_data(st.session_state.data); st.rerun()
-            d3()
+            d_w()
 
-    with c2:
+    with col2:
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj", key="b2", use_container_width=True):
-            st.session_state.tmp_kierowca = None
-            d_gotowka_final()
+        if st.button("➕ Dodaj", key="add_got_main", use_container_width=True):
+            st.session_state.wybor_kafelka = None
+            d_gotowka_tiles()
 
-    # --- HISTORIA ---
+    # --- HISTORIA I SIDEBAR ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     if "table_id" not in st.session_state: st.session_state.table_id = 1
-    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{st.session_state.table_id}", column_config={"Data": st.column_config.TextColumn("Data wpisu", width="small"), "Typ": st.column_config.TextColumn("Typ", width="medium"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"), "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"), "Opis": st.column_config.TextColumn("Opis", width="medium")})
+    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{st.session_state.table_id}", column_config={"Data": st.column_config.TextColumn("Data wpisu"), "Typ": st.column_config.TextColumn("Typ"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Z dnia"), "Opis": st.column_config.TextColumn("Opis")})
 
     with st.sidebar:
         st.header("⚙️ Opcje")
@@ -182,11 +189,12 @@ if check_password():
         if not df_active.empty:
             pdf_s = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT PDF", pdf_s, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
+            st.divider()
             if st.button("💾 POBIERZ RAPORT I WYCZYŚĆ", use_container_width=True):
                 @st.dialog("Zamknięcie dnia")
-                def d_reset():
-                    st.write("1. Pobierz raport PDF powyżej.")
+                def d_res():
+                    st.write("1. Pobierz raport PDF.")
                     if st.button("🔥 2. ZERUJ DANE", type="primary", use_container_width=True):
                         st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
                         save_data(st.session_state.data); st.rerun()
-                d_reset()
+                d_res()
