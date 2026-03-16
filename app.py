@@ -88,17 +88,14 @@ if check_password():
     # --- LOGIKA RESETU Z FLAGAMI ---
     @st.dialog("Pobierz raport i resetuj dane")
     def final_reset_flow():
-        # KROK 1: POBIERANIE
         if st.session_state.get('reset_step', 0) == 0:
             pdf_raw = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.write("Krok 1: Pobierz plik raportu.")
-            # Flaga jest ustawiana przy kliknięciu download_button
             if st.download_button("📄 POBIERZ RAPORT PDF", pdf_raw, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
                 st.session_state.reset_step = 1
                 st.session_state.show_reset_dialog = True
                 st.rerun()
 
-        # KROK 2: PRZYCISK RESETUJ
         elif st.session_state.reset_step == 1:
             st.success("✅ Raport pobrany. Teraz możesz zresetować dane.")
             if st.button("🔥 RESETUJ DANE", use_container_width=True, type="primary"):
@@ -109,7 +106,6 @@ if check_password():
                 st.session_state.show_reset_dialog = False
                 st.rerun()
 
-        # KROK 3: POTWIERDZENIE "JESTEŚ PEWIEN"
         elif st.session_state.reset_step == 2:
             st.error("❗ JESTEŚ PEWIEN? To wyczyści wszystkie kafelki!")
             if st.button("✅ TAK, JESTEM PEWIEN", use_container_width=True, type="primary"):
@@ -123,13 +119,11 @@ if check_password():
                 st.session_state.show_reset_dialog = False
                 st.rerun()
 
-    # WYMUSZENIE OTWARCIA OKNA PO REŚCIE STRONY (jeśli flaga aktywna)
     if st.session_state.get('show_reset_dialog', False):
         final_reset_flow()
 
     # --- KAFELKI GŁÓWNE ---
     c1, c2, c3 = st.columns(3)
-    # [Reszta kodu pozostaje bez zmian dla przychodów i wydatków]
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
         if st.button("➕ Dodaj", key="b1", use_container_width=True):
@@ -175,10 +169,18 @@ if check_password():
                                 save_data(st.session_state.data); st.rerun()
             d_got()
 
-    # --- HISTORIA I SIDEBAR ---
+    # --- HISTORIA Z FORMATAOWANIEM KWOT ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-    st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True)
+    
+    # FORMATOWANIE: Dwa miejsca po przecinku w kolumnie Kwota
+    st.dataframe(
+        df_h.style.apply(apply_row_styles, axis=1), 
+        use_container_width=True,
+        column_config={
+            "Kwota": st.column_config.NumberColumn(format="%.2f zł")
+        }
+    )
 
     with st.sidebar:
         st.header("⚙️ Opcje")
