@@ -31,7 +31,7 @@ def check_password():
         return False
     return True
 
-# --- GENERATOR PDF (KOLORY I BEZPIECZNE ZNAKI) ---
+# --- GENERATOR PDF ---
 def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
@@ -85,20 +85,19 @@ if check_password():
 
     st.title("🍕 Rozliczenie Pizzerii")
     
-    # --- NOWE OKNO GOTÓWKI (NIEZAWODNE ROZWIJANIE) ---
+    # --- OKNO GOTÓWKI (ROZWIJANE SEKCJE + PODŚWIETLONY PRZYCISK) ---
     @st.dialog("Dodaj wpis gotówkowy")
-    def d_gotowka_expander():
-        st.write("Kliknij w odpowiednią sekcję:")
-        
-        # Lista podmiotów z ikonami
+    def d_gotowka_fixed():
+        st.write("Wybierz kogo rozliczasz:")
         opcje = [("🏠 Bufet", "Bufet"), ("🚗 Kierowca 1", "Kierowca 1"), ("🚗 Kierowca 2", "Kierowca 2"), ("🚗 Kierowca 3", "Kierowca 3"), ("🚗 Kierowca 4", "Kierowca 4")]
 
         for label, nazwa in opcje:
             with st.expander(label):
-                kw_val = st.number_input(f"Kwota - {nazwa}", min_value=0.0, format="%.2f", value=None, key=f"kw_{nazwa}")
+                kw_val = st.number_input(f"Kwota ({nazwa})", min_value=0.0, format="%.2f", value=None, key=f"kw_{nazwa}")
                 da_val = st.date_input("Z dnia", datetime.now(), key=f"da_{nazwa}")
                 
-                if st.button(f"Zapisz {nazwa}", use_container_width=True, key=f"save_{nazwa}"):
+                # Podświetlony przycisk zapisu (primary)
+                if st.button(f"ZAPISZ {nazwa.upper()}", type="primary", use_container_width=True, key=f"save_{nazwa}"):
                     if kw_val:
                         nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {nazwa}", 'Kwota': float(kw_val), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_val.strftime("%d.%m")}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([nowy])], ignore_index=True)
@@ -109,12 +108,12 @@ if check_password():
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_ogolny:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj", key="b1", use_container_width=True):
+        if st.button("➕ Dodaj ", key="b1", use_container_width=True):
             @st.dialog("Dodaj Przychód")
             def d1():
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
                 da = st.date_input("Z dnia", datetime.now())
-                if st.button("Zapisz", use_container_width=True):
+                if st.button("ZAPISZ PRZYCHÓD", type="primary", use_container_width=True):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
@@ -123,13 +122,13 @@ if check_password():
 
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➖ Dodaj", key="b3", use_container_width=True):
+        if st.button("➖ Dodaj  ", key="b3", use_container_width=True):
             @st.dialog("Dodaj Wydatek")
             def d3():
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
                 da = st.date_input("Z dnia", datetime.now())
                 op = st.text_input("Opis")
-                if st.button("Zapisz", use_container_width=True):
+                if st.button("ZAPISZ WYDATEK", type="primary", use_container_width=True):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
@@ -139,14 +138,14 @@ if check_password():
     with c2:
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
         st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:16px;">{s_gotowka:,.2f} zł</b></div>', unsafe_allow_html=True)
-        if st.button("➕ Dodaj", key="b2", use_container_width=True):
-            d_gotowka_expander()
+        if st.button("➕ Dodaj   ", key="b2", use_container_width=True):
+            d_gotowka_fixed()
 
-    # --- HISTORIA ---
+    # --- HISTORIA I SIDEBAR ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     if "table_id" not in st.session_state: st.session_state.table_id = 1
-    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{st.session_state.table_id}", column_config={"Data": st.column_config.TextColumn("Data wpisu"), "Typ": st.column_config.TextColumn("Typ"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Z dnia"), "Opis": st.column_config.TextColumn("Opis")})
+    sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"t_{st.session_state.table_id}")
 
     with st.sidebar:
         st.header("⚙️ Opcje")
