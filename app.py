@@ -6,7 +6,7 @@ from datetime import datetime
 # --- 1. USTAWIENIA STRONY ---
 st.set_page_config(page_title="System Pizza", layout="wide")
 
-# --- 2. BAZA DANYCH (Żeby nic nie zginęło) ---
+# --- 2. BAZA DANYCH (Automatyczne wczytywanie) ---
 DB_FILE = "baza_pizza.csv"
 
 def wczytaj_dane():
@@ -25,21 +25,21 @@ st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
     
-    /* Styl kontenerów na górze */
     .card {
         padding: 20px;
-        border-radius: 12px 12px 0 0;
+        border-radius: 12px;
         color: white;
         text-align: center;
         font-weight: bold;
+        margin-bottom: 10px;
     }
-    .card-przychod { background: #27ae60; } /* Zielony */
-    .card-gotowka { background: #2980b9; }  /* Niebieski */
-    .card-wydatki { background: #c0392b; }  /* Czerwony */
+    .card-p { background: #27ae60; } /* Zielony */
+    .card-g { background: #2980b9; } /* Niebieski */
+    .card-w { background: #c0392b; } /* Czerwony */
     
-    .card-val { font-size: 26px; display: block; margin-top: 5px; }
+    .card-val { font-size: 28px; display: block; margin-top: 5px; }
     
-    /* Ukrycie zer i strzałek w polach kwot */
+    /* Naprawa pól - brak zer i strzałek */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -49,69 +49,62 @@ st.markdown("""
 df = st.session_state.data_log
 df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
 
-suma_przychodu = df[df['Typ'] == "Przychód"]['Kwota'].sum()
-suma_gotowki = df[df['Typ'] == "Gotówka"]['Kwota'].sum()
-suma_wydatkow = df[df['Typ'] == "Wydatek"]['Kwota'].sum()
-bilans = suma_przychodu + suma_gotowki - suma_wydatkow
+s_p = df[df['Typ'] == "Przychód"]['Kwota'].sum()
+s_g = df[df['Typ'] == "Gotówka"]['Kwota'].sum()
+s_w = df[df['Typ'] == "Wydatek"]['Kwota'].sum()
+bilans = s_p + s_g - s_w
 
-# --- 5. MENU BOCZNE ---
+# --- 5. MENU BOCZNE (USUWANIE) ---
 with st.sidebar:
     st.markdown('<h2 style="color:white; text-align:center;">MENU</h2>', unsafe_allow_html=True)
     st.markdown("---")
-    
-    # Usuwanie wpisów
-    st.markdown("### 🗑️ Usuń błędy")
     if not st.session_state.data_log.empty:
+        st.markdown("### 🗑️ Usuń wpis")
         lista = st.session_state.data_log.apply(lambda x: f"{x['Godzina']} | {x['Kwota']} zł", axis=1).tolist()
-        wybrane = st.multiselect("Zaznacz do usunięcia:", lista)
-        if st.button("USUŃ ZAZNACZONE", use_container_width=True):
+        wybrane = st.multiselect("Zaznacz linie:", lista)
+        if st.button("USUŃ WYBRANE", use_container_width=True):
             idx = [lista.index(w) for w in wybrane]
             st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
-            zapisz_dane(st.session_state.data_log)
-            st.rerun()
+            zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 6. TRZY KONTENERY Z WYSUWANYMI TABELAMI ---
-col1, col2, col3 = st.columns(3)
+# --- 6. TRZY SEKCJE (BEZ ZBĘDNYCH SŁÓW) ---
+c1, c2, c3 = st.columns(3)
 
-with col1:
-    st.markdown(f'<div class="card card-przychod">PRZYCHÓD<span class="card-val">{suma_przychodu:.2f} zł</span></div>', unsafe_allow_html=True)
-    with st.expander("➕ Dopisz Przychód"):
-        kw = st.number_input("Kwota:", value=None, key="p_kw", placeholder="0.00")
-        op = st.text_input("Opis:", key="p_op")
-        if st.button("Zatwierdź Przychód", use_container_width=True):
-            if kw:
-                now = datetime.now()
-                nowy = pd.DataFrame([[now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), "Przychód", kw, op]], columns=df.columns)
-                st.session_state.data_log = pd.concat([nowy, st.session_state.data_log], ignore_index=True)
+with c1:
+    st.markdown(f'<div class="card card-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
+    with st.container():
+        k = st.number_input("Kwota", value=None, key="pk", placeholder="wpisz...")
+        o = st.text_input("Opis", key="po", placeholder="notatka...")
+        if st.button("DODAJ", key="pb", use_container_width=True):
+            if k:
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", k, o]], columns=df.columns)
+                st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
-with col2:
-    st.markdown(f'<div class="card card-gotowka">GOTÓWKA<span class="card-val">{suma_gotowki:.2f} zł</span></div>', unsafe_allow_html=True)
-    with st.expander("➕ Dopisz Gotówkę"):
-        kw = st.number_input("Kwota:", value=None, key="g_kw", placeholder="0.00")
-        op = st.text_input("Opis:", key="g_op")
-        if st.button("Zatwierdź Gotówkę", use_container_width=True):
-            if kw:
-                now = datetime.now()
-                nowy = pd.DataFrame([[now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), "Gotówka", kw, op]], columns=df.columns)
-                st.session_state.data_log = pd.concat([nowy, st.session_state.data_log], ignore_index=True)
+with c2:
+    st.markdown(f'<div class="card card-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
+    with st.container():
+        k = st.number_input("Kwota", value=None, key="gk", placeholder="wpisz...")
+        o = st.text_input("Opis", key="go", placeholder="notatka...")
+        if st.button("DODAJ", key="gb", use_container_width=True):
+            if k:
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", k, o]], columns=df.columns)
+                st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
-with col3:
-    st.markdown(f'<div class="card card-wydatki">WYDATKI<span class="card-val">{suma_wydatkow:.2f} zł</span></div>', unsafe_allow_html=True)
-    with st.expander("➕ Dopisz Wydatek"):
-        kw = st.number_input("Kwota:", value=None, key="w_kw", placeholder="0.00")
-        op = st.text_input("Opis:", key="w_op")
-        if st.button("Zatwierdź Wydatek", use_container_width=True):
-            if kw:
-                now = datetime.now()
-                nowy = pd.DataFrame([[now.strftime("%Y-%m-%d"), now.strftime("%H:%M:%S"), "Wydatek", kw, op]], columns=df.columns)
-                st.session_state.data_log = pd.concat([nowy, st.session_state.data_log], ignore_index=True)
+with c3:
+    st.markdown(f'<div class="card card-w">WYDATKI<span class="card-val">{s_w:.2f} zł</span></div>', unsafe_allow_html=True)
+    with st.container():
+        k = st.number_input("Kwota", value=None, key="wk", placeholder="wpisz...")
+        o = st.text_input("Opis", key="wo", placeholder="notatka...")
+        if st.button("DODAJ", key="wb", use_container_width=True):
+            if k:
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", k, o]], columns=df.columns)
+                st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 7. PODSUMOWANIE NETTO I HISTORIA ---
-st.divider()
-st.metric("DO ODDANIA (BILANS)", f"{bilans:.2f} zł")
-
-st.markdown("### 📂 Historia wpisów")
+# --- 7. PODSUMOWANIE I TABELA ---
+st.markdown("---")
+st.subheader(f"DO ROZLICZENIA: {bilans:.2f} zł")
+st.markdown("### 📂 Historia")
 st.dataframe(st.session_state.data_log, use_container_width=True, hide_index=True)
