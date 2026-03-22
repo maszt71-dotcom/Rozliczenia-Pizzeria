@@ -1,95 +1,181 @@
 import streamlit as st
 import pandas as pd
+import os
+from datetime import datetime
 
-# Konfiguracja
-st.set_page_config(page_title="Rozliczenia Pizzeria", layout="wide")
+# --- 1. KONFIGURACJA STRONY ---
+st.set_page_config(
+    page_title="System Rozliczeń Pizzeria",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- STYLE CSS (Naprawa wyglądu i zer) ---
+# --- 2. AUTOMATYCZNA BAZA DANYCH (Zapis/Odczyt) ---
+DB_FILE = "baza_pizza.csv"
+
+def wczytaj_dane():
+    if os.path.exists(DB_FILE):
+        try:
+            return pd.read_csv(DB_FILE)
+        except:
+            return pd.DataFrame(columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+    return pd.DataFrame(columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+
+def zapisz_dane(df):
+    df.to_csv(DB_FILE, index=False)
+
+# Inicjalizacja danych przy starcie - DANE NIE ZNIKNĄ
+if 'data_log' not in st.session_state:
+    st.session_state.data_log = wczytaj_dane()
+
+# --- 3. STYLE CSS (Przywrócenie wyglądu i naprawa zer) ---
 st.markdown("""
     <style>
+    /* Pasek boczny - ciemny styl */
     [data-testid="stSidebar"] {
-        background-color: #2c3e50;
+        background-color: #2c3e50 !important;
         color: white;
     }
-    /* Stylizacja trzech kontenerów na górze */
-    .stats-container {
+    
+    /* Trzy kontenery na górze (Obrót, Wydatki, Do oddania) */
+    .top-container {
         display: flex;
-        gap: 20px;
-        margin-bottom: 25px;
+        justify-content: space-between;
+        gap: 15px;
+        margin-bottom: 30px;
     }
-    .stat-card {
+    
+    .card {
         flex: 1;
-        padding: 20px;
-        border-radius: 10px;
+        padding: 25px;
+        border-radius: 12px;
         color: white;
         text-align: center;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
-    .card-1 { background-color: #2ecc71; } /* Zielony */
-    .card-2 { background-color: #e74c3c; } /* Czerwony */
-    .card-3 { background-color: #3498db; } /* Niebieski */
     
-    .stat-value { font-size: 24px; font-weight: bold; }
-    .stat-label { font-size: 14px; opacity: 0.9; }
+    .card-income { background: linear-gradient(135deg, #27ae60, #2ecc71); }
+    .card-expenses { background: linear-gradient(135deg, #c0392b, #e74c3c); }
+    .card-total { background: linear-gradient(135deg, #2980b9, #3498db); }
+    
+    .card-val { font-size: 30px; font-weight: bold; margin-top: 10px; }
+    .card-lab { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
 
-    /* Naprawa pól liczbowych */
+    /* Naprawa pól wprowadzania - brak zer na starcie */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { 
         -webkit-appearance: none; margin: 0; 
     }
+    
+    /* Ukrycie dekoracji Streamlit */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- INICJALIZACJA DANYCH ---
-if 'obrot' not in st.session_state: st.session_state.obrot = 0.0
-if 'wydatki' not in st.session_state: st.session_state.wydatki = 0.0
+# --- 4. OBLICZENIA DLA KONTENERÓW ---
+df = st.session_state.data_log
+# Upewnienie się, że Kwota to liczba
+df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
 
-# --- PASEK BOCZNY (MENU) ---
+suma_in = df[df['Typ'].str.contains("Obrót", na=False)]['Kwota'].sum()
+suma_out = df[df['Typ'].str.contains("Wydatek", na=False)]['Kwota'].sum()
+bilans = suma_in - suma_out
+
+# --- 5. PASEK BOCZNY (MENU) ---
 with st.sidebar:
-    st.title("🍕 Menu")
-    if st.button("📥 Pobierz i Zapisz", use_container_width=True):
-        st.success("Zapisano!")
-    if st.button("💾 Pobierz", use_container_width=True):
-        st.info("Pobieranie...")
+    st.markdown('<h2 style="text-align:center; color:#e67e22;">PIZZA SYSTEM</h2>', unsafe_allow_html=True)
     st.markdown("---")
-    if st.button("⚙️ Ustawienia", use_container_width=True):
-        pass
+    
+    st.markdown("### 📋 OPERACJE")
+    
+    # PRZYWRÓCONE KAFELKI Z MENU
+    if st.button("📥 Pobierz i Zapisz", use_container_width=True):
+        zapisz_dane(st.session_state.data_log)
+        st.success("Dane zarchiwizowane!")
 
-# --- TRZY KONTENERY NA GÓRZE ---
-bilans = st.session_state.obrot - st.session_state.wydatki
+    # Przycisk eksportu do CSV
+    csv_bytes = st.session_state.data_log.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="💾 Pobierz Plik (Excel/CSV)",
+        data=csv_bytes,
+        file_name=f"raport_{datetime.now().strftime('%Y-%m-%d')}.csv",
+        use_container_width=True
+    )
 
+    st.markdown("---")
+    if st.button("🔄 Odśwież widok", use_container_width=True):
+        st.rerun()
+
+    if st.button("🗑️ WYCZYŚĆ BAZĘ", use_container_width=True):
+        if os.path.exists(DB_FILE):
+            os.remove(DB_FILE)
+        st.session_state.data_log = pd.DataFrame(columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+        st.rerun()
+
+# --- 6. WIDOK GŁÓWNY (TRZY KONTENERY) ---
 st.markdown(f"""
-    <div class="stats-container">
-        <div class="stat-card card-1">
-            <div class="stat-label">OBRÓT CAŁKOWITY</div>
-            <div class="stat-value">{st.session_state.obrot:.2f} zł</div>
+    <div class="top-container">
+        <div class="card card-income">
+            <div class="card-lab">Obrót Całkowity</div>
+            <div class="card-val">{suma_in:.2f} zł</div>
         </div>
-        <div class="stat-card card-2">
-            <div class="stat-label">WYDATKI GOTÓWKOWE</div>
-            <div class="stat-value">{st.session_state.wydatki:.2f} zł</div>
+        <div class="card card-expenses">
+            <div class="card-lab">Wydatki Gotówkowe</div>
+            <div class="card-val">{suma_out:.2f} zł</div>
         </div>
-        <div class="stat-card card-3">
-            <div class="stat-label">DO ROZLICZENIA</div>
-            <div class="stat-value">{bilans:.2f} zł</div>
+        <div class="card card-total">
+            <div class="card-lab">Do Rozliczenia</div>
+            <div class="card-val">{bilans:.2f} zł</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
-# --- FORMULARZ WPISYWANIA ---
-st.subheader("Nowy wpis")
-col1, col2 = st.columns(2)
+# --- 7. FORMULARZ WPISYWANIA ---
+st.markdown("### ➕ Dodaj nowy wpis")
+with st.container():
+    c1, c2, c3 = st.columns([2, 2, 4])
+    
+    with c1:
+        # NAPRAWA ZER: value=None sprawia, że pole jest puste
+        kwota_in = st.number_input("Kwota (zł):", min_value=0.0, value=None, step=0.01, placeholder="0.00")
+    
+    with c2:
+        typ_in = st.selectbox("Rodzaj:", ["Przychód (Obrót)", "Wydatek (Zakupy/Paliwo)"])
+    
+    with c3:
+        opis_in = st.text_input("Notatka/Opis:", placeholder="np. Raport dzienny, zakup paliwa...")
 
-with col1:
-    nowa_kwota = st.number_input("Wpisz kwotę zamówienia:", min_value=0.0, value=None, step=0.01, placeholder="0.00")
-with col2:
-    nowe_wydatki = st.number_input("Wpisz wydatki:", min_value=0.0, value=None, step=0.01, placeholder="0.00")
+    if st.button("ZATWIERDŹ I ZAPISZ", type="primary", use_container_width=True):
+        if kwota_in is not None:
+            teraz = datetime.now()
+            nowy_row = pd.DataFrame([[
+                teraz.strftime("%Y-%m-%d"),
+                teraz.strftime("%H:%M:%S"),
+                typ_in, kwota_in, opis_in
+            ]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+            
+            # Dodaj do tabeli i natychmiast zapisz na dysk
+            st.session_state.data_log = pd.concat([nowy_row, st.session_state.data_log], ignore_index=True)
+            zapisz_dane(st.session_state.data_log)
+            st.rerun()
+        else:
+            st.warning("Proszę wpisać kwotę przed zatwierdzeniem!")
 
-if st.button("Aktualizuj liczniki", type="primary"):
-    if nowa_kwota: st.session_state.obrot += nowa_kwota
-    if nowe_wydatki: st.session_state.wydatki += nowe_wydatki
-    st.rerun()
-
-# --- HISTORIA ---
+# --- 8. TABELA HISTORII ---
 st.markdown("---")
-st.markdown("### 📁 Historia")
-# Tutaj możesz dodać tabelę z historią
+st.markdown("### 📂 Historia wpisów (Zapisana)")
+
+if not st.session_state.data_log.empty:
+    st.dataframe(
+        st.session_state.data_log, 
+        use_container_width=True, 
+        hide_index=True
+    )
+else:
+    st.info("Baza danych jest pusta. Dodaj pierwszy wpis powyżej.")
+
+# Stopka informacyjna
+st.markdown("<br><hr>", unsafe_allow_html=True)
+st.caption(f"Status: Dane wczytane automatycznie | Plik: {DB_FILE} | Dzisiaj: {datetime.now().strftime('%d.%m.%Y')}")
