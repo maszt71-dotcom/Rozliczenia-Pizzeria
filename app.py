@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - SZEROKIE OKIENKA I KOLORY ---
+# --- 3. WYGLĄD (CSS) - KLUCZOWA POPRAWKA SZEROKOŚCI ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -44,13 +44,27 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* SZEROKOŚĆ OKIENKA (POPOVER) NA 100% KONTENERA */
+    /* --- DOPASOWANIE SZEROKOŚCI OKIENKA DO KOLUMNY --- */
+    /* Wymuszenie szerokości kontenera nadrzędnego */
     div[data-testid="stPopover"] {
-        width: 100%;
+        width: 100% !important;
     }
-    div[data-testid="stPopover"] > div:nth-child(2) {
+    
+    /* Wymuszenie szerokości samego przycisku */
+    div[data-testid="stPopover"] > button {
+        width: 100% !important;
+    }
+
+    /* Wymuszenie szerokości wyskakującego body na 100% kolumny */
+    div[data-testid="stPopoverBody"] {
         width: 100% !important;
         min-width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Dodatkowa poprawka pozycjonowania ramki okienka */
+    div[data-testid="stPopoverBody"] > div {
+        width: 100% !important;
     }
 
     /* KOLOROWE PRZYCISKI */
@@ -85,7 +99,7 @@ with st.sidebar:
     if not st.session_state.data_log.empty:
         st.markdown("### 🗑️ Usuń wpis")
         lista = st.session_state.data_log.apply(lambda x: f"{x['Godzina']} | {x['Kwota']} zł", axis=1).tolist()
-        wybrane = st.multiselect("Zaznacz linie:", lista)
+        wybrane = st.multiselect("Zaznacz:", lista)
         if st.button("USUŃ WYBRANE", use_container_width=True):
             idx = [lista.index(w) for w in wybrane]
             st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
