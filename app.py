@@ -20,27 +20,36 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - NOWE KOLORY ---
+# --- 3. WYGLĄD (CSS) - KOLORY I WĄSKIE PASKI ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
     
+    /* Główne karty */
     .card {
         padding: 20px;
-        border-radius: 12px;
+        border-radius: 12px 12px 0 0;
         color: white;
         text-align: center;
         font-weight: bold;
-        margin-bottom: 10px;
     }
-    /* Nowa kolorystyka */
-    .card-p { background: #2980b9; } /* Niebieski - Przychód */
-    .card-g { background: #27ae60; } /* Zielony - Gotówka */
-    .card-w { background: #e67e22; } /* Pomarańczowy - Wydatki */
+    
+    /* Wąskie paski pod spodem */
+    .sub-bar {
+        height: 10px;
+        width: 100%;
+        margin-bottom: 20px;
+        border-radius: 0 0 12px 12px;
+    }
+
+    /* Kolory: Przychód (Niebieski), Gotówka (Zielony), Wydatki (Pomarańcz) */
+    .bg-p { background-color: #2980b9; }
+    .bg-g { background-color: #27ae60; }
+    .bg-w { background-color: #e67e22; }
     
     .card-val { font-size: 28px; display: block; margin-top: 5px; }
     
-    /* Ukrycie zer i strzałek */
+    /* Naprawa pól wpisywania */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -55,7 +64,7 @@ s_g = df[df['Typ'] == "Gotówka"]['Kwota'].sum()
 s_w = df[df['Typ'] == "Wydatek"]['Kwota'].sum()
 bilans = s_p + s_g - s_w
 
-# --- 5. MENU BOCZNE (USUWANIE) ---
+# --- 5. MENU BOCZNE ---
 with st.sidebar:
     st.markdown('<h2 style="color:white; text-align:center;">MENU</h2>', unsafe_allow_html=True)
     st.markdown("---")
@@ -68,11 +77,12 @@ with st.sidebar:
             st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
             zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 6. TRZY SEKCJE Z NOWYMI KOLORAMI ---
+# --- 6. TRZY KOLUMNY Z ANALOGICZNYMI PASKAMI ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.markdown(f'<div class="card card-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="card bg-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-bar bg-p"></div>', unsafe_allow_html=True)
     with st.container():
         k = st.number_input("Kwota", value=None, key="pk", placeholder="wpisz...")
         o = st.text_input("Opis", key="po", placeholder="notatka...")
@@ -83,7 +93,8 @@ with c1:
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
 with c2:
-    st.markdown(f'<div class="card card-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="card bg-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-bar bg-g"></div>', unsafe_allow_html=True)
     with st.container():
         k = st.number_input("Kwota", value=None, key="gk", placeholder="wpisz...")
         o = st.text_input("Opis", key="go", placeholder="notatka...")
@@ -94,7 +105,8 @@ with c2:
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
 with c3:
-    st.markdown(f'<div class="card card-w">WYDATKI<span class="card-val">{s_w:.2f} zł</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="card bg-w">WYDATKI<span class="card-val">{s_w:.2f} zł</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-bar bg-w"></div>', unsafe_allow_html=True)
     with st.container():
         k = st.number_input("Kwota", value=None, key="wk", placeholder="wpisz...")
         o = st.text_input("Opis", key="wo", placeholder="notatka...")
