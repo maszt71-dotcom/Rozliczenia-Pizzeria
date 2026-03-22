@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - BLOKADA SZEROKOŚCI DO KOLUMNY ---
+# --- 3. WYGLĄD (CSS) - BLOKADA SZEROKOŚCI OKIENKA ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -43,23 +43,22 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* --- KLUCZ: DOPASOWANIE DO SZEROKOŚCI KOLUMNY --- */
+    /* --- NOWA, SILNIEJSZA BLOKADA SZEROKOŚCI --- */
     
-    /* Szerokość kontenera przycisku */
+    /* Wymuszamy na Streamlit, by okienko nie rozszerzało się poza kolumnę */
+    [data-testid="stPopoverBody"] {
+        max-width: 25rem !important; /* Sztywny limit szerokości okienka */
+        width: 100% !important;
+        min-width: 100% !important;
+    }
+
+    /* Dopasowanie przycisków do kolumn */
     div[data-testid="stPopover"] {
         width: 100% !important;
     }
     
     div[data-testid="stPopover"] > button {
         width: 100% !important;
-    }
-
-    /* Wymuszenie, by okienko nie było szersze niż kolumna (ok. 31-33%) */
-    div[data-testid="stPopoverBody"] {
-        width: 100% !important;
-        min-width: 100% !important;
-        max-width: 31vw !important; /* vw to szerokość ekranu, 31vw to ok. 1/3 ekranu */
-        left: 0 !important;
     }
 
     /* KOLORY PRZYCISKÓW */
@@ -107,7 +106,7 @@ with c1:
     st.markdown(f'<div class="card bg-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("P", value=None, key="pk", placeholder="wpisz kwotę...", label_visibility="collapsed")
-        if st.button("Zatwierdź Przychód", key="bp", use_container_width=True):
+        if st.button("Zatwierdź", key="bp", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
@@ -117,7 +116,7 @@ with c2:
     st.markdown(f'<div class="card bg-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("G", value=None, key="gk", placeholder="wpisz kwotę...", label_visibility="collapsed")
-        if st.button("Zatwierdź Gotówkę", key="bg", use_container_width=True):
+        if st.button("Zatwierdź", key="bg", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
@@ -128,7 +127,7 @@ with c3:
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("W", value=None, key="wk", placeholder="wpisz kwotę...", label_visibility="collapsed")
         opis = st.text_input("Opisz wydatek", key="wo", placeholder="na co poszło?")
-        if st.button("Zatwierdź Wydatek", key="bw", use_container_width=True):
+        if st.button("Zatwierdź", key="bw", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", val, opis]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
