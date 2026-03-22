@@ -6,7 +6,7 @@ from datetime import datetime
 # --- 1. USTAWIENIA STRONY ---
 st.set_page_config(page_title="System Pizza", layout="wide")
 
-# --- 2. BAZA DANYCH (Żeby dane nie zniknęły) ---
+# --- 2. BAZA DANYCH ---
 DB_FILE = "baza_pizza.csv"
 
 def wczytaj_dane():
@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - KOLOROWE PRZYCISKI ---
+# --- 3. WYGLĄD (CSS) - WYMUSZENIE KOLORÓW ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -38,27 +38,36 @@ st.markdown("""
         margin-bottom: 5px;
     }
     
-    .bg-p { background: #2980b9; } /* Niebieski */
-    .bg-g { background: #27ae60; } /* Zielony */
-    .bg-w { background: #e67e22; } /* Pomarańczowy */
+    .bg-p { background: #2980b9 !important; } /* Niebieski */
+    .bg-g { background: #27ae60 !important; } /* Zielony */
+    .bg-w { background: #e67e22 !important; } /* Pomarańczowy */
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* Personalizacja przycisków popover (DODAJ) - Kolory identyczne jak kafelki */
-    /* Przycisk 1 (Przychód) */
-    div[data-testid="stColumn"]:nth-of-type(1) div[data-testid="stPopover"] > button {
-        background-color: #2980b9 !important; color: white !important; border: none !important;
+    /* KOLOROWE PRZYCISKI - WYMUSZENIE PRZEZ SELEKTORY */
+    /* Przycisk Niebieski (Przychód) */
+    div[data-testid="stColumn"]:nth-of-type(1) button[kind="secondary"] {
+        background-color: #2980b9 !important;
+        color: white !important;
+        border: none !important;
+        width: 100%;
     }
-    /* Przycisk 2 (Gotówka) */
-    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stPopover"] > button {
-        background-color: #27ae60 !important; color: white !important; border: none !important;
+    /* Przycisk Zielony (Gotówka) */
+    div[data-testid="stColumn"]:nth-of-type(2) button[kind="secondary"] {
+        background-color: #27ae60 !important;
+        color: white !important;
+        border: none !important;
+        width: 100%;
     }
-    /* Przycisk 3 (Wydatek) */
-    div[data-testid="stColumn"]:nth-of-type(3) div[data-testid="stPopover"] > button {
-        background-color: #e67e22 !important; color: white !important; border: none !important;
+    /* Przycisk Pomarańczowy (Wydatki) */
+    div[data-testid="stColumn"]:nth-of-type(3) button[kind="secondary"] {
+        background-color: #e67e22 !important;
+        color: white !important;
+        border: none !important;
+        width: 100%;
     }
-    
-    /* Usunięcie strzałek z pól liczbowych */
+
+    /* Ukrycie strzałek w polach liczbowych */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -93,7 +102,7 @@ with c1:
     st.markdown(f'<div class="card bg-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("Kwota", value=None, key="pk", placeholder="0.00", label_visibility="collapsed")
-        if st.button("Zatwierdź", key="bp", use_container_width=True):
+        if st.button("Zatwierdź Przychód", key="bp", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", val, ""]], columns=df.columns)
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
@@ -103,7 +112,7 @@ with c2:
     st.markdown(f'<div class="card bg-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("Kwota", value=None, key="gk", placeholder="0.00", label_visibility="collapsed")
-        if st.button("Zatwierdź", key="bg", use_container_width=True):
+        if st.button("Zatwierdź Gotówkę", key="bg", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", val, ""]], columns=df.columns)
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
@@ -113,9 +122,8 @@ with c3:
     st.markdown(f'<div class="card bg-w">WYDATKI<span class="card-val">{s_w:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("Kwota", value=None, key="wk", placeholder="0.00", label_visibility="collapsed")
-        # Dodatkowa klatka z napisem "Opisz wydatek"
         opis = st.text_input("Opisz wydatek", key="wo", placeholder="na co poszło?")
-        if st.button("Zatwierdź", key="bw", use_container_width=True):
+        if st.button("Zatwierdź Wydatek", key="bw", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", val, opis]], columns=df.columns)
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
