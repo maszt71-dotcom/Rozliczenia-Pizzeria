@@ -6,7 +6,7 @@ from datetime import datetime
 # --- 1. USTAWIENIA STRONY ---
 st.set_page_config(page_title="System Pizza", layout="wide")
 
-# --- 2. BAZA DANYCH ---
+# --- 2. BAZA DANYCH (Żeby dane nie zniknęły) ---
 DB_FILE = "baza_pizza.csv"
 
 def wczytaj_dane():
@@ -23,11 +23,12 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) ---
+# --- 3. WYGLĄD (CSS) - KOLOROWE PRZYCISKI ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
     
+    /* Główne kafelki */
     .card {
         padding: 20px;
         border-radius: 12px;
@@ -43,11 +44,21 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* Kolorowe przyciski DODAJ */
-    div[data-testid="stPopover"]:nth-of-type(1) > button { background-color: #2980b9 !important; color: white !important; border: none; }
-    div[data-testid="stPopover"]:nth-of-type(2) > button { background-color: #27ae60 !important; color: white !important; border: none; }
-    div[data-testid="stPopover"]:nth-of-type(3) > button { background-color: #e67e22 !important; color: white !important; border: none; }
+    /* Personalizacja przycisków popover (DODAJ) - Kolory identyczne jak kafelki */
+    /* Przycisk 1 (Przychód) */
+    div[data-testid="stColumn"]:nth-of-type(1) div[data-testid="stPopover"] > button {
+        background-color: #2980b9 !important; color: white !important; border: none !important;
+    }
+    /* Przycisk 2 (Gotówka) */
+    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stPopover"] > button {
+        background-color: #27ae60 !important; color: white !important; border: none !important;
+    }
+    /* Przycisk 3 (Wydatek) */
+    div[data-testid="stColumn"]:nth-of-type(3) div[data-testid="stPopover"] > button {
+        background-color: #e67e22 !important; color: white !important; border: none !important;
+    }
     
+    /* Usunięcie strzałek z pól liczbowych */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -62,29 +73,29 @@ s_g = df[df['Typ'] == "Gotówka"]['Kwota'].sum()
 s_w = df[df['Typ'] == "Wydatek"]['Kwota'].sum()
 bilans = s_p + s_g - s_w
 
-# --- 5. MENU BOCZNE ---
+# --- 5. MENU BOCZNE (USUWANIE) ---
 with st.sidebar:
     st.markdown('<h2 style="color:white; text-align:center;">MENU</h2>', unsafe_allow_html=True)
     st.markdown("---")
     if not st.session_state.data_log.empty:
         st.markdown("### 🗑️ Usuń wpis")
         lista = st.session_state.data_log.apply(lambda x: f"{x['Godzina']} | {x['Kwota']} zł", axis=1).tolist()
-        wybrane = st.multiselect("Zaznacz:", lista)
+        wybrane = st.multiselect("Zaznacz linie:", lista)
         if st.button("USUŃ WYBRANE", use_container_width=True):
             idx = [lista.index(w) for w in wybrane]
             st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
             zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 6. KOLUMNY ---
+# --- 6. KOLUMNY Z KOLOROWYMI PRZYCISKAMI ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
     st.markdown(f'<div class="card bg-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("Kwota", value=None, key="pk", placeholder="0.00", label_visibility="collapsed")
-        if st.button("Zatwierdź", key="bp"):
+        if st.button("Zatwierdź", key="bp", use_container_width=True):
             if val:
-                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", val, ""]], columns=df.columns)
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
@@ -92,9 +103,9 @@ with c2:
     st.markdown(f'<div class="card bg-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("Kwota", value=None, key="gk", placeholder="0.00", label_visibility="collapsed")
-        if st.button("Zatwierdź", key="bg"):
+        if st.button("Zatwierdź", key="bg", use_container_width=True):
             if val:
-                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", val, ""]], columns=df.columns)
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
@@ -102,15 +113,15 @@ with c3:
     st.markdown(f'<div class="card bg-w">WYDATKI<span class="card-val">{s_w:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
         val = st.number_input("Kwota", value=None, key="wk", placeholder="0.00", label_visibility="collapsed")
-        # DODATKOWA KLATKA TYLKO W WYDATKACH
-        opis = st.text_input("Opisz wydatek", key="wo", placeholder="np. paliwo, zakupy...")
-        if st.button("Zatwierdź", key="bw"):
+        # Dodatkowa klatka z napisem "Opisz wydatek"
+        opis = st.text_input("Opisz wydatek", key="wo", placeholder="na co poszło?")
+        if st.button("Zatwierdź", key="bw", use_container_width=True):
             if val:
-                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", val, opis]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", val, opis]], columns=df.columns)
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 7. HISTORIA ---
+# --- 7. PODSUMOWANIE I HISTORIA ---
 st.markdown("---")
 st.subheader(f"DO ROZLICZENIA: {bilans:.2f} zł")
 st.dataframe(st.session_state.data_log, use_container_width=True, hide_index=True)
