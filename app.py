@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - TOTALNE WYMUSZENIE SZEROKOŚCI ---
+# --- 3. WYGLĄD (CSS) - BLOKADA SZEROKOŚCI DO KOLUMNY ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -44,35 +44,31 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* --- KLUCZ DO SZEROKOŚCI OKIENKA --- */
+    /* --- KLUCZ: DOPASOWANIE TYLKO DO SZEROKOŚCI KOLUMNY --- */
     
-    /* 1. Rozciągamy sam kontener popover w kolumnie */
+    /* Wymuszamy, aby kolumna była punktem odniesienia */
+    [data-testid="stColumn"] {
+        position: relative !important;
+    }
+
     div[data-testid="stPopover"] {
         width: 100% !important;
     }
     
-    /* 2. Rozciągamy przycisk "DODAJ" */
     div[data-testid="stPopover"] > button {
         width: 100% !important;
-        display: block !important;
     }
 
-    /* 3. WYMUSZENIE SZEROKOŚCI RAMKI WYSKAKUJĄCEJ (Zdejmujemy limity Streamlit) */
+    /* Okienko ma brać 100% szerokości swojej kolumny, a nie ekranu */
     div[data-testid="stPopoverBody"] {
-        width: calc(100% + 0px) !important; /* Wykorzystuje całą dostępną szerokość kolumny */
+        width: 100% !important;
         min-width: 100% !important;
         max-width: 100% !important;
-        transform: none !important; /* Blokujemy przesuwanie okienka */
         left: 0 !important;
-    }
-    
-    /* 4. Rozciągnięcie zawartości wewnątrz białego okienka */
-    div[data-testid="stPopoverBody"] > div {
-        width: 100% !important;
-        padding: 1rem !important;
+        position: absolute !important;
     }
 
-    /* KOLORY PRZYCISKÓW (Zgodne z kafelkami) */
+    /* KOLORY PRZYCISKÓW */
     div[data-testid="stColumn"]:nth-of-type(1) button[kind="secondary"] {
         background-color: #2980b9 !important; color: white !important; border: none !important;
     }
@@ -83,7 +79,6 @@ st.markdown("""
         background-color: #e67e22 !important; color: white !important; border: none !important;
     }
 
-    /* Brak strzałek w polach liczbowych */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -111,15 +106,14 @@ with st.sidebar:
             st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
             zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 6. KOLUMNY Z SZEROKIMI OKIENKAMI ---
+# --- 6. KOLUMNY ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
     st.markdown(f'<div class="card bg-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
-        st.write("Wpisz kwotę przychodu:")
-        val = st.number_input("P", value=None, key="pk", placeholder="0.00", label_visibility="collapsed")
-        if st.button("Zatwierdź Przychód", key="bp", use_container_width=True):
+        val = st.number_input("P", value=None, key="pk", placeholder="wpisz kwotę...", label_visibility="collapsed")
+        if st.button("Zatwierdź", key="bp", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
@@ -128,9 +122,8 @@ with c1:
 with c2:
     st.markdown(f'<div class="card bg-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
-        st.write("Wpisz kwotę gotówki:")
-        val = st.number_input("G", value=None, key="gk", placeholder="0.00", label_visibility="collapsed")
-        if st.button("Zatwierdź Gotówkę", key="bg", use_container_width=True):
+        val = st.number_input("G", value=None, key="gk", placeholder="wpisz kwotę...", label_visibility="collapsed")
+        if st.button("Zatwierdź", key="bg", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
@@ -139,10 +132,9 @@ with c2:
 with c3:
     st.markdown(f'<div class="card bg-w">WYDATKI<span class="card-val">{s_w:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
-        st.write("Wpisz kwotę wydatku:")
-        val = st.number_input("W", value=None, key="wk", placeholder="0.00", label_visibility="collapsed")
+        val = st.number_input("W", value=None, key="wk", placeholder="wpisz kwotę...", label_visibility="collapsed")
         opis = st.text_input("Opisz wydatek", key="wo", placeholder="na co poszło?")
-        if st.button("Zatwierdź Wydatek", key="bw", use_container_width=True):
+        if st.button("Zatwierdź", key="bw", use_container_width=True):
             if val:
                 n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", val, opis]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
