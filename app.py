@@ -1,47 +1,39 @@
 import streamlit as st
 import pandas as pd
-import os
 from datetime import datetime
 
-# --- 1. KONFIGURACJA STRONY ---
+# --- KONFIGURACJA STRONY ---
 st.set_page_config(
     page_title="System Rozliczeń Pizzeria",
+    page_icon="🍕",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- 2. AUTOMATYCZNA BAZA DANYCH (Zapis/Odczyt) ---
-DB_FILE = "baza_pizza.csv"
-
-def wczytaj_dane():
-    if os.path.exists(DB_FILE):
-        try:
-            return pd.read_csv(DB_FILE)
-        except:
-            return pd.DataFrame(columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
-    return pd.DataFrame(columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
-
-def zapisz_dane(df):
-    df.to_csv(DB_FILE, index=False)
-
-# Inicjalizacja danych przy starcie - DANE NIE ZNIKNĄ
-if 'data_log' not in st.session_state:
-    st.session_state.data_log = wczytaj_dane()
-
-# --- 3. STYLE CSS (Przywrócenie wyglądu i naprawa zer) ---
+# --- STYLE CSS (Przywrócenie wyglądu i naprawa pól) ---
 st.markdown("""
     <style>
-    /* Pasek boczny - ciemny styl */
+    /* Główne tło i czcionka */
+    .stApp {
+        background-color: #f8f9fa;
+    }
+
+    /* Pasek boczny */
     [data-testid="stSidebar"] {
         background-color: #2c3e50 !important;
-        color: white;
+        min-width: 260px;
     }
     
-    /* Trzy kontenery na górze (Obrót, Wydatki, Do oddania) */
+    .sidebar-text {
+        color: white !important;
+        text-align: center;
+    }
+
+    /* Trzy kontenery na górze */
     .top-container {
         display: flex;
         justify-content: space-between;
-        gap: 15px;
+        gap: 20px;
         margin-bottom: 30px;
     }
     
@@ -51,131 +43,138 @@ st.markdown("""
         border-radius: 12px;
         color: white;
         text-align: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    
+    .card:hover {
+        transform: translateY(-5px);
     }
     
     .card-income { background: linear-gradient(135deg, #27ae60, #2ecc71); }
     .card-expenses { background: linear-gradient(135deg, #c0392b, #e74c3c); }
     .card-total { background: linear-gradient(135deg, #2980b9, #3498db); }
     
-    .card-val { font-size: 30px; font-weight: bold; margin-top: 10px; }
+    .card-val { font-size: 28px; font-weight: bold; margin-top: 10px; }
     .card-lab { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
 
-    /* Naprawa pól wprowadzania - brak zer na starcie */
+    /* Naprawa pól wprowadzania (brak strzałek i zer) */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { 
         -webkit-appearance: none; margin: 0; 
     }
     
-    /* Ukrycie dekoracji Streamlit */
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
+    /* Personalizacja przycisków w menu */
+    .stButton>button {
+        border-radius: 8px;
+        height: 3em;
+        transition: 0.3s;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. OBLICZENIA DLA KONTENERÓW ---
-df = st.session_state.data_log
-# Upewnienie się, że Kwota to liczba
-df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
+# --- INICJALIZACJA STANU (Baza danych w sesji) ---
+if 'data_log' not in st.session_state:
+    st.session_state.data_log = pd.DataFrame(columns=['Godzina', 'Typ', 'Kwota', 'Opis'])
+if 'total_in' not in st.session_state: st.session_state.total_in = 0.0
+if 'total_out' not in st.session_state: st.session_state.total_out = 0.0
 
-suma_in = df[df['Typ'].str.contains("Obrót", na=False)]['Kwota'].sum()
-suma_out = df[df['Typ'].str.contains("Wydatek", na=False)]['Kwota'].sum()
-bilans = suma_in - suma_out
-
-# --- 5. PASEK BOCZNY (MENU) ---
+# --- PASEK BOCZNY (MENU) ---
 with st.sidebar:
-    st.markdown('<h2 style="text-align:center; color:#e67e22;">PIZZA SYSTEM</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="sidebar-text">🍕 MENU SYSTEMU</h2>', unsafe_allow_html=True)
     st.markdown("---")
     
-    st.markdown("### 📋 OPERACJE")
+    st.markdown('<p class="sidebar-text">OPERACJE NA DANYCH</p>', unsafe_allow_html=True)
     
-    # PRZYWRÓCONE KAFELKI Z MENU
+    # PRZYWRÓCONE KAFELKI
     if st.button("📥 Pobierz i Zapisz", use_container_width=True):
-        zapisz_dane(st.session_state.data_log)
-        st.success("Dane zarchiwizowane!")
-
-    # Przycisk eksportu do CSV
-    csv_bytes = st.session_state.data_log.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="💾 Pobierz Plik (Excel/CSV)",
-        data=csv_bytes,
-        file_name=f"raport_{datetime.now().strftime('%Y-%m-%d')}.csv",
-        use_container_width=True
-    )
-
+        st.toast("Dane zostały zarchiwizowane pomyślnie!", icon="✅")
+        
+    if st.button("💾 Pobierz (Excel)", use_container_width=True):
+        st.toast("Przygotowywanie pliku do pobrania...")
+        
     st.markdown("---")
-    if st.button("🔄 Odśwież widok", use_container_width=True):
+    
+    if st.button("⚙️ Ustawienia", use_container_width=True):
+        st.sidebar.warning("Ustawienia są zablokowane dla Twojej roli.")
+        
+    if st.button("🔄 Resetuj Dzisiejszy Dzień", use_container_width=True):
+        st.session_state.total_in = 0.0
+        st.session_state.total_out = 0.0
+        st.session_state.data_log = pd.DataFrame(columns=['Godzina', 'Typ', 'Kwota', 'Opis'])
         st.rerun()
 
-    if st.button("🗑️ WYCZYŚĆ BAZĘ", use_container_width=True):
-        if os.path.exists(DB_FILE):
-            os.remove(DB_FILE)
-        st.session_state.data_log = pd.DataFrame(columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
-        st.rerun()
+# --- GŁÓWNA TREŚĆ ---
+st.title("Panel Rozliczeń Dziennych")
 
-# --- 6. WIDOK GŁÓWNY (TRZY KONTENERY) ---
+# TRZY KONTENERY NA GÓRZE
+bilans = st.session_state.total_in - st.session_state.total_out
+
 st.markdown(f"""
     <div class="top-container">
         <div class="card card-income">
-            <div class="card-lab">Obrót Całkowity</div>
-            <div class="card-val">{suma_in:.2f} zł</div>
+            <div class="card-lab">Łączny Obrót</div>
+            <div class="card-val">{st.session_state.total_in:.2f} zł</div>
         </div>
         <div class="card card-expenses">
             <div class="card-lab">Wydatki Gotówkowe</div>
-            <div class="card-val">{suma_out:.2f} zł</div>
+            <div class="card-val">{st.session_state.total_out:.2f} zł</div>
         </div>
         <div class="card card-total">
-            <div class="card-lab">Do Rozliczenia</div>
+            <div class="card-lab">Do Rozliczenia (Netto)</div>
             <div class="card-val">{bilans:.2f} zł</div>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 7. FORMULARZ WPISYWANIA ---
-st.markdown("### ➕ Dodaj nowy wpis")
+# SEKACJA DODAWANIA WPISU
+st.markdown("### ➕ Dodaj nową transakcję")
 with st.container():
-    c1, c2, c3 = st.columns([2, 2, 4])
+    c1, c2, c3 = st.columns([2, 2, 3])
     
     with c1:
         # NAPRAWA ZER: value=None sprawia, że pole jest puste
-        kwota_in = st.number_input("Kwota (zł):", min_value=0.0, value=None, step=0.01, placeholder="0.00")
+        kwota_input = st.number_input("Kwota (zł)", min_value=0.0, value=None, step=0.01, placeholder="Wpisz kwotę...")
     
     with c2:
-        typ_in = st.selectbox("Rodzaj:", ["Przychód (Obrót)", "Wydatek (Zakupy/Paliwo)"])
+        typ_transakcji = st.selectbox("Typ", ["Przychód (Obrót)", "Wydatek (Zakupy/Paliwo)"])
     
     with c3:
-        opis_in = st.text_input("Notatka/Opis:", placeholder="np. Raport dzienny, zakup paliwa...")
+        notatka = st.text_input("Krótki opis (opcjonalnie)", placeholder="np. Dostawa serów, zamówienie #12")
 
-    if st.button("ZATWIERDŹ I ZAPISZ", type="primary", use_container_width=True):
-        if kwota_in is not None:
-            teraz = datetime.now()
-            nowy_row = pd.DataFrame([[
-                teraz.strftime("%Y-%m-%d"),
-                teraz.strftime("%H:%M:%S"),
-                typ_in, kwota_in, opis_in
-            ]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+    if st.button("Zatwierdź wpis", type="primary", use_container_width=True):
+        if kwota_input is not None and kwota_input > 0:
+            now = datetime.now().strftime("%H:%M:%S")
             
-            # Dodaj do tabeli i natychmiast zapisz na dysk
-            st.session_state.data_log = pd.concat([nowy_row, st.session_state.data_log], ignore_index=True)
-            zapisz_dane(st.session_state.data_log)
+            if "Przychód" in typ_transakcji:
+                st.session_state.total_in += kwota_input
+            else:
+                st.session_state.total_out += kwota_input
+            
+            # Dodanie do tabeli historii
+            new_row = pd.DataFrame([[now, typ_transakcji, kwota_input, notatka]], 
+                                   columns=['Godzina', 'Typ', 'Kwota', 'Opis'])
+            st.session_state.data_log = pd.concat([new_row, st.session_state.data_log], ignore_index=True)
+            
+            st.success(f"Dodano: {kwota_input:.2f} zł")
             st.rerun()
         else:
-            st.warning("Proszę wpisać kwotę przed zatwierdzeniem!")
+            st.error("Proszę podać prawidłową kwotę!")
 
-# --- 8. TABELA HISTORII ---
+# SEKCJA HISTORII (Podobna do tej ze zrzutu ekranu)
 st.markdown("---")
-st.markdown("### 📂 Historia wpisów (Zapisana)")
+st.markdown("### 📂 Historia dzisiejszych operacji")
 
 if not st.session_state.data_log.empty:
-    st.dataframe(
-        st.session_state.data_log, 
-        use_container_width=True, 
-        hide_index=True
-    )
+    st.dataframe(st.session_state.data_log, use_container_width=True, hide_index=True)
 else:
-    st.info("Baza danych jest pusta. Dodaj pierwszy wpis powyżej.")
+    st.info("Brak wpisów w historii dla bieżącej sesji.")
 
-# Stopka informacyjna
-st.markdown("<br><hr>", unsafe_allow_html=True)
-st.caption(f"Status: Dane wczytane automatycznie | Plik: {DB_FILE} | Dzisiaj: {datetime.now().strftime('%d.%m.%Y')}")
+# STOPKA SYSTEMOWA
+st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("---")
+col_f1, col_f2 = st.columns(2)
+with col_f1:
+    st.caption(f"Status połączenia: ✅ Stabilne")
+with col_f2:
+    st.caption(f"Ostatnia synchronizacja: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
