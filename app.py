@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - KLUCZOWA POPRAWKA SZEROKOŚCI ---
+# --- 3. WYGLĄD (CSS) - PRECYZYJNA SZEROKOŚĆ OKIENKA ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -44,27 +44,30 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* --- DOPASOWANIE SZEROKOŚCI OKIENKA DO KOLUMNY --- */
-    /* Wymuszenie szerokości kontenera nadrzędnego */
+    /* --- DOPASOWANIE SZEROKOŚCI WYPOWIEDZI (POPOVER) DO KAFELKA --- */
+    
+    /* Kontener przycisku na 100% kolumny */
     div[data-testid="stPopover"] {
         width: 100% !important;
     }
     
-    /* Wymuszenie szerokości samego przycisku */
+    /* Przycisk na 100% kolumny */
     div[data-testid="stPopover"] > button {
         width: 100% !important;
     }
 
-    /* Wymuszenie szerokości wyskakującego body na 100% kolumny */
+    /* WYMUSZENIE SZEROKOŚCI OKIENKA NA SZEROKOŚĆ KAFELKA */
     div[data-testid="stPopoverBody"] {
         width: 100% !important;
         min-width: 100% !important;
         max-width: 100% !important;
+        left: 0 !important; /* Wyrównanie do lewej krawędzi kolumny */
     }
     
-    /* Dodatkowa poprawka pozycjonowania ramki okienka */
+    /* Stylizacja wnętrza okienka */
     div[data-testid="stPopoverBody"] > div {
         width: 100% !important;
+        padding: 10px !important;
     }
 
     /* KOLOROWE PRZYCISKI */
