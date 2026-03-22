@@ -6,7 +6,7 @@ from datetime import datetime
 # --- 1. USTAWIENIA STRONY ---
 st.set_page_config(page_title="System Pizza", layout="wide")
 
-# --- 2. BAZA DANYCH (Automatyczne wczytywanie) ---
+# --- 2. BAZA DANYCH ---
 DB_FILE = "baza_pizza.csv"
 
 def wczytaj_dane():
@@ -20,7 +20,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) ---
+# --- 3. WYGLĄD (CSS) - NOWE KOLORY ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -33,13 +33,14 @@ st.markdown("""
         font-weight: bold;
         margin-bottom: 10px;
     }
-    .card-p { background: #27ae60; } /* Zielony */
-    .card-g { background: #2980b9; } /* Niebieski */
-    .card-w { background: #c0392b; } /* Czerwony */
+    /* Nowa kolorystyka */
+    .card-p { background: #2980b9; } /* Niebieski - Przychód */
+    .card-g { background: #27ae60; } /* Zielony - Gotówka */
+    .card-w { background: #e67e22; } /* Pomarańczowy - Wydatki */
     
     .card-val { font-size: 28px; display: block; margin-top: 5px; }
     
-    /* Naprawa pól - brak zer i strzałek */
+    /* Ukrycie zer i strzałek */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -67,7 +68,7 @@ with st.sidebar:
             st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
             zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 6. TRZY SEKCJE (BEZ ZBĘDNYCH SŁÓW) ---
+# --- 6. TRZY SEKCJE Z NOWYMI KOLORAMI ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
