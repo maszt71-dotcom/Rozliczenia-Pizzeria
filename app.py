@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - BLOKADA SZEROKOŚCI OKIENKA ---
+# --- 3. WYGLĄD (CSS) - PRECYZYJNE DOPASOWANIE DO KOLUMNY ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -43,34 +43,39 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* --- NOWA, SILNIEJSZA BLOKADA SZEROKOŚCI --- */
+    /* --- FINALNE ROZWIĄZANIE SZEROKOŚCI --- */
     
-    /* Wymuszamy na Streamlit, by okienko nie rozszerzało się poza kolumnę */
-    [data-testid="stPopoverBody"] {
-        max-width: 25rem !important; /* Sztywny limit szerokości okienka */
+    /* Wymuszamy, by kolumna nie ograniczała swoich dzieci */
+    [data-testid="stColumn"] {
+        display: flex !important;
+        flex-direction: column !important;
         width: 100% !important;
-        min-width: 100% !important;
     }
 
-    /* Dopasowanie przycisków do kolumn */
+    /* Przycisk popover na całą szerokość kolumny */
     div[data-testid="stPopover"] {
         width: 100% !important;
     }
     
     div[data-testid="stPopover"] > button {
         width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
     }
 
-    /* KOLORY PRZYCISKÓW */
-    div[data-testid="stColumn"]:nth-of-type(1) button[kind="secondary"] {
-        background-color: #2980b9 !important; color: white !important; border: none !important;
+    /* Okienko (body) dopasowane do nadrzędnej kolumny */
+    div[data-testid="stPopoverBody"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        left: 0 !important;
+        right: 0 !important;
     }
-    div[data-testid="stColumn"]:nth-of-type(2) button[kind="secondary"] {
-        background-color: #27ae60 !important; color: white !important; border: none !important;
-    }
-    div[data-testid="stColumn"]:nth-of-type(3) button[kind="secondary"] {
-        background-color: #e67e22 !important; color: white !important; border: none !important;
-    }
+
+    /* KOLORY PRZYCISKÓW (Wymuszenie) */
+    div[data-testid="stColumn"]:nth-of-type(1) button[kind="secondary"] { background-color: #2980b9 !important; color: white !important; border: none !important; }
+    div[data-testid="stColumn"]:nth-of-type(2) button[kind="secondary"] { background-color: #27ae60 !important; color: white !important; border: none !important; }
+    div[data-testid="stColumn"]:nth-of-type(3) button[kind="secondary"] { background-color: #e67e22 !important; color: white !important; border: none !important; }
 
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
