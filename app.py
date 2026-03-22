@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - PRECYZYJNA SZEROKOŚĆ OKIENKA ---
+# --- 3. WYGLĄD (CSS) - TOTALNE WYMUSZENIE SZEROKOŚCI ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -44,50 +44,53 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* --- DOPASOWANIE SZEROKOŚCI WYPOWIEDZI (POPOVER) DO KAFELKA --- */
+    /* --- KLUCZ DO SZEROKOŚCI OKIENKA --- */
     
-    /* Kontener przycisku na 100% kolumny */
+    /* 1. Rozciągamy sam kontener popover w kolumnie */
     div[data-testid="stPopover"] {
         width: 100% !important;
     }
     
-    /* Przycisk na 100% kolumny */
+    /* 2. Rozciągamy przycisk "DODAJ" */
     div[data-testid="stPopover"] > button {
         width: 100% !important;
+        display: block !important;
     }
 
-    /* WYMUSZENIE SZEROKOŚCI OKIENKA NA SZEROKOŚĆ KAFELKA */
+    /* 3. WYMUSZENIE SZEROKOŚCI RAMKI WYSKAKUJĄCEJ (Zdejmujemy limity Streamlit) */
     div[data-testid="stPopoverBody"] {
-        width: 100% !important;
+        width: calc(100% + 0px) !important; /* Wykorzystuje całą dostępną szerokość kolumny */
         min-width: 100% !important;
         max-width: 100% !important;
-        left: 0 !important; /* Wyrównanie do lewej krawędzi kolumny */
+        transform: none !important; /* Blokujemy przesuwanie okienka */
+        left: 0 !important;
     }
     
-    /* Stylizacja wnętrza okienka */
+    /* 4. Rozciągnięcie zawartości wewnątrz białego okienka */
     div[data-testid="stPopoverBody"] > div {
         width: 100% !important;
-        padding: 10px !important;
+        padding: 1rem !important;
     }
 
-    /* KOLOROWE PRZYCISKI */
+    /* KOLORY PRZYCISKÓW (Zgodne z kafelkami) */
     div[data-testid="stColumn"]:nth-of-type(1) button[kind="secondary"] {
-        background-color: #2980b9 !important; color: white !important; border: none !important; width: 100%;
+        background-color: #2980b9 !important; color: white !important; border: none !important;
     }
     div[data-testid="stColumn"]:nth-of-type(2) button[kind="secondary"] {
-        background-color: #27ae60 !important; color: white !important; border: none !important; width: 100%;
+        background-color: #27ae60 !important; color: white !important; border: none !important;
     }
     div[data-testid="stColumn"]:nth-of-type(3) button[kind="secondary"] {
-        background-color: #e67e22 !important; color: white !important; border: none !important; width: 100%;
+        background-color: #e67e22 !important; color: white !important; border: none !important;
     }
 
+    /* Brak strzałek w polach liczbowych */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 4. OBLICZENIA ---
-df = st.session_state.data_log
+df = st.session_state.data_log.copy()
 df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
 
 s_p = df[df['Typ'] == "Przychód"]['Kwota'].sum()
@@ -108,37 +111,40 @@ with st.sidebar:
             st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
             zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 6. KOLUMNY ---
+# --- 6. KOLUMNY Z SZEROKIMI OKIENKAMI ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
     st.markdown(f'<div class="card bg-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
-        val = st.number_input("Kwota", value=None, key="pk", placeholder="0.00", label_visibility="collapsed")
-        if st.button("Zatwierdź", key="bp", use_container_width=True):
+        st.write("Wpisz kwotę przychodu:")
+        val = st.number_input("P", value=None, key="pk", placeholder="0.00", label_visibility="collapsed")
+        if st.button("Zatwierdź Przychód", key="bp", use_container_width=True):
             if val:
-                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", val, ""]], columns=df.columns)
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
 with c2:
     st.markdown(f'<div class="card bg-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
-        val = st.number_input("Kwota", value=None, key="gk", placeholder="0.00", label_visibility="collapsed")
-        if st.button("Zatwierdź", key="bg", use_container_width=True):
+        st.write("Wpisz kwotę gotówki:")
+        val = st.number_input("G", value=None, key="gk", placeholder="0.00", label_visibility="collapsed")
+        if st.button("Zatwierdź Gotówkę", key="bg", use_container_width=True):
             if val:
-                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", val, ""]], columns=df.columns)
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
 with c3:
     st.markdown(f'<div class="card bg-w">WYDATKI<span class="card-val">{s_w:.2f} zł</span></div>', unsafe_allow_html=True)
     with st.popover("➕ DODAJ", use_container_width=True):
-        val = st.number_input("Kwota", value=None, key="wk", placeholder="0.00", label_visibility="collapsed")
+        st.write("Wpisz kwotę wydatku:")
+        val = st.number_input("W", value=None, key="wk", placeholder="0.00", label_visibility="collapsed")
         opis = st.text_input("Opisz wydatek", key="wo", placeholder="na co poszło?")
-        if st.button("Zatwierdź", key="bw", use_container_width=True):
+        if st.button("Zatwierdź Wydatek", key="bw", use_container_width=True):
             if val:
-                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", val, opis]], columns=df.columns)
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", val, opis]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
