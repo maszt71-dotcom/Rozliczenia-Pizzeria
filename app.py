@@ -70,23 +70,36 @@ with c2:
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
+        # Resetowanie wyboru przy każdym otwarciu okna
+        if "osoba_v3" in st.session_state: del st.session_state.osoba_gotowka_v3
+        
         @st.dialog("Dodaj Gotówkę")
         def add_g():
-            # Używamy Radio jako kafelków, żeby okno nie znikało przy kliknięciu
-            # To rozwiązanie jest najstabilniejsze w Streamlit
-            st.write("Wybierz osobę:")
-            osoba = st.radio("Osoba:", ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"], index=None, label_visibility="collapsed")
-            
-            if osoba:
-                st.divider()
-                st.write(f"Wybrano: **{osoba}**")
+            if "osoba_gotowka_v3" not in st.session_state:
+                st.session_state.osoba_gotowka_v3 = None
+
+            if st.session_state.osoba_gotowka_v3 is None:
+                st.write("Wybierz osobę (belki):")
+                # BELKI JEDNA POD DRUGĄ
+                if st.button("🏢 Bufet", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Bufet"; st.rerun()
+                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Kierowca 1"; st.rerun()
+                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Kierowca 2"; st.rerun()
+                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Kierowca 3"; st.rerun()
+                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Kierowca 4"; st.rerun()
+            else:
+                st.subheader(f"Wybrano: {st.session_state.osoba_gotowka_v3}")
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
                 da = st.date_input("Z dnia", datetime.now())
-                if st.button("ZAPISZ", type="primary", use_container_width=True):
+                c_ok, c_bk = st.columns(2)
+                if c_ok.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {osoba}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
-                    else: st.error("Wpisz kwotę!")
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.osoba_gotowka_v3}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                        del st.session_state.osoba_gotowka_v3
+                        st.rerun()
+                if c_bk.button("WSTECZ", use_container_width=True):
+                    del st.session_state.osoba_gotowka_v3
+                    st.rerun()
         add_g()
 
 with c3:
@@ -107,6 +120,3 @@ with c3:
 st.divider()
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
-
-with st.sidebar:
-    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
