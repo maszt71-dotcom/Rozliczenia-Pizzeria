@@ -23,13 +23,13 @@ EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl"
 EMAIL_HASLO = "pizz@123" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
 
-# Cyberfolks: Port 465 to czysty SSL (wymaga SMTP_SSL)
+# Cyberfolks: Port 465 to czysty SSL. Serwer mail.cyberfolks.pl
 SMTP_SERVER = "mail.cyberfolks.pl" 
 SMTP_PORT = 465 
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
-# --- FUNKCJA WYSYŁANIA MAILA (POPRAWIONA POD CYBERFOLKS) ---
+# --- FUNKCJA WYSYŁANIA MAILA (WERSJA OSTATECZNA - DIRECT SSL) ---
 def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
     try:
         msg = MIMEMultipart()
@@ -56,8 +56,8 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
                 part2.add_header('Content-Disposition', f'attachment; filename=finanse_data.csv')
                 msg.attach(part2)
 
-        # KLUCZOWA POPRAWKA: SMTP_SSL (bezpieczne połączenie od startu)
-        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+        # KLUCZ: Wymuszenie SSL od samego początku połączenia (bez HELO przed szyfrowaniem)
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=10)
         server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
         server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
         server.quit()
@@ -124,16 +124,11 @@ s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].
 def modal_quick_report():
     st.write("Wysylka raportu PDF+CSV na Gmail (bez resetu)...")
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
-    
-    # Pobieranie do folderu Pobrane
-    st.download_button("📥 POBIERZ PDF DO PLIKOW", pdf_file, f"Kopia_Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
-    
+    st.download_button("📥 POBIERZ PDF DO PLIKOW", pdf_file, f"Raport_Kopia_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
     if st.button("📧 WYŚLIJ TERAZ NA GMAIL", use_container_width=True, type="primary"):
         with st.spinner("Trwa wysylanie..."):
             if wyslij_na_mail(pdf_file, DB_FILE, "SZYBKI-RAPORT"):
                 st.success("Wyslano na Gmail!")
-            else:
-                st.error("Blad wysylki. Sprawdz polaczenie.")
 
 @st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
@@ -160,7 +155,7 @@ def modal_reset():
             save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
             st.session_state.step = "pobierz"; st.rerun()
 
-# --- WYGLĄD GŁÓWNY (KAFELKI) ---
+# --- WYGLĄD GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 with c1:
