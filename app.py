@@ -28,9 +28,6 @@ if cookies.get("is_logged") != "true":
 def load_data():
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
-        # Naprawa daty 1970: konwertujemy tylko poprawne daty, resztę czyścimy
-        if 'Data zdarzenia' in df.columns:
-            df['Data zdarzenia'] = pd.to_datetime(df['Data zdarzenia'], errors='coerce')
         return df
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
@@ -41,19 +38,20 @@ data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-# Obliczenia
+# Sumy
 s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
 def apply_row_styles(row):
     color = ''
-    try:
-        typ = str(row['Typ'])
-        if typ == 'Przychód ogólny': color = 'background-color: #d4edda; color: #155724'
-        elif typ == 'Wydatki gotówkowe': color = 'background-color: #f8d7da; color: #721c24'
-        elif 'Gotówka' in typ: color = 'background-color: #fff3cd; color: #856404'
-    except: pass
+    typ = str(row['Typ'])
+    if typ == 'Przychód ogólny': 
+        color = 'background-color: #d4edda; color: #155724' # Zielony
+    elif typ == 'Wydatki gotówkowe': 
+        color = 'background-color: #f8d7da; color: #721c24' # Czerwony
+    elif 'Gotówka' in typ: 
+        color = 'background-color: #fff3cd; color: #856404' # Żółty
     return [color] * len(row)
 
 # --- WIDOK GŁÓWNY ---
@@ -70,7 +68,7 @@ with c1:
             da = st.date_input("Data zdarzenia", datetime.now())
             if st.button("ZAPISZ"):
                 if kw:
-                    n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da}
+                    n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_p()
 
@@ -79,27 +77,27 @@ with c2:
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
+        if "os_wyb_v6" not in st.session_state: st.session_state.os_wyb_v6 = None
+        
         @st.dialog("Dodaj Gotówkę")
         def add_g():
-            if "wybor_belki" not in st.session_state: st.session_state.wybor_belki = None
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            
             for o in osoby:
-                st.button(o, use_container_width=True, key=f"btn_{o}", on_click=lambda x=o: st.session_state.update({"wybor_belki": x}))
+                st.button(o, use_container_width=True, key=f"btn_{o}", on_click=lambda x=o: st.session_state.update({"os_wyb_v6": x}))
                 
-                if st.session_state.wybor_belki == o:
+                if st.session_state.os_wyb_v6 == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"kw_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"da_{o}")
                         c_z, c_w = st.columns(2)
-                        if c_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
+                        if c_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"s_{o}"):
                             if kw:
-                                n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da}
+                                n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.wybor_belki = None; st.rerun()
-                        if c_w.button("WYJDŹ", use_container_width=True, key=f"exit_{o}"):
-                            st.session_state.wybor_belki = None; st.rerun()
-        st.session_state.wybor_belki = None
+                                st.session_state.os_wyb_v6 = None; st.rerun()
+                        if c_w.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
+                            st.session_state.os_wyb_v6 = None; st.rerun()
+        st.session_state.os_wyb_v6 = None
         add_g()
 
 with c3:
@@ -112,22 +110,23 @@ with c3:
             op = st.text_input("Opis", placeholder=" ")
             if st.button("ZAPISZ"):
                 if kw:
-                    n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da}
+                    n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_w()
 
 # --- TABELA HISTORII ---
 st.divider()
-# Dodajemy Typ do danych, żeby apply_row_styles widziało kolory, ale nie pokazujemy go w tabeli
-df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
+# Przygotowanie danych do wyświetlenia (z zachowaniem kolumny Typ do kolorowania)
+df_display = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
 
 st.dataframe(
-    df_h.drop(columns=['Typ']).style.apply(apply_row_styles, axis=1, subset=None), 
+    df_display.style.apply(apply_row_styles, axis=1), 
     use_container_width=True, 
     column_config={
         "Data": st.column_config.TextColumn("Data zapisu"),
         "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
-        "Data zdarzenia": st.column_config.DateColumn("Data zdarzenia", format="YYYY-MM-DD"),
+        "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), # Tekst zapobiega błędowi 1970
+        "Typ": None # Ukrywamy Typ, ale jest w danych do kolorowania
     }
 )
 
