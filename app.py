@@ -50,7 +50,6 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd, tytul="RAPORT"):
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(190, 15, txt=tytul, ln=True, align='C')
     pdf.set_font("Arial", 'B', 12)
-    # Kolory podsumowania
     pdf.set_fill_color(212, 237, 218); pdf.set_text_color(21, 87, 36)
     pdf.cell(190, 10, txt=f" PRZYCHOD OGOLNY: {s_og:.2f} zl", ln=True, fill=True)
     pdf.set_fill_color(255, 243, 205); pdf.set_text_color(133, 100, 4)
@@ -103,17 +102,21 @@ def apply_row_styles(row):
     elif 'Gotówka' in typ: color = 'background-color: #fff3cd; color: #856404'
     return [color] * len(row)
 
-# --- WIDOK ---
+# --- WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 
-# ZNIKAJĄCY PRZYCISK NOCNY
-if os.path.exists(plik_nocny) and cookies.get("pobrany_nocny") != dzis_str:
+# PANCERNA LOGIKA ZNIKAJĄCEGO PRZYCISKU
+if "pobrany_dzisiaj" not in st.session_state:
+    st.session_state.pobrany_dzisiaj = (cookies.get("pobrany_nocny") == dzis_str)
+
+if os.path.exists(plik_nocny) and not st.session_state.pobrany_dzisiaj:
     with open(plik_nocny, "rb") as f:
         bytes_nocny = f.read()
     st.success(f"✅ Masz gotowy raport dobowy (2:00-2:00) z dnia {teraz.strftime('%d.%m')}!")
-    if st.download_button("📥 POBIERZ RAPORT NOCNY", bytes_nocny, file_name=f"raport_nocny_{dzis_str}.pdf", use_container_width=True):
+    if st.download_button("📥 POBIERZ RAPORT NOCNY", bytes_nocny, file_name=f"raport_nocny_{dzis_str}.pdf", use_container_width=True, key="btn_nocny_final"):
         cookies["pobrany_nocny"] = dzis_str
         cookies.save()
+        st.session_state.pobrany_dzisiaj = True
         st.rerun()
 
 # --- KAFELKI ---
@@ -197,7 +200,7 @@ with st.sidebar:
     st.divider()
     selected = event.selection.rows
     if selected:
-        if "as" not in st.session_state: st.session_state.as_s = False
+        if "as_s" not in st.session_state: st.session_state.as_s = False
         if not st.session_state.as_s:
             if st.button("🗑️ USUŃ ZAZNACZONE", use_container_width=True): st.session_state.as_s = True; st.rerun()
         else:
