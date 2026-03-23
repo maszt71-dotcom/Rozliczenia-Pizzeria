@@ -18,18 +18,18 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- TWOJE DANE POCZTOWE (Cyberfolks -> Gmail) ---
+# --- DANE POCZTOWE (Cyberfolks -> Gmail) ---
 EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl" 
 EMAIL_HASLO = "pizz@123" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
 
-# Cyberfolks wymaga SSL na porcie 465
+# Cyberfolks: Port 465 to czysty SSL
 SMTP_SERVER = "mail.cyberfolks.pl" 
 SMTP_PORT = 465 
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
-# --- FUNKCJA WYSYŁANIA MAILA (PANCERNE SSL) ---
+# --- FUNKCJA WYSYŁANIA MAILA (POPRAWIONA POD CYBERFOLKS) ---
 def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
     try:
         msg = MIMEMultipart()
@@ -56,7 +56,7 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
                 part2.add_header('Content-Disposition', f'attachment; filename=finanse_data.csv')
                 msg.attach(part2)
 
-        # Kluczowa zmiana: SMTP_SSL dla Cyberfolks
+        # Kluczowa poprawka: smtplib.SMTP_SSL zamiast zwykłego SMTP
         with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
             server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
             server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
@@ -97,9 +97,9 @@ def load_data():
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 def save_data(df): df.to_csv(DB_FILE, index=False)
 
+# --- LOGIKA LOGOWANIA ---
 if 'is_logged' not in st.session_state:
-    if cookies.get("is_logged") == "true": st.session_state.is_logged = True
-    else: st.session_state.is_logged = False
+    st.session_state.is_logged = cookies.get("is_logged") == "true"
 
 if not st.session_state.is_logged:
     st.title("🍕 Logowanie")
@@ -118,20 +118,21 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- PROCEDURY ---
+# --- PROCEDURY (MODALE) ---
 @st.dialog("Szybki Raport na Mail")
 def modal_quick_report():
     st.write("Wysylka raportu PDF+CSV na Gmail (bez resetu)...")
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
     
-    # Przycisk pobierania zawsze dostępny
+    # Przycisk pobierania (automatycznie do "Pobranych")
     st.download_button("📥 POBIERZ PDF DO PLIKOW", pdf_file, f"Raport_Kopia_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
     
     if st.button("📧 WYŚLIJ TERAZ NA GMAIL", use_container_width=True, type="primary"):
-        if wyslij_na_mail(pdf_file, DB_FILE, "SZYBKI-RAPORT"):
-            st.success("Wyslano na Gmail!")
-        else:
-            st.error("Blad wysylki. Sprawdz dane logowania.")
+        with st.spinner("Wysylanie..."):
+            if wyslij_na_mail(pdf_file, DB_FILE, "SZYBKI-RAPORT"):
+                st.success("Wyslano na Gmail!")
+            else:
+                st.error("Blad wysylki. Sprawdz dane logowania.")
 
 @st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
@@ -139,14 +140,15 @@ def modal_reset():
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
 
     if st.session_state.step == "pobierz":
-        st.write("1️⃣ KROK: Pobierz raport PDF (zapisze sie w Twoich pobranych).")
+        st.write("1️⃣ KROK: Pobierz raport PDF (zapisze sie w folderze Pobrane).")
         if st.download_button("📥 POBIERZ PDF I PRZEJDŹ DALEJ", pdf_file, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
             st.session_state.step = "wyslij"; st.rerun()
     elif st.session_state.step == "wyslij":
         st.write("2️⃣ KROK: Wyślij kopię bezpieczenstwa (PDF+CSV) na Gmail.")
         if st.button("📧 WYŚLIJ NA MAIL", use_container_width=True, type="primary"):
-            if wyslij_na_mail(pdf_file, DB_FILE, "RECZNY-RESET"):
-                st.session_state.step = "reset"; st.rerun()
+            with st.spinner("Wysylanie..."):
+                if wyslij_na_mail(pdf_file, DB_FILE, "RECZNY-RESET"):
+                    st.session_state.step = "reset"; st.rerun()
     elif st.session_state.step == "reset":
         st.write("3️⃣ KROK: Czy wyczyścić dane w aplikacji?")
         if st.button("🔥 RESETUJ TABELE", use_container_width=True, type="primary"):
@@ -157,7 +159,7 @@ def modal_reset():
             save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
             st.session_state.step = "pobierz"; st.rerun()
 
-# --- INTERFEJS ---
+# --- INTERFEJS GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -207,3 +209,6 @@ with st.sidebar:
     if st.button("💾 POBIERZ RAPORT I RESETUJ TABELE", type="primary", use_container_width=True):
         st.session_state.step = "pobierz"; modal_reset()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
+    if sel.selection.rows:
+        if st.button("🗑️ USUŃ ZAZNACZONE", type="secondary", use_container_width=True):
+            curr = load_data(); curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'; save_data(curr); st.rerun()
