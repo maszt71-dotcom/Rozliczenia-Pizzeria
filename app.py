@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from streamlit_cookies_manager import CookieManager
 from fpdf import FPDF
 
@@ -30,22 +30,27 @@ if cookies.get("is_logged") != "true":
 
 # --- OBSŁUGA DANYCH ---
 def load_data():
-    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
-    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+    if os.path.exists(DB_FILE): 
+        df = pd.read_csv(DB_FILE)
+        df['Data_dt'] = pd.to_datetime(df['Data'], format="%Y-%m-%d %H:%M", errors='coerce')
+        return df
+    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia', 'Data_dt'])
 
 def save_data(df):
+    if 'Data_dt' in df.columns: df = df.drop(columns=['Data_dt'])
     df.to_csv(DB_FILE, index=False)
 
 def clean_text(text):
     if not isinstance(text, str): return str(text)
     return text.encode('ascii', 'ignore').decode('ascii').strip()
 
-def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
+def create_pdf(df_to_pdf, s_og, s_got, s_wyd, tytul="RAPORT FINANSOWY"):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(190, 15, txt="RAPORT FINANSOWY PIZZERIA", ln=True, align='C')
+    pdf.cell(190, 15, txt=tytul, ln=True, align='C')
     pdf.set_font("Arial", 'B', 12)
+    # Kolory w podsumowaniu
     pdf.set_fill_color(212, 237, 218); pdf.set_text_color(21, 87, 36)
     pdf.cell(190, 10, txt=f" PRZYCHOD OGOLNY: {s_og:.2f} zl", ln=True, fill=True)
     pdf.set_fill_color(255, 243, 205); pdf.set_text_color(133, 100, 4)
@@ -62,23 +67,30 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
         pdf.cell(90, 8, info[:50], 1); pdf.ln()
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- AUTOMATYCZNY RAPORT NOCNY (2:00) ---
+# --- AUTOMATYCZNY RAPORT NOCNY (ZAKRES 2:00 - 2:00) ---
 teraz = datetime.now()
 dzis_str = teraz.strftime('%Y%m%d')
 plik_nocny = f"{REPORT_DIR}/raport_{dzis_str}.pdf"
 
 if teraz.hour >= 2 and not os.path.exists(plik_nocny):
-    d = load_data()
-    da = d[d['Status'] == 'Aktywny'].copy()
-    da['Kwota'] = pd.to_numeric(da['Kwota'], errors='coerce').fillna(0)
-    s1 = da[da['Typ'] == 'Przychód ogólny']['Kwota'].sum()
-    s2 = da[da['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
-    s3 = da[da['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s2
-    pdf_bytes = create_pdf(da.iloc[::-1], s1, s3, s2)
-    with open(plik_nocny, "wb") as f:
-        f.write(pdf_bytes)
+    d_raw = load_data()
+    # Zakres: od wczoraj 02:00 do dzisiaj 02:00
+    granica_dolna = (teraz - timedelta(days=1)).replace(hour=2, minute=0, second=0, microsecond=0)
+    granica_gorna = teraz.replace(hour=2, minute=0, second=0, microsecond=0)
+    
+    # Filtrujemy dane tylko z tego przedziału (nawet jeśli są Aktywne/Zarchiwizowane)
+    mask = (d_raw['Data_dt'] >= granica_dolna) & (d_raw['Data_dt'] < granica_gorna)
+    d_noc = d_raw[mask].copy()
+    d_noc['Kwota'] = pd.to_numeric(d_noc['Kwota'], errors='coerce').fillna(0)
+    
+    if not d_noc.empty:
+        s1 = d_noc[d_noc['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+        s2 = d_noc[d_noc['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
+        s3 = d_noc[d_noc['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s2
+        pdf_bytes = create_pdf(d_noc.iloc[::-1], s1, s3, s2, tytul=f"RAPORT DOBOWY 2:00-2:00 ({dzis_str})")
+        with open(plik_nocny, "wb") as f: f.write(pdf_bytes)
 
-# --- DANE DO WIDOKU ---
+# --- DANE DO WIDOKU GŁÓWNEGO ---
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
@@ -98,25 +110,14 @@ def apply_row_styles(row):
 # --- WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 
-# LOGIKA ZNIKANIA RAPORTU NOCNEGO
-ostatni_pobrany = cookies.get("last_report_date")
-
-if os.path.exists(plik_nocny) and ostatni_pobrany != dzis_str:
+# ZNIKAJĄCY PRZYCISK NOCNY
+if os.path.exists(plik_nocny) and cookies.get("pobrany_nocny") != dzis_str:
     with open(plik_nocny, "rb") as f:
         pdf_data_night = f.read()
-    st.success("✅ Masz gotowy raport nocny z godziny 02:00!")
-    if st.download_button(
-        label="📥 POBIERZ RAPORT NOCNY",
-        data=pdf_data_night,
-        file_name=os.path.basename(plik_nocny),
-        mime="application/pdf",
-        use_container_width=True,
-        key="night_report_v2"
-    ):
-        # Po kliknięciu zapisujemy w ciastku dzisiejszą datę
-        cookies["last_report_date"] = dzis_str
-        cookies.save()
-        st.rerun()
+    st.success(f"✅ Masz gotowy raport dobowy (2:00-2:00) z dnia {teraz.strftime('%d.%m')}!")
+    if st.download_button(label="📥 POBIERZ RAPORT NOCNY", data=pdf_data_night, file_name=os.path.basename(plik_nocny), mime="application/pdf", use_container_width=True, key="btn_nocny_final"):
+        cookies["pobrany_nocny"] = dzis_str
+        cookies.save(); st.rerun()
 
 # --- KAFELKI ---
 c1, c2, c3 = st.columns(3)
@@ -137,13 +138,13 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "os_v20" not in st.session_state: st.session_state.os_v20 = None
+        if "os_v23" not in st.session_state: st.session_state.os_v23 = None
         @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v20 = o
-                if st.session_state.get("os_v20") == o:
+                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v23 = o
+                if st.session_state.get("os_v23") == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"k_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
@@ -151,10 +152,10 @@ with c2:
                             if kw:
                                 n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v20 = None; st.rerun()
+                                st.session_state.os_v23 = None; st.rerun()
                         if st.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
-                            st.session_state.os_v20 = None; st.rerun()
-        st.session_state.os_v20 = None
+                            st.session_state.os_v23 = None; st.rerun()
+        st.session_state.os_v23 = None
         add_g()
 
 with c3:
@@ -182,15 +183,19 @@ event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_w
 with st.sidebar:
     st.header("⚙️ Opcje")
     
-    # RAPORT I ZEROWANIE
-    if "wipe_step" not in st.session_state: st.session_state.wipe_step = 0
+    # 1. TYLKO POBIERZ
     pdf_normal = create_pdf(df_h, s_og, s_got, s_wyd)
+    st.download_button(label="📥 POBIERZ RAPORT PDF", data=pdf_normal, file_name=f"raport_{teraz.strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
     
+    st.divider()
+
+    # 2. POBIERZ I WYZERUJ
+    if "wipe_step" not in st.session_state: st.session_state.wipe_step = 0
     if st.session_state.wipe_step == 0:
         if st.download_button(label="📥 POBIERZ RAPORT I WYZERUJ DANE", data=pdf_normal, file_name=f"raport_koncowy_{dzis_str}.pdf", mime="application/pdf", use_container_width=True, type="primary"):
             st.session_state.wipe_step = 1; st.rerun()
     elif st.session_state.wipe_step == 1:
-        st.warning("Czy na pewno WYZEROWAĆ dane?")
+        st.warning("Pobrano raport. Czy na pewno WYZEROWAĆ dane?")
         if st.button("TAK, ZERUJ", type="primary", use_container_width=True): st.session_state.wipe_step = 2; st.rerun()
         if st.button("ANULUJ", use_container_width=True): st.session_state.wipe_step = 0; st.rerun()
     elif st.session_state.wipe_step == 2:
