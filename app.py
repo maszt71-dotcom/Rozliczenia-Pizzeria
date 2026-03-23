@@ -18,7 +18,7 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- DANE POCZTOWE (Aftermarket -> Gmail) ---
+# --- DANE POCZTOWE (Aftermarket) ---
 EMAIL_WYSYLKOWY = "biuro@vantivo.pl" 
 EMAIL_HASLO = "Jebaltopsiak123!" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
@@ -28,7 +28,7 @@ SMTP_PORT = 465
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
-# --- FUNKCJA WYSYŁANIA (DIRECT SSL) ---
+# --- FUNKCJA WYSYŁANIA ---
 def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
     try:
         msg = MIMEMultipart()
@@ -36,7 +36,7 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
         msg['To'] = EMAIL_DOCELOWY
         msg['Subject'] = f"🚀 {temat_prefix} - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         
-        body = f"Raport wygenerowany: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\nW zalaczniku PDF oraz CSV."
+        body = f"Raport wygenerowany: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
         msg.attach(MIMEText(body, 'plain'))
 
         part1 = MIMEBase('application', "octet-stream")
@@ -94,7 +94,7 @@ def load_data():
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 def save_data(df): df.to_csv(DB_FILE, index=False)
 
-# --- LOGIKA DOSTĘPU ---
+# --- LOGOWANIE ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     wpisane = st.text_input("Hasło", type="password")
@@ -125,11 +125,11 @@ def modal_reset():
     if "step" not in st.session_state: st.session_state.step = 1
     pdf = create_pdf(df_active, s_og, s_got, s_wyd)
     if st.session_state.step == 1:
-        st.write("1. Pobierz PDF")
+        st.write("1. Pobierz raport PDF.")
         if st.download_button("📥 POBIERZ PDF", pdf, "raport.pdf", use_container_width=True, type="primary"):
             st.session_state.step = 2; st.rerun()
     elif st.session_state.step == 2:
-        st.write("2. Wyślij kopię na Gmail")
+        st.write("2. Wyślij kopię na Gmail.")
         if st.button("📧 WYŚLIJ NA MAIL", use_container_width=True, type="primary"):
             if wyslij_na_mail(pdf, DB_FILE, "RECZNY-RESET"):
                 st.session_state.step = 3; st.rerun()
@@ -143,7 +143,7 @@ def modal_reset():
             save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
             st.session_state.step = 1; st.rerun()
 
-# --- WYGLĄD GŁÓWNY (KAFELKI) ---
+# --- WYGLĄD GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -163,11 +163,11 @@ with c2:
     if st.button("➕ Dodaj ", key="b2", use_container_width=True):
         @st.dialog("Rozlicz Gotówkę")
         def d2():
-            os = st.selectbox("Kto?", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
-            kw = st.number_input("Kwota", min_value=0.0)
+            osoba = st.selectbox("Kto?", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
             da = st.date_input("Z dnia", datetime.now())
             if st.button("ZAPISZ"):
-                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {os}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {osoba}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         d2()
 with c3:
@@ -175,7 +175,7 @@ with c3:
     if st.button("➖ Dodaj", key="b3", use_container_width=True):
         @st.dialog("Dodaj Wydatek")
         def d3():
-            kw = st.number_input("Kwota", min_value=0.0)
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
             da = st.date_input("Z dnia", datetime.now())
             op = st.text_input("Opis")
             if st.button("ZAPISZ"):
