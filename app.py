@@ -39,14 +39,12 @@ def clean_text(text):
     if not isinstance(text, str): return str(text)
     return text.encode('ascii', 'ignore').decode('ascii').strip()
 
-# FUNKCJA PDF
 def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(190, 15, txt="RAPORT FINANSOWY PIZZERIA", ln=True, align='C')
     pdf.set_font("Arial", 'B', 12)
-    # Kolory w podsumowaniu
     pdf.set_fill_color(212, 237, 218); pdf.set_text_color(21, 87, 36)
     pdf.cell(190, 10, txt=f" PRZYCHOD OGOLNY: {s_og:.2f} zl", ln=True, fill=True)
     pdf.set_fill_color(255, 243, 205); pdf.set_text_color(133, 100, 4)
@@ -54,7 +52,6 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
     pdf.set_fill_color(248, 215, 218); pdf.set_text_color(114, 28, 36)
     pdf.cell(190, 10, txt=f" WYDATKI GOTOWKOWE: {s_wyd:.2f} zl", ln=True, fill=True)
     pdf.ln(10); pdf.set_text_color(0, 0, 0); pdf.set_font("Arial", 'B', 10)
-    # Tabela czarno-biała
     pdf.cell(40, 8, "Data zapisu", 1); pdf.cell(25, 8, "Kwota", 1); pdf.cell(35, 8, "Data zdarz.", 1); pdf.cell(90, 8, "Typ / Opis", 1); pdf.ln()
     pdf.set_font("Arial", size=9)
     for _, row in df_to_pdf.iterrows():
@@ -64,6 +61,7 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
         pdf.cell(90, 8, info[:50], 1); pdf.ln()
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
+# --- LOGIKA SESJI ---
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
@@ -82,8 +80,8 @@ def apply_row_styles(row):
 
 # --- WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
-
 c1, c2, c3 = st.columns(3)
+
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><b>PRZYCHÓD OGÓLNY</b><br><b style="font-size:20px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Przychód", use_container_width=True):
@@ -101,13 +99,13 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "os_v14" not in st.session_state: st.session_state.os_v14 = None
+        if "os_v15" not in st.session_state: st.session_state.os_v14 = None
         @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                st.button(o, use_container_width=True, key=f"b_{o}", on_click=lambda x=o: st.session_state.update({"os_v14": x}))
-                if st.session_state.os_v14 == o:
+                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v15 = o
+                if st.session_state.get("os_v15") == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"k_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
@@ -115,10 +113,10 @@ with c2:
                             if kw:
                                 n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v14 = None; st.rerun()
+                                st.session_state.os_v15 = None; st.rerun()
                         if st.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
-                            st.session_state.os_v14 = None; st.rerun()
-        st.session_state.os_v14 = None
+                            st.session_state.os_v15 = None; st.rerun()
+        st.session_state.os_v15 = None
         add_g()
 
 with c3:
@@ -135,50 +133,55 @@ with c3:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_w()
 
-# --- TABELA HISTORII ---
+# --- TABELA ---
 st.divider()
 df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
+if "t_key" not in st.session_state: st.session_state.t_key = 0
+event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.t_key}",
+    column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None})
 
-# PANCERNY RESET: klucz tabeli zmienia się, gdy chcemy odznaczyć ptaszki
-if "table_key" not in st.session_state: st.session_state.table_key = 0
-
-event = st.dataframe(
-    df_h.style.apply(apply_row_styles, axis=1), 
-    use_container_width=True, 
-    on_select="rerun", 
-    selection_mode="multi-row",
-    key=f"table_{st.session_state.table_key}",
-    column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None}
-)
-
-# --- SIDEBAR ---
+# --- SIDEBAR (RAPORT I ZEROWANIE) ---
 with st.sidebar:
     st.header("⚙️ Opcje")
-    try:
-        pdf_out = create_pdf(df_h, s_og, s_got, s_wyd)
-        st.download_button(label="📥 POBIERZ RAPORT PDF", data=pdf_out, file_name=f"raport_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
-    except: st.error("Błąd PDF")
     
-    st.divider()
-    selected_indices = event.selection.rows
-    if selected_indices:
-        if "ask_sure" not in st.session_state: st.session_state.ask_sure = False
-        if not st.session_state.ask_sure:
-            if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                st.session_state.ask_sure = True; st.rerun()
-        else:
-            st.error("Czy jesteś pewien?")
-            c_tak, c_nie = st.columns(2)
-            if c_tak.button("TAK", type="primary", use_container_width=True):
-                full = load_data(); full.loc[df_h.index[selected_indices], 'Status'] = 'Usunięty'; save_data(full)
-                st.session_state.ask_sure = False
-                st.session_state.table_key += 1 # RESET PTASZKÓW
-                st.rerun()
-            if c_nie.button("NIE", use_container_width=True):
-                st.session_state.ask_sure = False
-                st.session_state.table_key += 1 # RESET PTASZKÓW
-                st.rerun()
-    else: st.session_state.ask_sure = False
+    # LOGIKA POBIERANIA I ZEROWANIA
+    if "raport_pobrany" not in st.session_state: st.session_state.raport_pobrany = False
+    
+    pdf_out = create_pdf(df_h, s_og, s_got, s_wyd)
+    if st.download_button(label="📥 POBIERZ RAPORT PDF", data=pdf_out, file_name=f"raport_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True):
+        st.session_state.raport_pobrany = True
 
+    # Przycisk zerowania (aktywny tylko po pobraniu raportu)
+    if st.button("🔥 WYZERO_UJ DANE", type="primary", use_container_width=True, disabled=not st.session_state.raport_pobrany):
+        st.session_state.ask_zero = True
+
+    if st.session_state.get("ask_zero"):
+        st.error("Wszystkie dane zostaną zarchiwizowane. Czy na pewno?")
+        cz1, cz2 = st.columns(2)
+        if cz1.button("TAK, ZERUJ", type="primary"):
+            full = load_data()
+            full.loc[full['Status'] == 'Aktywny', 'Status'] = f"Zarchiwizowane_{datetime.now().strftime('%Y%m%d')}"
+            save_data(full)
+            st.session_state.raport_pobrany = False
+            st.session_state.ask_zero = False
+            st.rerun()
+        if cz2.button("ANULUJ"):
+            st.session_state.ask_zero = False
+            st.rerun()
+
+    st.divider()
+    # Usuwanie zaznaczonych
+    selected = event.selection.rows
+    if selected:
+        if "ask_s" not in st.session_state: st.session_state.ask_s = False
+        if not st.session_state.ask_s:
+            if st.button("🗑️ USUŃ ZAZNACZONE", use_container_width=True): st.session_state.ask_s = True; st.rerun()
+        else:
+            st.error("Usunąć?"); u1, u2 = st.columns(2)
+            if u1.button("TAK"):
+                f = load_data(); f.loc[df_h.index[selected], 'Status'] = 'Usunięty'; save_data(f)
+                st.session_state.ask_s = False; st.session_state.t_key += 1; st.rerun()
+            if u2.button("NIE"): st.session_state.ask_s = False; st.session_state.t_key += 1; st.rerun()
+    
     st.divider()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
