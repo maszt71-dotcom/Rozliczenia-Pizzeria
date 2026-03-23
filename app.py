@@ -79,32 +79,36 @@ with c2:
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
         @st.dialog("Dodaj Gotówkę")
         def add_g():
-            # Inicjalizacja wyboru wewnątrz dialogu
-            if "osoba_wybrana" not in st.session_state:
-                st.session_state.osoba_wybrana = None
+            # Używamy kontenera, żeby podmieniać zawartość bez przeładowania całej strony
+            placeholder = st.empty()
+            
+            if "osoba_tmp" not in st.session_state:
+                st.session_state.osoba_tmp = None
 
-            if st.session_state.osoba_wybrana is None:
-                st.write("Wybierz osobę:")
-                if st.button("🏢 Bufet", use_container_width=True): st.session_state.osoba_wybrana = "Bufet"; st.rerun()
-                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.osoba_wybrana = "Kierowca 1"; st.rerun()
-                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.osoba_wybrana = "Kierowca 2"; st.rerun()
-                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.osoba_wybrana = "Kierowca 3"; st.rerun()
-                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.osoba_wybrana = "Kierowca 4"; st.rerun()
+            if st.session_state.osoba_tmp is None:
+                with placeholder.container():
+                    st.write("Wybierz osobę:")
+                    if st.button("🏢 Bufet", use_container_width=True): st.session_state.osoba_tmp = "Bufet"; st.rerun()
+                    if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.osoba_tmp = "Kierowca 1"; st.rerun()
+                    if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.osoba_tmp = "Kierowca 2"; st.rerun()
+                    if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.osoba_tmp = "Kierowca 3"; st.rerun()
+                    if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.osoba_tmp = "Kierowca 4"; st.rerun()
             else:
-                st.subheader(f"Rozliczasz: {st.session_state.osoba_wybrana}")
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
-                da = st.date_input("Z dnia", datetime.now())
-                
-                col1, col2 = st.columns(2)
-                if col1.button("ZAPISZ", type="primary", use_container_width=True):
-                    if kw is not None:
-                        nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.osoba_wybrana}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
-                        st.session_state.osoba_wybrana = None # Reset wyboru po zapisie
+                with placeholder.container():
+                    st.subheader(f"Rozliczasz: {st.session_state.osoba_tmp}")
+                    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
+                    da = st.date_input("Z dnia", datetime.now())
+                    
+                    c1, c2 = st.columns(2)
+                    if c1.button("ZAPISZ", type="primary", use_container_width=True):
+                        if kw is not None:
+                            nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.osoba_tmp}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                            save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
+                            st.session_state.osoba_tmp = None
+                            st.rerun()
+                    if c2.button("WSTECZ", use_container_width=True):
+                        st.session_state.osoba_tmp = None
                         st.rerun()
-                if col2.button("WSTECZ", use_container_width=True):
-                    st.session_state.osoba_wybrana = None
-                    st.rerun()
         add_g()
 
 with c3:
@@ -132,6 +136,5 @@ st.dataframe(
 )
 
 with st.sidebar:
-    st.header("⚙️ Opcje")
     if st.button("🔄 ODŚWIEŻ", use_container_width=True):
         st.rerun()
