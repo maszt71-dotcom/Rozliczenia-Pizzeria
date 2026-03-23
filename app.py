@@ -17,7 +17,9 @@ if not cookies.ready():
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 REPORT_DIR = 'nocne_raporty'
+STATUS_DIR = 'statusy_pobrania' # Nowy folder na znaczniki
 if not os.path.exists(REPORT_DIR): os.makedirs(REPORT_DIR)
+if not os.path.exists(STATUS_DIR): os.makedirs(STATUS_DIR)
 
 # --- LOGIKA DOSTĘPU ---
 if cookies.get("is_logged") != "true":
@@ -70,6 +72,7 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd, tytul="RAPORT"):
 teraz = datetime.now()
 dzis_str = teraz.strftime('%Y%m%d')
 plik_nocny = f"{REPORT_DIR}/raport_{dzis_str}.pdf"
+plik_statusu = f"{STATUS_DIR}/pobrano_{dzis_str}.txt"
 
 if teraz.hour >= 2 and not os.path.exists(plik_nocny):
     d_raw = load_data()
@@ -89,7 +92,6 @@ if teraz.hour >= 2 and not os.path.exists(plik_nocny):
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
-
 s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
@@ -105,21 +107,16 @@ def apply_row_styles(row):
 # --- WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 
-# PANCERNA LOGIKA ZNIKAJĄCEGO PRZYCISKU
-if "pobrany_dzisiaj" not in st.session_state:
-    st.session_state.pobrany_dzisiaj = (cookies.get("pobrany_nocny") == dzis_str)
-
-if os.path.exists(plik_nocny) and not st.session_state.pobrany_dzisiaj:
+# PANCERNY PRZYCISK NOCNY (BEZ CIASTECZEK)
+if os.path.exists(plik_nocny) and not os.path.exists(plik_statusu):
     with open(plik_nocny, "rb") as f:
         bytes_nocny = f.read()
     st.success(f"✅ Masz gotowy raport dobowy (2:00-2:00) z dnia {teraz.strftime('%d.%m')}!")
-    if st.download_button("📥 POBIERZ RAPORT NOCNY", bytes_nocny, file_name=f"raport_nocny_{dzis_str}.pdf", use_container_width=True, key="btn_nocny_final"):
-        cookies["pobrany_nocny"] = dzis_str
-        cookies.save()
-        st.session_state.pobrany_dzisiaj = True
+    if st.download_button("📥 POBIERZ RAPORT NOCNY", bytes_nocny, file_name=f"raport_nocny_{dzis_str}.pdf", use_container_width=True, key="btn_nocny_safe"):
+        with open(plik_statusu, "w") as f: f.write("pobrano")
         st.rerun()
 
-# --- KAFELKI ---
+# --- KAFELKI I RESZTA KODU (BEZ ZMIAN) ---
 c1, c2, c3 = st.columns(3)
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><b>PRZYCHÓD OGÓLNY</b><br><b style="font-size:20px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -172,14 +169,13 @@ with c3:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_w()
 
-# --- TABELA ---
+# --- TABELA I SIDEBAR (BEZ ZMIAN) ---
 st.divider()
 df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
 if "tk" not in st.session_state: st.session_state.tk = 0
 event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk}",
     column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None})
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     st.download_button(label="📥 POBIERZ RAPORT PDF", data=create_pdf(df_h, s_og, s_got, s_wyd), file_name=f"raport_{dzis_str}.pdf", mime="application/pdf", use_container_width=True)
