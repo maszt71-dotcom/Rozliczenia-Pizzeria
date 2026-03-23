@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import io
-from datetime import datetime
+from datetime import datetime, time
 from streamlit_cookies_manager import CookieManager
 from fpdf import FPDF
 
@@ -16,6 +16,8 @@ if not cookies.ready():
 # --- USTAWIENIA ---
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
+REPORT_DIR = 'nocne_raporty'
+if not os.path.exists(REPORT_DIR): os.makedirs(REPORT_DIR)
 
 # --- LOGIKA DOSTĘPU ---
 if cookies.get("is_logged") != "true":
@@ -60,6 +62,27 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
         pdf.cell(90, 8, info[:50], 1); pdf.ln()
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
+# --- LOGIKA AUTOMATU (2:00 RANO) ---
+def auto_night_report():
+    teraz = datetime.now()
+    dzis_tag = teraz.strftime("%Y%m%d")
+    plik_nocny = f"{REPORT_DIR}/raport_nocny_{dzis_tag}.pdf"
+    
+    if teraz.hour >= 2 and not os.path.exists(plik_nocny):
+        d = load_data()
+        da = d[d['Status'] == 'Aktywny'].copy()
+        da['Kwota'] = pd.to_numeric(da['Kwota'], errors='coerce').fillna(0)
+        s1 = da[da['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+        s2 = da[da['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
+        s3 = da[da['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s2
+        
+        pdf_bytes = create_pdf(da.iloc[::-1], s1, s3, s2)
+        with open(plik_nocny, "wb") as f:
+            f.write(pdf_bytes)
+
+auto_night_report()
+
+# --- DANE DO WIDOKU ---
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
@@ -97,13 +120,13 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "os_v_final" not in st.session_state: st.session_state.os_v_final = None
+        if "os_v16" not in st.session_state: st.session_state.os_v16 = None
         @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v_final = o
-                if st.session_state.get("os_v_final") == o:
+                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v16 = o
+                if st.session_state.get("os_v16") == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"k_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
@@ -111,10 +134,10 @@ with c2:
                             if kw:
                                 n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v_final = None; st.rerun()
+                                st.session_state.os_v16 = None; st.rerun()
                         if st.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
-                            st.session_state.os_v_final = None; st.rerun()
-        st.session_state.os_v_final = None
+                            st.session_state.os_v16 = None; st.rerun()
+        st.session_state.os_v16 = None
         add_g()
 
 with c3:
@@ -148,15 +171,15 @@ with st.sidebar:
     
     st.divider()
 
-    # RAPORT I ZEROWANIE (POTRÓJNE POTWIERDZENIE)
+    # KAFELEK: POBIERZ RAPORT I WYZERUJ DANE
     if "wipe_step" not in st.session_state: st.session_state.wipe_step = 0
 
     if st.session_state.wipe_step == 0:
-        if st.download_button(label="📥 RAPORT I ZERUJ DANE", data=pdf_normal, file_name=f"raport_koncowy_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True, type="primary"):
+        if st.download_button(label="📥 POBIERZ RAPORT I WYZERUJ DANE", data=pdf_normal, file_name=f"raport_koncowy_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True, type="primary"):
             st.session_state.wipe_step = 1; st.rerun()
 
     elif st.session_state.wipe_step == 1:
-        st.warning("Pobrano raport. Czy na pewno WYZEROWAĆ wszystkie dane?")
+        st.warning("Raport pobrany. Czy na pewno WYZEROWAĆ dane?")
         if st.button("TAK, ZERUJ", type="primary", use_container_width=True):
             st.session_state.wipe_step = 2; st.rerun()
         if st.button("ANULUJ", use_container_width=True):
@@ -164,7 +187,7 @@ with st.sidebar:
 
     elif st.session_state.wipe_step == 2:
         st.error("JESTEŚ PEWIEN? Tego nie da się cofnąć!")
-        if st.button("POTWIERDZAM – CZYŚĆ", type="primary", use_container_width=True):
+        if st.button("POTWIERDZAM – CZYŚĆ WSZYSTKO", type="primary", use_container_width=True):
             full = load_data()
             full.loc[full['Status'] == 'Aktywny', 'Status'] = f"Zarchiwizowane_{datetime.now().strftime('%Y%m%d')}"
             save_data(full)
