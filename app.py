@@ -209,7 +209,7 @@ if check_password():
             st.session_state.data = load_data(); st.rerun()
         st.divider()
         if not df_active.empty:
-            if st.button("💾 POBIERZ I RESETUJ DANE", use_container_width=True, type="primary"):
+            if st.button("💾 POBIERZ RAPORT I RESETUJ DANE", use_container_width=True, type="primary"):
                 st.session_state.reset_step = 0
                 st.session_state.show_reset_dialog = True
                 st.rerun()
