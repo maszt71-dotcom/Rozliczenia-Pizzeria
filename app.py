@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import io
+import re
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 from fpdf import FPDF
@@ -35,7 +36,13 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# Funkcja PDF (naprawiona pod kątem polskich znaków i stabilności)
+# FUNKCJA CZYSZCZĄCA TEKST Z EMOTEK DLA PDF
+def clean_text(text):
+    if not isinstance(text, str): return str(text)
+    # Usuwa znaki spoza standardowego zakresu (emotki)
+    return text.encode('ascii', 'ignore').decode('ascii').strip()
+
+# FUNKCJA PDF
 def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -61,11 +68,13 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
     pdf.ln()
     
     pdf.set_font("Arial", size=9)
-    for _, row in df_to_pdf.head(50).iterrows(): # Raport z ostatnich 50 wpisów
-        pdf.cell(40, 8, str(row['Data']), 1)
+    for _, row in df_to_pdf.iterrows():
+        pdf.cell(40, 8, clean_text(row['Data']), 1)
         pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1)
-        pdf.cell(35, 8, str(row['Data zdarzenia']), 1)
-        pdf.cell(90, 8, f"{row['Typ']} {row['Opis'] if pd.notna(row['Opis']) else ''}"[:50], 1)
+        pdf.cell(35, 8, clean_text(row['Data zdarzenia']), 1)
+        # Czyszczenie Typu i Opisu z emotek przed zapisem do PDF
+        info = f"{clean_text(row['Typ'])} {clean_text(row['Opis']) if pd.notna(row['Opis']) else ''}"
+        pdf.cell(90, 8, info[:50], 1)
         pdf.ln()
     
     return pdf.output(dest='S').encode('latin-1', 'replace')
@@ -107,13 +116,13 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "os_v10" not in st.session_state: st.session_state.os_v10 = None
+        if "os_v11" not in st.session_state: st.session_state.os_v11 = None
         @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                st.button(o, use_container_width=True, key=f"b_{o}", on_click=lambda x=o: st.session_state.update({"os_v10": x}))
-                if st.session_state.os_v10 == o:
+                st.button(o, use_container_width=True, key=f"b_{o}", on_click=lambda x=o: st.session_state.update({"os_v11": x}))
+                if st.session_state.os_v11 == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"k_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
@@ -121,10 +130,10 @@ with c2:
                             if kw:
                                 n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v10 = None; st.rerun()
+                                st.session_state.os_v11 = None; st.rerun()
                         if st.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
-                            st.session_state.os_v10 = None; st.rerun()
-        st.session_state.os_v10 = None
+                            st.session_state.os_v11 = None; st.rerun()
+        st.session_state.os_v11 = None
         add_g()
 
 with c3:
@@ -147,25 +156,18 @@ df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
 event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row",
     column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None})
 
-# --- SIDEBAR (TUTAJ JEST PRZYCISK PDF) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     
-    # GENEROWANIE I POBIERANIE PDF
+    # Przycisk Raportu PDF (z poprawką na emotki)
     try:
         pdf_out = create_pdf(df_h, s_og, s_got, s_wyd)
-        st.download_button(
-            label="📥 POBIERZ RAPORT PDF",
-            data=pdf_out,
-            file_name=f"raport_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
+        st.download_button(label="📥 POBIERZ RAPORT PDF", data=pdf_out, file_name=f"raport_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
     except Exception as e:
         st.error(f"Błąd PDF: {e}")
     
     st.divider()
-    # Logika usuwania z potwierdzeniem
     selected = event.selection.rows
     if selected:
         if "confirm" not in st.session_state: st.session_state.confirm = False
