@@ -100,13 +100,13 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "os_v_25" not in st.session_state: st.session_state.os_v_25 = None
+        if "os_v_26" not in st.session_state: st.session_state.os_v_26 = None
         @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v_25 = o
-                if st.session_state.get("os_v_25") == o:
+                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v_26 = o
+                if st.session_state.get("os_v_26") == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"k_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
@@ -114,10 +114,10 @@ with c2:
                             if kw:
                                 n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v_25 = None; st.rerun()
+                                st.session_state.os_v_26 = None; st.rerun()
                         if st.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
-                            st.session_state.os_v_25 = None; st.rerun()
-        st.session_state.os_v_25 = None
+                            st.session_state.os_v_26 = None; st.rerun()
+        st.session_state.os_v_26 = None
         add_g()
 
 with c3:
@@ -137,14 +137,14 @@ with c3:
 # --- TABELA ---
 st.divider()
 df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
-if "tk_25" not in st.session_state: st.session_state.tk_25 = 0
+if "tk_26" not in st.session_state: st.session_state.tk_26 = 0
 
 event = st.dataframe(
     df_h.style.apply(apply_row_styles, axis=1), 
     use_container_width=True, 
     on_select="rerun", 
     selection_mode="multi-row", 
-    key=f"table_{st.session_state.tk_25}",
+    key=f"table_{st.session_state.tk_26}",
     column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None}
 )
 
@@ -158,48 +158,52 @@ with st.sidebar:
     st.divider()
 
     # ZEROWANIE
-    if "ws_25" not in st.session_state: st.session_state.ws_25 = 0
-    if st.session_state.ws_25 == 0:
+    if "ws_26" not in st.session_state: st.session_state.ws_26 = 0
+    if st.session_state.ws_26 == 0:
         if st.download_button(label="📥 POBIERZ RAPORT I WYZERUJ DANE", data=pdf_bytes, file_name=f"koniec_zmiany.pdf", mime="application/pdf", use_container_width=True, type="primary"):
-            st.session_state.ws_25 = 1; st.rerun()
-    elif st.session_state.ws_25 == 1:
+            st.session_state.ws_26 = 1; st.rerun()
+    elif st.session_state.ws_26 == 1:
         st.warning("Czy na pewno WYZEROWAĆ?")
-        if st.button("TAK, ZERUJ", type="primary", use_container_width=True): st.session_state.ws_25 = 2; st.rerun()
-        if st.button("ANULUJ", use_container_width=True): st.session_state.ws_25 = 0; st.rerun()
-    elif st.session_state.ws_25 == 2:
+        if st.button("TAK, ZERUJ", type="primary", use_container_width=True): st.session_state.ws_26 = 2; st.rerun()
+        if st.button("ANULUJ", use_container_width=True): st.session_state.ws_26 = 0; st.rerun()
+    elif st.session_state.ws_26 == 2:
         st.error("JESTEŚ PEWIEN?")
         if st.button("POTWIERDZAM", type="primary", use_container_width=True):
             f = load_data(); f.loc[f['Status'] == 'Aktywny', 'Status'] = f"Arch_{datetime.now().strftime('%Y%m%d')}"; save_data(f)
-            st.session_state.ws_25 = 0; st.rerun()
-        if st.button("NIE", use_container_width=True): st.session_state.ws_25 = 0; st.rerun()
+            st.session_state.ws_26 = 0; st.rerun()
+        if st.button("NIE", use_container_width=True): st.session_state.ws_26 = 0; st.rerun()
 
     st.divider()
     
-    # LOGIKA USUWANIA (NAPRAWIONA)
+    # LOGIKA USUWANIA (PODWÓJNE POTWIERDZENIE)
     selected_rows = event.selection.rows
     if selected_rows:
-        if "ask_del" not in st.session_state: st.session_state.ask_del = False
+        if "del_step" not in st.session_state: st.session_state.del_step = 0
         
-        if not st.session_state.ask_del:
+        if st.session_state.del_step == 0:
             if st.button("🗑️ USUŃ ZAZNACZONE", use_container_width=True, type="primary"):
-                st.session_state.ask_del = True; st.rerun()
-        else:
+                st.session_state.del_step = 1; st.rerun()
+        
+        elif st.session_state.del_step == 1:
             st.error("Usunąć zaznaczone?")
-            c_t, c_n = st.columns(2)
-            if c_t.button("TAK", use_container_width=True):
+            c_t1, c_n1 = st.columns(2)
+            if c_t1.button("TAK", key="dt1", use_container_width=True):
+                st.session_state.del_step = 2; st.rerun()
+            if c_n1.button("NIE", key="dn1", use_container_width=True):
+                st.session_state.del_step = 0; st.session_state.tk_26 += 1; st.rerun()
+
+        elif st.session_state.del_step == 2:
+            st.error("Jesteś pewien? Tej czynności nie da się cofnąć!")
+            c_t2, c_n2 = st.columns(2)
+            if c_t2.button("POTWIERDZAM", key="dt2", type="primary", use_container_width=True):
                 full_data = load_data()
-                # Usuwamy zaznaczone wiersze
                 full_data.loc[df_h.index[selected_rows], 'Status'] = 'Usunięty'
                 save_data(full_data)
-                st.session_state.ask_del = False
-                st.session_state.tk_25 += 1 # Reset ptaszków
-                st.rerun()
-            if c_n.button("NIE", use_container_width=True):
-                st.session_state.ask_del = False
-                st.session_state.tk_25 += 1 # Reset ptaszków
-                st.rerun()
+                st.session_state.del_step = 0; st.session_state.tk_26 += 1; st.rerun()
+            if c_n2.button("ANULUJ", key="dn2", use_container_width=True):
+                st.session_state.del_step = 0; st.session_state.tk_26 += 1; st.rerun()
     else:
-        st.session_state.ask_del = False
+        st.session_state.del_step = 0
 
     st.divider()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
