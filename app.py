@@ -70,30 +70,29 @@ with c2:
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        @st.dialog("Wybierz Osobę")
+        @st.dialog("Dodaj Gotówkę")
         def add_g():
-            # SPOSÓB NA NIEZAMYKAJĄCE SIĘ OKNO: Formularz wewnątrz dialogu
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             
-            # Tworzymy belki, które nie odświeżają strony (używając form_submit_button)
-            for os_name in osoby:
-                if st.button(os_name, use_container_width=True, key=f"btn_{os_name}"):
-                    st.session_state.wybrana_osoba = os_name
+            # Formularz wyboru
+            for o in osoby:
+                if st.button(o, use_container_width=True):
+                    st.session_state.wyb_v4 = o
             
-            if "wybrana_osoba" in st.session_state and st.session_state.wybrana_osoba:
+            # Pojawia się bezpośrednio pod klikniętą belką (na dole listy)
+            if "wyb_v4" in st.session_state and st.session_state.wyb_v4:
                 st.divider()
-                st.subheader(f"Osoba: {st.session_state.wybrana_osoba}")
+                st.write(f"**{st.session_state.wyb_v4}**")
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
                 da = st.date_input("Z dnia", datetime.now())
                 
-                if st.button("ZAPISZ DANE", type="primary", use_container_width=True):
+                if st.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybrana_osoba}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wyb_v4}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.wybrana_osoba = None
+                        st.session_state.wyb_v4 = None
                         st.rerun()
-        # Czyścimy wybór przy starcie
-        if "wybrana_osoba" in st.session_state: st.session_state.wybrana_osoba = None
+        st.session_state.wyb_v4 = None
         add_g()
 
 with c3:
