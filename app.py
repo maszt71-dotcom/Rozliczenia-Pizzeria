@@ -18,18 +18,18 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- DANE POCZTOWE (Cyberfolks -> Gmail) ---
+# --- TWOJE DANE POCZTOWE (Cyberfolks -> Gmail) ---
 EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl" 
 EMAIL_HASLO = "pizz@123" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
 
-# ZMIANA NA PORT 465 (SSL) - Najbardziej stabilny dla Cyberfolks
+# Cyberfolks wymaga SSL na porcie 465
 SMTP_SERVER = "mail.cyberfolks.pl" 
 SMTP_PORT = 465 
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
-# --- FUNKCJA WYSYŁANIA MAILA (PDF + CSV) ---
+# --- FUNKCJA WYSYŁANIA MAILA (PANCERNE SSL) ---
 def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
     try:
         msg = MIMEMultipart()
@@ -56,11 +56,10 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
                 part2.add_header('Content-Disposition', f'attachment; filename=finanse_data.csv')
                 msg.attach(part2)
 
-        # Używamy SMTP_SSL dla portu 465
-        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
-        server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
-        server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
-        server.quit()
+        # Kluczowa zmiana: SMTP_SSL dla Cyberfolks
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
+            server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
         return True
     except Exception as e:
         st.error(f"Szczegoly bledu poczty: {e}")
@@ -92,20 +91,24 @@ def apply_row_styles(row):
     elif 'Gotówka' in row['Typ']: color = 'background-color: #fff3cd; color: #856404'
     return [color] * len(row)
 
-# --- LOGIKA DOSTĘPU ---
-if cookies.get("is_logged") != "true":
-    st.title("🍕 Logowanie")
-    wpisane = st.text_input("Hasło", type="password")
-    if st.button("Zaloguj się"):
-        if wpisane == MOJE_HASLO:
-            cookies["is_logged"] = "true"; cookies.save(); st.rerun()
-    st.stop()
-
 # --- ŁADOWANIE DANYCH ---
 def load_data():
     if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 def save_data(df): df.to_csv(DB_FILE, index=False)
+
+if 'is_logged' not in st.session_state:
+    if cookies.get("is_logged") == "true": st.session_state.is_logged = True
+    else: st.session_state.is_logged = False
+
+if not st.session_state.is_logged:
+    st.title("🍕 Logowanie")
+    wpisane = st.text_input("Hasło", type="password")
+    if st.button("Zaloguj się"):
+        if wpisane == MOJE_HASLO:
+            cookies["is_logged"] = "true"; cookies.save()
+            st.session_state.is_logged = True; st.rerun()
+    st.stop()
 
 st.session_state.data = load_data()
 df_active = st.session_state.data[st.session_state.data['Status'] == 'Aktywny'].copy()
@@ -115,16 +118,20 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- PROCEDURY (MODALE) ---
+# --- PROCEDURY ---
 @st.dialog("Szybki Raport na Mail")
 def modal_quick_report():
     st.write("Wysylka raportu PDF+CSV na Gmail (bez resetu)...")
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
-    if st.button("📧 WYŚLIJ TERAZ", use_container_width=True, type="primary"):
+    
+    # Przycisk pobierania zawsze dostępny
+    st.download_button("📥 POBIERZ PDF DO PLIKOW", pdf_file, f"Raport_Kopia_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
+    
+    if st.button("📧 WYŚLIJ TERAZ NA GMAIL", use_container_width=True, type="primary"):
         if wyslij_na_mail(pdf_file, DB_FILE, "SZYBKI-RAPORT"):
             st.success("Wyslano na Gmail!")
         else:
-            st.error("Blad wysylki. Sprawdz polaczenie.")
+            st.error("Blad wysylki. Sprawdz dane logowania.")
 
 @st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
@@ -132,15 +139,14 @@ def modal_reset():
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
 
     if st.session_state.step == "pobierz":
-        st.write("1️⃣ KROK: Pobierz raport PDF (plik trafi do folderu Pobrane).")
-        # Przycisk download_button automatycznie zapisuje plik w oknie pobranych przeglądarki
+        st.write("1️⃣ KROK: Pobierz raport PDF (zapisze sie w Twoich pobranych).")
         if st.download_button("📥 POBIERZ PDF I PRZEJDŹ DALEJ", pdf_file, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
             st.session_state.step = "wyslij"; st.rerun()
     elif st.session_state.step == "wyslij":
         st.write("2️⃣ KROK: Wyślij kopię bezpieczenstwa (PDF+CSV) na Gmail.")
         if st.button("📧 WYŚLIJ NA MAIL", use_container_width=True, type="primary"):
             if wyslij_na_mail(pdf_file, DB_FILE, "RECZNY-RESET"):
-                st.session_state.step = "reset"; st.success("Wysłano na maila!"); st.rerun()
+                st.session_state.step = "reset"; st.rerun()
     elif st.session_state.step == "reset":
         st.write("3️⃣ KROK: Czy wyczyścić dane w aplikacji?")
         if st.button("🔥 RESETUJ TABELE", use_container_width=True, type="primary"):
@@ -151,7 +157,7 @@ def modal_reset():
             save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
             st.session_state.step = "pobierz"; st.rerun()
 
-# --- WYGLĄD GŁÓWNY (KAFELKI) ---
+# --- INTERFEJS ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -189,7 +195,6 @@ with c3:
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         d3()
 
-# --- HISTORIA ---
 st.divider(); st.subheader("📂 Historia")
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł"), "Opis": st.column_config.TextColumn(width="large")})
@@ -202,6 +207,3 @@ with st.sidebar:
     if st.button("💾 POBIERZ RAPORT I RESETUJ TABELE", type="primary", use_container_width=True):
         st.session_state.step = "pobierz"; modal_reset()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
-    if sel.selection.rows:
-        if st.button("🗑️ USUŃ ZAZNACZONE", type="secondary", use_container_width=True):
-            curr = load_data(); curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'; save_data(curr); st.rerun()
