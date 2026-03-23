@@ -72,30 +72,21 @@ with c2:
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
         @st.dialog("Dodaj Gotówkę")
         def add_g():
-            # Używamy kontenera, żeby podmieniać widok BEZ odświeżania całej strony
-            if "wybor" not in st.session_state: st.session_state.wybor = None
-
-            if st.session_state.wybor is None:
-                st.write("Wybierz osobę:")
-                if st.button("🏢 Bufet", use_container_width=True): st.session_state.wybor = "Bufet"; st.rerun()
-                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.wybor = "Kierowca 1"; st.rerun()
-                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.wybor = "Kierowca 2"; st.rerun()
-                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.wybor = "Kierowca 3"; st.rerun()
-                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.wybor = "Kierowca 4"; st.rerun()
-            else:
-                st.subheader(f"Osoba: {st.session_state.wybor}")
-                kw_val = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
-                da_val = st.date_input("Z dnia", datetime.now())
-                col_z, col_w = st.columns(2)
-                if col_z.button("ZAPISZ", type="primary", use_container_width=True):
-                    if kw_val:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybor}", 'Kwota': float(kw_val), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_val.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.wybor = None; st.rerun()
-                if col_w.button("WSTECZ", use_container_width=True):
-                    st.session_state.wybor = None; st.rerun()
-        # Resetujemy przy otwarciu dialogu
-        st.session_state.wybor = None
+            # Używamy Radio jako kafelków, żeby okno nie znikało przy kliknięciu
+            # To rozwiązanie jest najstabilniejsze w Streamlit
+            st.write("Wybierz osobę:")
+            osoba = st.radio("Osoba:", ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"], index=None, label_visibility="collapsed")
+            
+            if osoba:
+                st.divider()
+                st.write(f"Wybrano: **{osoba}**")
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
+                da = st.date_input("Z dnia", datetime.now())
+                if st.button("ZAPISZ", type="primary", use_container_width=True):
+                    if kw:
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {osoba}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
+                    else: st.error("Wpisz kwotę!")
         add_g()
 
 with c3:
