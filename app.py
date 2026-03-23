@@ -7,7 +7,8 @@ from fpdf import FPDF
 from streamlit_cookies_manager import CookieManager
 
 # --- KONFIGURACJA STRONY ---
-st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕") # Zmieniono na wide dla lepszej tabeli
+# Ustawienie "wide" pozwala tabeli rozwinąć skrzydła na całym ekranie
+st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
 
 cookies = CookieManager()
 if not cookies.ready():
@@ -167,10 +168,11 @@ if check_password():
                                 save_data(st.session_state.data); st.rerun()
             d_got()
 
-    # --- HISTORIA Z SZERSZYM OPISEM ---
+    # --- HISTORIA Z ZOPTYMALIZOWANYMI KOLUMNAMI ---
     st.divider(); st.subheader("📂 Historia")
     df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
     
+    # Użycie column_config pozwala nadać kolumnie "Opis" status "large"
     selection = st.dataframe(
         df_h.style.apply(apply_row_styles, axis=1), 
         use_container_width=True,
@@ -181,7 +183,7 @@ if check_password():
             "Typ": st.column_config.TextColumn("Typ", width="medium"),
             "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
             "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
-            "Opis": st.column_config.TextColumn("Opis", width="large"), # Rozszerzona kolumna opisu
+            "Opis": st.column_config.TextColumn("Opis", width="large"), # Tutaj dajemy najwięcej miejsca
         }
     )
 
