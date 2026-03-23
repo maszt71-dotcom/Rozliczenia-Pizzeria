@@ -28,8 +28,7 @@ if cookies.get("is_logged") != "true":
 
 # --- OBSŁUGA DANYCH ---
 def load_data():
-    if os.path.exists(DB_FILE):
-        return pd.read_csv(DB_FILE)
+    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
 def save_data(df):
@@ -143,32 +142,35 @@ event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_w
 with st.sidebar:
     st.header("⚙️ Opcje")
     
-    # 1. ZWYKŁY RAPORT (OSOBNO)
+    # ZWYKŁY RAPORT
     pdf_normal = create_pdf(df_h, s_og, s_got, s_wyd)
     st.download_button(label="📥 POBIERZ RAPORT PDF", data=pdf_normal, file_name=f"raport_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
     
     st.divider()
 
-    # 2. RAPORT + ZEROWANIE
-    if "ask_wipe" not in st.session_state: st.session_state.ask_wipe = False
+    # RAPORT I ZEROWANIE (POTRÓJNE POTWIERDZENIE)
+    if "wipe_step" not in st.session_state: st.session_state.wipe_step = 0
 
-    if not st.session_state.ask_wipe:
-        # Ten przycisk tylko generuje PDF, ale po kliknięciu "aktywuje" pytanie o zerowanie
+    if st.session_state.wipe_step == 0:
         if st.download_button(label="📥 RAPORT I ZERUJ DANE", data=pdf_normal, file_name=f"raport_koncowy_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True, type="primary"):
-            st.session_state.ask_wipe = True
-            st.rerun()
-    else:
-        st.error("Raport pobrany. Czy na pewno WYZEROWAĆ wszystkie dane?")
-        cw1, cw2 = st.columns(2)
-        if cw1.button("TAK, ZERUJ", type="primary", use_container_width=True):
+            st.session_state.wipe_step = 1; st.rerun()
+
+    elif st.session_state.wipe_step == 1:
+        st.warning("Pobrano raport. Czy na pewno WYZEROWAĆ wszystkie dane?")
+        if st.button("TAK, ZERUJ", type="primary", use_container_width=True):
+            st.session_state.wipe_step = 2; st.rerun()
+        if st.button("ANULUJ", use_container_width=True):
+            st.session_state.wipe_step = 0; st.rerun()
+
+    elif st.session_state.wipe_step == 2:
+        st.error("JESTEŚ PEWIEN? Tego nie da się cofnąć!")
+        if st.button("POTWIERDZAM – CZYŚĆ", type="primary", use_container_width=True):
             full = load_data()
             full.loc[full['Status'] == 'Aktywny', 'Status'] = f"Zarchiwizowane_{datetime.now().strftime('%Y%m%d')}"
             save_data(full)
-            st.session_state.ask_wipe = False
-            st.rerun()
-        if cw2.button("ANULUJ", use_container_width=True):
-            st.session_state.ask_wipe = False
-            st.rerun()
+            st.session_state.wipe_step = 0; st.rerun()
+        if st.button("NIE, WRÓĆ", use_container_width=True):
+            st.session_state.wipe_step = 0; st.rerun()
 
     st.divider()
     # Usuwanie zaznaczonych
