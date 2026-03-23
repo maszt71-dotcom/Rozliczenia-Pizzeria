@@ -21,15 +21,12 @@ if cookies.get("is_logged") != "true":
     wpisane = st.text_input("Hasło", type="password")
     if st.button("Zaloguj się"):
         if wpisane == MOJE_HASLO:
-            cookies["is_logged"] = "true"
-            cookies.save()
-            st.rerun()
+            cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
 
 # --- OBSŁUGA DANYCH ---
 def load_data():
-    if os.path.exists(DB_FILE):
-        return pd.read_csv(DB_FILE)
+    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
 def save_data(df):
@@ -50,9 +47,9 @@ def apply_row_styles(row):
     elif 'Gotówka' in row['Typ']: color = 'background-color: #fff3cd; color: #856404'
     return [color] * len(row)
 
-# --- FUNKCJE POMOCNICZE DO DIALOGÓW ---
-def set_osoba(osoba):
-    st.session_state.wybrana_osoba_dialog = osoba
+# --- FUNKCJA RESETU WYBORU ---
+def otworz_dodawanie_gotowki():
+    st.session_state.wybrana_osoba_v2 = None
 
 # --- WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
@@ -68,46 +65,37 @@ with c1:
             da = st.date_input("Z dnia", datetime.now())
             if st.button("ZAPISZ"):
                 if kw is not None:
-                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
-                    st.rerun()
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_p()
 
 with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"
     brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "wybrana_osoba_dialog" not in st.session_state:
-            st.session_state.wybrana_osoba_dialog = None
-            
+    # on_click resetuje osobe zanim otworzy okno
+    if st.button("➕ Dodaj Gotówkę", use_container_width=True, on_click=otworz_dodawanie_gotowki):
         @st.dialog("Dodaj Gotówkę")
         def add_g():
-            if st.session_state.wybrana_osoba_dialog is None:
+            if "wybrana_osoba_v2" not in st.session_state or st.session_state.wybrana_osoba_v2 is None:
                 st.write("Wybierz osobę:")
-                st.button("🏢 Bufet", use_container_width=True, on_click=set_osoba, args=("Bufet",))
-                st.button("🚗 Kierowca 1", use_container_width=True, on_click=set_osoba, args=("Kierowca 1",))
-                st.button("🚗 Kierowca 2", use_container_width=True, on_click=set_osoba, args=("Kierowca 2",))
-                st.button("🚗 Kierowca 3", use_container_width=True, on_click=set_osoba, args=("Kierowca 3",))
-                st.button("🚗 Kierowca 4", use_container_width=True, on_click=set_osoba, args=("Kierowca 4",))
+                if st.button("🏢 Bufet", use_container_width=True): st.session_state.wybrana_osoba_v2 = "Bufet"; st.rerun()
+                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.wybrana_osoba_v2 = "Kierowca 1"; st.rerun()
+                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.wybrana_osoba_v2 = "Kierowca 2"; st.rerun()
+                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.wybrana_osoba_v2 = "Kierowca 3"; st.rerun()
+                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.wybrana_osoba_v2 = "Kierowca 4"; st.rerun()
             else:
-                st.subheader(f"Rozliczasz: {st.session_state.wybrana_osoba_dialog}")
+                st.subheader(f"Osoba: {st.session_state.wybrana_osoba_v2}")
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
                 da = st.date_input("Z dnia", datetime.now())
-                
                 col1, col2 = st.columns(2)
                 if col1.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw is not None:
-                        nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybrana_osoba_dialog}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
-                        st.session_state.wybrana_osoba_dialog = None 
-                        st.rerun()
-                    else:
-                        st.error("Wpisz kwotę!")
-                
-                if col2.button("WSTECZ", use_container_width=True):
-                    st.session_state.wybrana_osoba_dialog = None
-                    st.rerun()
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybrana_osoba_v2}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                        st.session_state.wybrana_osoba_v2 = None; st.rerun()
+                    else: st.error("Wpisz kwotę!")
+                if col2.button("WSTECZ", use_container_width=True): st.session_state.wybrana_osoba_v2 = None; st.rerun()
         add_g()
 
 with c3:
@@ -120,21 +108,14 @@ with c3:
             op = st.text_input("Opis", placeholder=" ")
             if st.button("ZAPISZ"):
                 if kw is not None:
-                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
-                    st.rerun()
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_w()
 
 # --- TABELA ---
 st.divider()
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-st.dataframe(
-    df_h.style.apply(apply_row_styles, axis=1), 
-    use_container_width=True, 
-    column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł"), "Opis": st.column_config.TextColumn(width="large")}
-)
+st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł"), "Opis": st.column_config.TextColumn(width="large")})
 
 with st.sidebar:
-    if st.button("🔄 ODŚWIEŻ", use_container_width=True):
-        st.session_state.wybrana_osoba_dialog = None
-        st.rerun()
+    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
