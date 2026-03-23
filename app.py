@@ -1,7 +1,12 @@
 import streamlit as st
 import pandas as pd
 import os
+import smtplib
 import random
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from datetime import datetime
 from fpdf import FPDF
 from streamlit_cookies_manager import CookieManager
@@ -13,8 +18,43 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
+# --- TWOJE DANE POCZTOWE (JUŻ WPISANE) ---
+EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl" 
+EMAIL_HASLO = "pizz@123" 
+EMAIL_DOCELOWY = "mange929598@gmail.com" 
+
+SMTP_SERVER = "mail.cyberfolks.pl" 
+SMTP_PORT = 587
 MOJE_HASLO = "dup@"
 
+# --- FUNKCJA WYSYŁANIA MAILA ---
+def wyslij_backup_na_mail(pdf_data, nazwa_pliku):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_WYSYLKOWY
+        msg['To'] = EMAIL_DOCELOWY
+        msg['Subject'] = f"🚀 RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"
+        
+        body = f"W załączniku przesyłam raport finansowy wygenerowany: {datetime.now().strftime('%d.%m.%Y %H:%M')}."
+        msg.attach(MIMEText(body, 'plain'))
+
+        part = MIMEBase('application', "octet-stream")
+        part.set_payload(pdf_data)
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f'attachment; filename={nazwa_pliku}')
+        msg.attach(part)
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
+        server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        st.error(f"Problem z wysyłką przez Cyberfolks: {e}")
+        return False
+
+# --- LOGIKA DOSTĘPU ---
 def check_password():
     if cookies.get("is_logged") == "true": return True
     if "password_correct" not in st.session_state:
@@ -74,7 +114,7 @@ if check_password():
         return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
     def save_data(df): df.to_csv(DB_FILE, index=False)
 
-    if 'data' not in st.session_state: st.session_state.data = load_data()
+    st.session_state.data = load_data()
     df_active = st.session_state.data[st.session_state.data['Status'] == 'Aktywny'].copy()
     df_active['Data zdarzenia'] = df_active['Data zdarzenia'].astype(str).str[:5]
     df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
@@ -101,21 +141,19 @@ if check_password():
                 st.session_state.reset_step = 2
                 st.rerun()
             if st.button("❌ PRZERWIJ OPERACJĘ", use_container_width=True):
-                st.session_state.reset_step = 0
-                st.session_state.show_reset_dialog = False
-                st.rerun()
+                st.session_state.reset_step = 0; st.session_state.show_reset_dialog = False; st.rerun()
         elif st.session_state.reset_step == 2:
-            st.error("❗ JESTEŚ PEWIEN?")
+            st.error("❗ JESTEŚ PEWIEN? Raport zostanie wysłany na Gmail: mange929598@gmail.com")
             if st.button("✅ TAK, JESTEM PEWIEN", use_container_width=True, type="primary"):
-                st.session_state.data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-                save_data(st.session_state.data)
-                st.session_state.reset_step = 0
-                st.session_state.show_reset_dialog = False
-                st.rerun()
+                pdf_to_mail = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
+                wyslij_backup_na_mail(pdf_to_mail, f"Raport_{datetime.now().strftime('%d_%m')}.pdf")
+                
+                empty_df = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+                save_data(empty_df)
+                st.session_state.data = empty_df
+                st.session_state.reset_step = 0; st.session_state.show_reset_dialog = False; st.rerun()
             if st.button("❌ PRZERWIJ", use_container_width=True):
-                st.session_state.reset_step = 0
-                st.session_state.show_reset_dialog = False
-                st.rerun()
+                st.session_state.reset_step = 0; st.session_state.show_reset_dialog = False; st.rerun()
 
     if st.session_state.get('show_reset_dialog', False):
         final_reset_flow()
@@ -132,8 +170,9 @@ if check_password():
                 if st.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
-                        save_data(st.session_state.data); st.rerun()
+                        current_data = load_data()
+                        new_data = pd.concat([current_data, pd.DataFrame([n])], ignore_index=True)
+                        save_data(new_data); st.rerun()
             d1()
     with c3:
         st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wydatki:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -146,8 +185,9 @@ if check_password():
                 if st.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
-                        save_data(st.session_state.data); st.rerun()
+                        current_data = load_data()
+                        new_data = pd.concat([current_data, pd.DataFrame([n])], ignore_index=True)
+                        save_data(new_data); st.rerun()
             d3()
     with c2:
         bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_gotowka >= 0 else ("#ff0000", "#8b0000", "#ffffff")
@@ -163,8 +203,9 @@ if check_password():
                         if st.button(f"ZAPISZ {nazwa.upper()}", type="primary", use_container_width=True, key=f"s_{nazwa}"):
                             if kw_v:
                                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {nazwa}", 'Kwota': float(kw_v), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da_v.strftime("%d.%m")}
-                                st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([n])], ignore_index=True)
-                                save_data(st.session_state.data); st.rerun()
+                                current_data = load_data()
+                                new_data = pd.concat([current_data, pd.DataFrame([n])], ignore_index=True)
+                                save_data(new_data); st.rerun()
             d_got()
 
     # --- HISTORIA ---
@@ -176,40 +217,28 @@ if check_password():
         use_container_width=True,
         on_select="rerun",
         selection_mode="multi-row",
+        key=f"table_{random.randint(0,9999)}",
         column_config={
-            "Data": st.column_config.TextColumn("Data wpisu", width="small"),
-            "Typ": st.column_config.TextColumn("Typ", width="medium"),
-            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", width="small"),
-            "Data zdarzenia": st.column_config.TextColumn("Z dnia", width="small"),
-            "Opis": st.column_config.TextColumn("Opis", width="large"),
+            "Kwota": st.column_config.NumberColumn(format="%.2f zł"),
+            "Opis": st.column_config.TextColumn(width="large"),
         }
     )
 
     with st.sidebar:
         st.header("⚙️ Opcje")
         if selection.selection.rows:
-            st.error(f"Zaznaczono: {len(selection.selection.rows)}")
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
                 @st.dialog("Potwierdź usunięcie")
                 def confirm_delete():
-                    st.warning("Czy na pewno chcesz usunąć zaznaczone wpisy?")
-                    if st.button("TAK, USUŃ NA STAŁE", type="primary", use_container_width=True):
-                        indices_to_hide = df_h.index[selection.selection.rows]
-                        st.session_state.data.loc[indices_to_hide, 'Status'] = 'Usunięty'
-                        save_data(st.session_state.data)
-                        st.rerun()
+                    st.warning("Usunąć zaznaczone wpisy?"); 
+                    if st.button("TAK", type="primary", use_container_width=True):
+                        indices = df_h.index[selection.selection.rows]
+                        current_data = load_data(); current_data.loc[indices, 'Status'] = 'Usunięty'; save_data(current_data); st.rerun()
                 confirm_delete()
-            st.divider()
-
         if not df_active.empty:
             pdf_copy = create_pdf(df_active, s_ogolny, s_gotowka, s_wydatki)
             st.download_button("📄 POBIERZ RAPORT (KOPIA)", pdf_copy, f"Kopia_Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
-        st.divider()
-        if st.button("🔄 ODŚWIEŻ DANE", use_container_width=True):
-            st.session_state.data = load_data(); st.rerun()
-        st.divider()
+        if st.button("🔄 ODŚWIEŻ DANE", use_container_width=True): st.rerun()
         if not df_active.empty:
             if st.button("💾 POBIERZ RAPORT I RESETUJ DANE", use_container_width=True, type="primary"):
-                st.session_state.reset_step = 0
-                st.session_state.show_reset_dialog = True
-                st.rerun()
+                st.session_state.reset_step = 0; st.session_state.show_reset_dialog = True; st.rerun()
