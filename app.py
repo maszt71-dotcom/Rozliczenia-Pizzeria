@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import os
 import io
-import re
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 from fpdf import FPDF
@@ -36,45 +35,69 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# FUNKCJA CZYSZCZĄCA TEKST Z EMOTEK DLA PDF
 def clean_text(text):
     if not isinstance(text, str): return str(text)
-    # Usuwa znaki spoza standardowego zakresu (emotki)
     return text.encode('ascii', 'ignore').decode('ascii').strip()
 
-# FUNKCJA PDF
+# FUNKCJA PDF Z KOLORAMI ŚWIĘTYMI
 def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Nagłówek główny
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, txt="RAPORT FINANSOWY PIZZERIA", ln=True, align='C')
+    pdf.cell(190, 15, txt="RAPORT FINANSOWY PIZZERIA", ln=True, align='C')
     pdf.set_font("Arial", size=10)
-    pdf.cell(200, 10, txt=f"Wygenerowano: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True, align='C')
+    pdf.cell(190, 5, txt=f"Wygenerowano: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True, align='C')
     pdf.ln(10)
     
-    # Podsumowanie
+    # PODSUMOWANIE Z KOLORAMI MENU
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, txt=f"PRZYCHOD OGOLNY: {s_og:.2f} zl", ln=True)
-    pdf.cell(200, 10, txt=f"GOTOWKA (SUMA): {s_got:.2f} zl", ln=True)
-    pdf.cell(200, 10, txt=f"WYDATKI GOTOWKOWE: {s_wyd:.2f} zl", ln=True)
-    pdf.ln(5)
     
-    # Tabela
+    # Przychód (Zielony)
+    pdf.set_fill_color(212, 237, 218) # #d4edda
+    pdf.set_text_color(21, 87, 36)    # #155724
+    pdf.cell(190, 10, txt=f" PRZYCHOD OGOLNY: {s_og:.2f} zl", ln=True, fill=True)
+    
+    # Gotówka (Żółty)
+    pdf.set_fill_color(255, 243, 205) # #fff3cd
+    pdf.set_text_color(133, 100, 4)   # #856404
+    pdf.cell(190, 10, txt=f" GOTOWKA (SUMA): {s_got:.2f} zl", ln=True, fill=True)
+    
+    # Wydatki (Czerwony)
+    pdf.set_fill_color(248, 215, 218) # #f8d7da
+    pdf.set_text_color(114, 28, 36)   # #721c24
+    pdf.cell(190, 10, txt=f" WYDATKI GOTOWKOWE: {s_wyd:.2f} zl", ln=True, fill=True)
+    
+    pdf.ln(10)
+    pdf.set_text_color(0, 0, 0) # Reset koloru tekstu na czarny
+    
+    # TABELA Z KOLORAMI WIERSZY
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(40, 8, "Data zapisu", 1)
-    pdf.cell(25, 8, "Kwota", 1)
-    pdf.cell(35, 8, "Data zdarz.", 1)
-    pdf.cell(90, 8, "Typ / Opis", 1)
+    pdf.cell(40, 8, "Data zapisu", 1, 0, 'C')
+    pdf.cell(25, 8, "Kwota", 1, 0, 'C')
+    pdf.cell(35, 8, "Data zdarz.", 1, 0, 'C')
+    pdf.cell(90, 8, "Typ / Opis", 1, 0, 'C')
     pdf.ln()
     
     pdf.set_font("Arial", size=9)
     for _, row in df_to_pdf.iterrows():
-        pdf.cell(40, 8, clean_text(row['Data']), 1)
-        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1)
-        pdf.cell(35, 8, clean_text(row['Data zdarzenia']), 1)
-        # Czyszczenie Typu i Opisu z emotek przed zapisem do PDF
+        typ = str(row['Typ'])
+        # Ustawienie koloru tła wiersza w PDF
+        if typ == 'Przychód ogólny':
+            pdf.set_fill_color(212, 237, 218)
+        elif typ == 'Wydatki gotówkowe':
+            pdf.set_fill_color(248, 215, 218)
+        elif 'Gotówka' in typ:
+            pdf.set_fill_color(255, 243, 205)
+        else:
+            pdf.set_fill_color(255, 255, 255)
+            
+        pdf.cell(40, 8, clean_text(row['Data']), 1, 0, 'L', fill=True)
+        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1, 0, 'R', fill=True)
+        pdf.cell(35, 8, clean_text(row['Data zdarzenia']), 1, 0, 'C', fill=True)
         info = f"{clean_text(row['Typ'])} {clean_text(row['Opis']) if pd.notna(row['Opis']) else ''}"
-        pdf.cell(90, 8, info[:50], 1)
+        pdf.cell(90, 8, info[:50], 1, 0, 'L', fill=True)
         pdf.ln()
     
     return pdf.output(dest='S').encode('latin-1', 'replace')
@@ -116,13 +139,13 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "os_v11" not in st.session_state: st.session_state.os_v11 = None
+        if "os_v12" not in st.session_state: st.session_state.os_v12 = None
         @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                st.button(o, use_container_width=True, key=f"b_{o}", on_click=lambda x=o: st.session_state.update({"os_v11": x}))
-                if st.session_state.os_v11 == o:
+                st.button(o, use_container_width=True, key=f"b_{o}", on_click=lambda x=o: st.session_state.update({"os_v12": x}))
+                if st.session_state.os_v12 == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"k_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
@@ -130,10 +153,10 @@ with c2:
                             if kw:
                                 n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v11 = None; st.rerun()
+                                st.session_state.os_v12 = None; st.rerun()
                         if st.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
-                            st.session_state.os_v11 = None; st.rerun()
-        st.session_state.os_v11 = None
+                            st.session_state.os_v12 = None; st.rerun()
+        st.session_state.os_v12 = None
         add_g()
 
 with c3:
@@ -159,8 +182,6 @@ event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_w
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Opcje")
-    
-    # Przycisk Raportu PDF (z poprawką na emotki)
     try:
         pdf_out = create_pdf(df_h, s_og, s_got, s_wyd)
         st.download_button(label="📥 POBIERZ RAPORT PDF", data=pdf_out, file_name=f"raport_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
@@ -181,6 +202,5 @@ with st.sidebar:
                 st.session_state.confirm = False; st.rerun()
             if c2.button("NIE"): st.session_state.confirm = False; st.rerun()
     else: st.session_state.confirm = False
-
     st.divider()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
