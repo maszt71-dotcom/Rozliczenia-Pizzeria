@@ -68,31 +68,38 @@ with c1:
 with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
         @st.dialog("Dodaj Gotówkę")
         def add_g():
-            if "wybor_os" not in st.session_state: st.session_state.wybor_os = None
+            # Używamy kontenera wewnątrz dialogu
+            if "wybrany" not in st.session_state: st.session_state.wybrany = None
             
-            if st.session_state.wybor_os is None:
+            # EKRAN 1: BELKI (JAK NA TWOIM ZDJĘCIU)
+            if st.session_state.wybrany is None:
                 st.write("Wybierz osobę:")
-                if st.button("🏢 Bufet", use_container_width=True): st.session_state.wybor_os = "Bufet"; st.rerun()
-                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.wybor_os = "Kierowca 1"; st.rerun()
-                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.wybor_os = "Kierowca 2"; st.rerun()
-                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.wybor_os = "Kierowca 3"; st.rerun()
-                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.wybor_os = "Kierowca 4"; st.rerun()
+                # Bez st.rerun() przy kliknieciu, zeby nie zamykalo okna
+                if st.button("🏢 Bufet", use_container_width=True): st.session_state.wybrany = "Bufet"; st.rerun()
+                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.wybrany = "Kierowca 1"; st.rerun()
+                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.wybrany = "Kierowca 2"; st.rerun()
+                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.wybrany = "Kierowca 3"; st.rerun()
+                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.wybrany = "Kierowca 4"; st.rerun()
+            
+            # EKRAN 2: FORMULARZ PO KLIKNIĘCIU
             else:
-                st.subheader(f"Osoba: {st.session_state.wybor_os}")
+                st.subheader(f"Osoba: {st.session_state.wybrany}")
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
                 da = st.date_input("Z dnia", datetime.now())
                 c_z, c_w = st.columns(2)
                 if c_z.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybor_os}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybrany}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.wybor_os = None; st.rerun()
+                        st.session_state.wybrany = None; st.rerun()
                 if c_w.button("WSTECZ", use_container_width=True):
-                    st.session_state.wybor_os = None; st.rerun()
-        st.session_state.wybor_os = None
+                    st.session_state.wybrany = None; st.rerun()
+        # Reset przy każdym otwarciu okna
+        st.session_state.wybrany = None
         add_g()
 
 with c3:
@@ -120,7 +127,7 @@ sel = st.dataframe(
     column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")}
 )
 
-# --- SIDEBAR (MENU BOCZNE) ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     if sel.selection.rows:
