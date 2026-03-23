@@ -18,12 +18,14 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- DANE POCZTOWE ---
+# --- DANE POCZTOWE (Cyberfolks -> Gmail) ---
 EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl" 
 EMAIL_HASLO = "pizz@123" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
+
+# ZMIANA NA PORT 465 (SSL) - Najbardziej stabilny dla Cyberfolks
 SMTP_SERVER = "mail.cyberfolks.pl" 
-SMTP_PORT = 587
+SMTP_PORT = 465 
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
@@ -38,12 +40,14 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
         body = f"Raport wygenerowany: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\nW zalaczniku PDF oraz CSV do przywrocenia danych."
         msg.attach(MIMEText(body, 'plain'))
 
+        # Załącznik PDF
         part1 = MIMEBase('application', "octet-stream")
         part1.set_payload(pdf_data)
         encoders.encode_base64(part1)
         part1.add_header('Content-Disposition', f'attachment; filename=Raport_{datetime.now().strftime("%d_%m")}.pdf')
         msg.attach(part1)
 
+        # Załącznik CSV
         if os.path.exists(csv_path):
             with open(csv_path, "rb") as f:
                 part2 = MIMEBase('application', "octet-stream")
@@ -52,13 +56,14 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
                 part2.add_header('Content-Disposition', f'attachment; filename=finanse_data.csv')
                 msg.attach(part2)
 
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
+        # Używamy SMTP_SSL dla portu 465
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
         server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
         server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
         server.quit()
         return True
-    except:
+    except Exception as e:
+        st.error(f"Szczegoly bledu poczty: {e}")
         return False
 
 # --- GENERATOR PDF ---
@@ -113,14 +118,13 @@ s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].
 # --- PROCEDURY (MODALE) ---
 @st.dialog("Szybki Raport na Mail")
 def modal_quick_report():
-    st.write("Generowanie raportu i wysyłka na Gmail (bez resetowania tabeli)...")
+    st.write("Wysylka raportu PDF+CSV na Gmail (bez resetu)...")
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
     if st.button("📧 WYŚLIJ TERAZ", use_container_width=True, type="primary"):
         if wyslij_na_mail(pdf_file, DB_FILE, "SZYBKI-RAPORT"):
-            st.success("Wysłano pomyślnie!")
-            if st.button("Zamknij"): st.rerun()
+            st.success("Wyslano na Gmail!")
         else:
-            st.error("Błąd wysyłki.")
+            st.error("Blad wysylki. Sprawdz polaczenie.")
 
 @st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
@@ -128,25 +132,26 @@ def modal_reset():
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
 
     if st.session_state.step == "pobierz":
-        st.write("1️⃣ KROK: Pobierz raport PDF.")
-        if st.download_button("📥 POBIERZ PDF", pdf_file, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
+        st.write("1️⃣ KROK: Pobierz raport PDF (plik trafi do folderu Pobrane).")
+        # Przycisk download_button automatycznie zapisuje plik w oknie pobranych przeglądarki
+        if st.download_button("📥 POBIERZ PDF I PRZEJDŹ DALEJ", pdf_file, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
             st.session_state.step = "wyslij"; st.rerun()
     elif st.session_state.step == "wyslij":
-        st.write("2️⃣ KROK: Wyślij kopię (PDF+CSV) na Gmail.")
+        st.write("2️⃣ KROK: Wyślij kopię bezpieczenstwa (PDF+CSV) na Gmail.")
         if st.button("📧 WYŚLIJ NA MAIL", use_container_width=True, type="primary"):
             if wyslij_na_mail(pdf_file, DB_FILE, "RECZNY-RESET"):
-                st.session_state.step = "reset"; st.success("Wysłano!"); st.rerun()
+                st.session_state.step = "reset"; st.success("Wysłano na maila!"); st.rerun()
     elif st.session_state.step == "reset":
         st.write("3️⃣ KROK: Czy wyczyścić dane w aplikacji?")
         if st.button("🔥 RESETUJ TABELE", use_container_width=True, type="primary"):
             st.session_state.step = "potwierdz"; st.rerun()
     elif st.session_state.step == "potwierdz":
-        st.error("4️⃣ KROK: CZY NA PEWNO?")
+        st.error("4️⃣ KROK: CZY NA PEWNO? Tabela zostanie wyczyszczona.")
         if st.button("✅ TAK, JESTEM PEWIEN", use_container_width=True, type="primary"):
             save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
             st.session_state.step = "pobierz"; st.rerun()
 
-# --- WYGLĄD GŁÓWNY ---
+# --- WYGLĄD GŁÓWNY (KAFELKI) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 with c1:
