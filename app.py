@@ -139,7 +139,7 @@ def modal_reset():
                 st.session_state.step = "reset"; st.success("Wysłano!"); st.rerun()
     elif st.session_state.step == "reset":
         st.write("3️⃣ KROK: Czy wyczyścić dane w aplikacji?")
-        if st.button("🔥 RESETUJ DANE", use_container_width=True, type="primary"):
+        if st.button("🔥 RESETUJ TABELE", use_container_width=True, type="primary"):
             st.session_state.step = "potwierdz"; st.rerun()
     elif st.session_state.step == "potwierdz":
         st.error("4️⃣ KROK: CZY NA PEWNO?")
@@ -197,6 +197,6 @@ with st.sidebar:
         if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
             curr = load_data(); curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'; save_data(curr); st.rerun()
     st.divider()
-    if st.button("💾 ZAMKNIJ OKRES I RESETUJ", type="primary", use_container_width=True):
+    if st.button("💾 POBIERZ RAPORT I RESETUJ TABELE", type="primary", use_container_width=True):
         st.session_state.step = "pobierz"; modal_reset()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
