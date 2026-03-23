@@ -78,23 +78,30 @@ with c2:
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
         @st.dialog("Dodaj Gotówkę")
         def add_g():
-            osoby = {
-                "🏢 Bufet": "Bufet",
-                "🚗 Kierowca 1": "Kierowca 1",
-                "🚗 Kierowca 2": "Kierowca 2",
-                "🚗 Kierowca 3": "Kierowca 3",
-                "🚗 Kierowca 4": "Kierowca 4"
-            }
-            # Lista wyboru
-            wybor = st.selectbox("Wybierz osobę:", ["---"] + list(osoby.keys()))
-            
-            # Warunek: pokazuj resztę pól tylko jeśli osoba jest wybrana
-            if wybor != "---":
+            if "selected_person" not in st.session_state:
+                st.session_state.selected_person = None
+
+            if st.session_state.selected_person is None:
+                st.write("Wybierz osobę:")
+                col_a, col_b = st.columns(2)
+                if col_a.button("🏢 Bufet", use_container_width=True): st.session_state.selected_person = "Bufet"; st.rerun()
+                if col_b.button("🚗 Kierowca 1", use_container_width=True): st.session_state.selected_person = "Kierowca 1"; st.rerun()
+                if col_a.button("🚗 Kierowca 2", use_container_width=True): st.session_state.selected_person = "Kierowca 2"; st.rerun()
+                if col_b.button("🚗 Kierowca 3", use_container_width=True): st.session_state.selected_person = "Kierowca 3"; st.rerun()
+                if col_a.button("🚗 Kierowca 4", use_container_width=True): st.session_state.selected_person = "Kierowca 4"; st.rerun()
+            else:
+                st.subheader(f"Rozliczasz: {st.session_state.selected_person}")
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
                 da = st.date_input("Z dnia", datetime.now())
-                if st.button("ZAPISZ"):
-                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {osoby[wybor]}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                
+                c_save, c_back = st.columns(2)
+                if c_save.button("ZAPISZ", type="primary", use_container_width=True):
+                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.selected_person}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
+                    st.session_state.selected_person = None
+                    st.rerun()
+                if c_back.button("COFNIJ", use_container_width=True):
+                    st.session_state.selected_person = None
                     st.rerun()
         add_g()
 
