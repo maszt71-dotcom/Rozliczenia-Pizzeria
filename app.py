@@ -63,12 +63,16 @@ with c1:
     if st.button("➕ Dodaj Przychód", use_container_width=True):
         @st.dialog("Dodaj Przychód")
         def add_p():
-            kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+            # value=None sprawia, ze pole jest puste na starcie
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwote...")
             da = st.date_input("Z dnia", datetime.now())
             if st.button("ZAPISZ"):
-                nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
-                st.rerun()
+                if kw is not None:
+                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
+                    st.rerun()
+                else:
+                    st.error("Wpisz kwote!")
         add_p()
 
 with c2:
@@ -83,23 +87,25 @@ with c2:
 
             if st.session_state.selected_person is None:
                 st.write("Wybierz osobę:")
-                col_a, col_b = st.columns(2)
-                if col_a.button("🏢 Bufet", use_container_width=True): st.session_state.selected_person = "Bufet"; st.rerun()
-                if col_b.button("🚗 Kierowca 1", use_container_width=True): st.session_state.selected_person = "Kierowca 1"; st.rerun()
-                if col_a.button("🚗 Kierowca 2", use_container_width=True): st.session_state.selected_person = "Kierowca 2"; st.rerun()
-                if col_b.button("🚗 Kierowca 3", use_container_width=True): st.session_state.selected_person = "Kierowca 3"; st.rerun()
-                if col_a.button("🚗 Kierowca 4", use_container_width=True): st.session_state.selected_person = "Kierowca 4"; st.rerun()
+                if st.button("🏢 Bufet", use_container_width=True): st.session_state.selected_person = "Bufet"; st.rerun()
+                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.selected_person = "Kierowca 1"; st.rerun()
+                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.selected_person = "Kierowca 2"; st.rerun()
+                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.selected_person = "Kierowca 3"; st.rerun()
+                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.selected_person = "Kierowca 4"; st.rerun()
             else:
                 st.subheader(f"Rozliczasz: {st.session_state.selected_person}")
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwote...")
                 da = st.date_input("Z dnia", datetime.now())
                 
                 c_save, c_back = st.columns(2)
                 if c_save.button("ZAPISZ", type="primary", use_container_width=True):
-                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.selected_person}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
-                    st.session_state.selected_person = None
-                    st.rerun()
+                    if kw is not None:
+                        nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.selected_person}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
+                        st.session_state.selected_person = None
+                        st.rerun()
+                    else:
+                        st.error("Wpisz kwote!")
                 if c_back.button("COFNIJ", use_container_width=True):
                     st.session_state.selected_person = None
                     st.rerun()
@@ -110,16 +116,19 @@ with c3:
     if st.button("➖ Dodaj Wydatek", use_container_width=True):
         @st.dialog("Dodaj Wydatek")
         def add_w():
-            kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="Wpisz kwote...")
             da = st.date_input("Z dnia", datetime.now())
-            op = st.text_input("Opis")
+            op = st.text_input("Opis", placeholder="Za co wydatek?")
             if st.button("ZAPISZ"):
-                nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
-                st.rerun()
+                if kw is not None:
+                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
+                    st.rerun()
+                else:
+                    st.error("Wpisz kwote!")
         add_w()
 
-# --- TABELA HISTORII ---
+# --- TABELA ---
 st.divider()
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 sel = st.dataframe(
@@ -138,7 +147,8 @@ with st.sidebar:
     if sel.selection.rows:
         if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
             current_all = load_data()
-            current_all.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
+            indices_to_delete = df_h.index[sel.selection.rows]
+            current_all.loc[indices_to_delete, 'Status'] = 'Usunięty'
             save_data(current_all)
             st.rerun()
     st.divider()
