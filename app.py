@@ -39,40 +39,37 @@ def clean_text(text):
     if not isinstance(text, str): return str(text)
     return text.encode('ascii', 'ignore').decode('ascii').strip()
 
-# FUNKCJA PDF Z KOLORAMI ŚWIĘTYMI
+# FUNKCJA PDF (KOLORY TYLKO W PODSUMOWANIU)
 def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
     
-    # Nagłówek główny
+    # Nagłówek
     pdf.set_font("Arial", 'B', 16)
     pdf.cell(190, 15, txt="RAPORT FINANSOWY PIZZERIA", ln=True, align='C')
     pdf.set_font("Arial", size=10)
     pdf.cell(190, 5, txt=f"Wygenerowano: {datetime.now().strftime('%Y-%m-%d %H:%M')}", ln=True, align='C')
     pdf.ln(10)
     
-    # PODSUMOWANIE Z KOLORAMI MENU
+    # PODSUMOWANIE (KOLOROWE)
     pdf.set_font("Arial", 'B', 12)
-    
-    # Przychód (Zielony)
-    pdf.set_fill_color(212, 237, 218) # #d4edda
-    pdf.set_text_color(21, 87, 36)    # #155724
+    # Przychód
+    pdf.set_fill_color(212, 237, 218)
+    pdf.set_text_color(21, 87, 36)
     pdf.cell(190, 10, txt=f" PRZYCHOD OGOLNY: {s_og:.2f} zl", ln=True, fill=True)
-    
-    # Gotówka (Żółty)
-    pdf.set_fill_color(255, 243, 205) # #fff3cd
-    pdf.set_text_color(133, 100, 4)   # #856404
+    # Gotówka
+    pdf.set_fill_color(255, 243, 205)
+    pdf.set_text_color(133, 100, 4)
     pdf.cell(190, 10, txt=f" GOTOWKA (SUMA): {s_got:.2f} zl", ln=True, fill=True)
-    
-    # Wydatki (Czerwony)
-    pdf.set_fill_color(248, 215, 218) # #f8d7da
-    pdf.set_text_color(114, 28, 36)   # #721c24
+    # Wydatki
+    pdf.set_fill_color(248, 215, 218)
+    pdf.set_text_color(114, 28, 36)
     pdf.cell(190, 10, txt=f" WYDATKI GOTOWKOWE: {s_wyd:.2f} zl", ln=True, fill=True)
     
     pdf.ln(10)
-    pdf.set_text_color(0, 0, 0) # Reset koloru tekstu na czarny
+    pdf.set_text_color(0, 0, 0) # Powrót do czarnego tekstu
     
-    # TABELA Z KOLORAMI WIERSZY
+    # TABELA (CZARNO-BIAŁA)
     pdf.set_font("Arial", 'B', 10)
     pdf.cell(40, 8, "Data zapisu", 1, 0, 'C')
     pdf.cell(25, 8, "Kwota", 1, 0, 'C')
@@ -82,26 +79,16 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
     
     pdf.set_font("Arial", size=9)
     for _, row in df_to_pdf.iterrows():
-        typ = str(row['Typ'])
-        # Ustawienie koloru tła wiersza w PDF
-        if typ == 'Przychód ogólny':
-            pdf.set_fill_color(212, 237, 218)
-        elif typ == 'Wydatki gotówkowe':
-            pdf.set_fill_color(248, 215, 218)
-        elif 'Gotówka' in typ:
-            pdf.set_fill_color(255, 243, 205)
-        else:
-            pdf.set_fill_color(255, 255, 255)
-            
-        pdf.cell(40, 8, clean_text(row['Data']), 1, 0, 'L', fill=True)
-        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1, 0, 'R', fill=True)
-        pdf.cell(35, 8, clean_text(row['Data zdarzenia']), 1, 0, 'C', fill=True)
+        pdf.cell(40, 8, clean_text(row['Data']), 1)
+        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1, 0, 'R')
+        pdf.cell(35, 8, clean_text(row['Data zdarzenia']), 1, 0, 'C')
         info = f"{clean_text(row['Typ'])} {clean_text(row['Opis']) if pd.notna(row['Opis']) else ''}"
-        pdf.cell(90, 8, info[:50], 1, 0, 'L', fill=True)
+        pdf.cell(90, 8, info[:50], 1)
         pdf.ln()
     
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
+# --- PRZYGOTOWANIE DANYCH ---
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
@@ -139,13 +126,13 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "os_v12" not in st.session_state: st.session_state.os_v12 = None
+        if "os_v13" not in st.session_state: st.session_state.os_v13 = None
         @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                st.button(o, use_container_width=True, key=f"b_{o}", on_click=lambda x=o: st.session_state.update({"os_v12": x}))
-                if st.session_state.os_v12 == o:
+                st.button(o, use_container_width=True, key=f"b_{o}", on_click=lambda x=o: st.session_state.update({"os_v13": x}))
+                if st.session_state.os_v13 == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"k_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
@@ -153,10 +140,10 @@ with c2:
                             if kw:
                                 n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v12 = None; st.rerun()
+                                st.session_state.os_v13 = None; st.rerun()
                         if st.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
-                            st.session_state.os_v12 = None; st.rerun()
-        st.session_state.os_v12 = None
+                            st.session_state.os_v13 = None; st.rerun()
+        st.session_state.os_v13 = None
         add_g()
 
 with c3:
@@ -173,15 +160,25 @@ with c3:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_w()
 
-# --- TABELA ---
+# --- TABELA HISTORII ---
 st.divider()
 df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
-event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row",
-    column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None})
+
+# Kluczowa zmiana: używamy klucza 'my_table', aby móc resetować zaznaczenie
+event = st.dataframe(
+    df_h.style.apply(apply_row_styles, axis=1), 
+    use_container_width=True, 
+    on_select="rerun", 
+    selection_mode="multi-row",
+    key="my_table",
+    column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None}
+)
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Opcje")
+    
+    # Przycisk PDF
     try:
         pdf_out = create_pdf(df_h, s_og, s_got, s_wyd)
         st.download_button(label="📥 POBIERZ RAPORT PDF", data=pdf_out, file_name=f"raport_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
@@ -189,18 +186,34 @@ with st.sidebar:
         st.error(f"Błąd PDF: {e}")
     
     st.divider()
-    selected = event.selection.rows
-    if selected:
-        if "confirm" not in st.session_state: st.session_state.confirm = False
-        if not st.session_state.confirm:
+    
+    # LOGIKA USUWANIA Z RESETEM PTASZKÓW
+    selected_indices = event.selection.rows
+    if selected_indices:
+        if "ask_sure" not in st.session_state: st.session_state.ask_sure = False
+        
+        if not st.session_state.ask_sure:
             if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-                st.session_state.confirm = True; st.rerun()
+                st.session_state.ask_sure = True
+                st.rerun()
         else:
-            st.error("Czy jesteś pewien?"); c1, c2 = st.columns(2)
-            if c1.button("TAK", type="primary"):
-                full = load_data(); full.loc[df_h.index[selected], 'Status'] = 'Usunięty'; save_data(full)
-                st.session_state.confirm = False; st.rerun()
-            if c2.button("NIE"): st.session_state.confirm = False; st.rerun()
-    else: st.session_state.confirm = False
+            st.error("Czy jesteś pewien?")
+            c_tak, c_nie = st.columns(2)
+            if c_tak.button("TAK", type="primary", use_container_width=True):
+                full = load_data()
+                full.loc[df_h.index[selected_indices], 'Status'] = 'Usunięty'
+                save_data(full)
+                st.session_state.ask_sure = False
+                # Czyścimy zaznaczenie w tabeli
+                st.session_state.my_table.selection.rows = []
+                st.rerun()
+            if c_nie.button("NIE", use_container_width=True):
+                st.session_state.ask_sure = False
+                # Czyścimy zaznaczenie w tabeli (ptaszki znikają)
+                st.session_state.my_table.selection.rows = []
+                st.rerun()
+    else:
+        st.session_state.ask_sure = False
+
     st.divider()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
