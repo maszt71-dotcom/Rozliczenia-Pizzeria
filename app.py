@@ -70,20 +70,36 @@ with c2:
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        @st.dialog("Wybierz osobę i kwotę")
+        @st.dialog("Dodaj Gotówkę")
         def add_g():
-            # Używamy prostego selectboxa lub radio, żeby uniknąć zamykania okna przez buttony
-            osoba = st.radio("Dla kogo:", ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"], index=None)
+            # Stałe miejsce w oknie, które podmieniamy
+            kontener = st.empty()
             
-            if osoba:
-                st.divider()
-                st.write(f"Wpisujesz dla: **{osoba}**")
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
-                da = st.date_input("Z dnia", datetime.now())
-                if st.button("ZAPISZ"):
-                    if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {osoba}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
+            if "os_tmp" not in st.session_state: st.session_state.os_tmp = None
+
+            if st.session_state.os_tmp is None:
+                with kontener.container():
+                    st.write("Wybierz osobę:")
+                    if st.button("🏢 Bufet", use_container_width=True): st.session_state.os_tmp = "Bufet"; st.rerun()
+                    if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.os_tmp = "Kierowca 1"; st.rerun()
+                    if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.os_tmp = "Kierowca 2"; st.rerun()
+                    if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.os_tmp = "Kierowca 3"; st.rerun()
+                    if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.os_tmp = "Kierowca 4"; st.rerun()
+            else:
+                with kontener.container():
+                    st.subheader(f"Osoba: {st.session_state.os_tmp}")
+                    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
+                    da = st.date_input("Z dnia", datetime.now())
+                    cz, cw = st.columns(2)
+                    if cz.button("ZAPISZ", type="primary", use_container_width=True):
+                        if kw:
+                            n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os_tmp}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                            save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                            st.session_state.os_tmp = None; st.rerun()
+                    if cw.button("WSTECZ", use_container_width=True):
+                        st.session_state.os_tmp = None; st.rerun()
+        # Reset przy otwarciu
+        st.session_state.os_tmp = None
         add_g()
 
 with c3:
