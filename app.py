@@ -68,38 +68,31 @@ with c1:
 with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        # Resetowanie wyboru przy każdym otwarciu okna
-        if "osoba_v3" in st.session_state: del st.session_state.osoba_gotowka_v3
-        
         @st.dialog("Dodaj Gotówkę")
         def add_g():
-            if "osoba_gotowka_v3" not in st.session_state:
-                st.session_state.osoba_gotowka_v3 = None
-
-            if st.session_state.osoba_gotowka_v3 is None:
-                st.write("Wybierz osobę (belki):")
-                # BELKI JEDNA POD DRUGĄ
-                if st.button("🏢 Bufet", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Bufet"; st.rerun()
-                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Kierowca 1"; st.rerun()
-                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Kierowca 2"; st.rerun()
-                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Kierowca 3"; st.rerun()
-                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.osoba_gotowka_v3 = "Kierowca 4"; st.rerun()
+            if "wybor_os" not in st.session_state: st.session_state.wybor_os = None
+            
+            if st.session_state.wybor_os is None:
+                st.write("Wybierz osobę:")
+                if st.button("🏢 Bufet", use_container_width=True): st.session_state.wybor_os = "Bufet"; st.rerun()
+                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.wybor_os = "Kierowca 1"; st.rerun()
+                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.wybor_os = "Kierowca 2"; st.rerun()
+                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.wybor_os = "Kierowca 3"; st.rerun()
+                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.wybor_os = "Kierowca 4"; st.rerun()
             else:
-                st.subheader(f"Wybrano: {st.session_state.osoba_gotowka_v3}")
+                st.subheader(f"Osoba: {st.session_state.wybor_os}")
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
                 da = st.date_input("Z dnia", datetime.now())
-                c_ok, c_bk = st.columns(2)
-                if c_ok.button("ZAPISZ", type="primary", use_container_width=True):
+                c_z, c_w = st.columns(2)
+                if c_z.button("ZAPISZ", type="primary", use_container_width=True):
                     if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.osoba_gotowka_v3}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybor_os}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        del st.session_state.osoba_gotowka_v3
-                        st.rerun()
-                if c_bk.button("WSTECZ", use_container_width=True):
-                    del st.session_state.osoba_gotowka_v3
-                    st.rerun()
+                        st.session_state.wybor_os = None; st.rerun()
+                if c_w.button("WSTECZ", use_container_width=True):
+                    st.session_state.wybor_os = None; st.rerun()
+        st.session_state.wybor_os = None
         add_g()
 
 with c3:
@@ -116,7 +109,24 @@ with c3:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_w()
 
-# --- TABELA ---
+# --- TABELA HISTORII ---
 st.divider()
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
+sel = st.dataframe(
+    df_h.style.apply(apply_row_styles, axis=1), 
+    use_container_width=True, 
+    on_select="rerun", 
+    selection_mode="multi-row",
+    column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")}
+)
+
+# --- SIDEBAR (MENU BOCZNE) ---
+with st.sidebar:
+    st.header("⚙️ Opcje")
+    if sel.selection.rows:
+        if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
+            curr = load_data()
+            curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
+            save_data(curr); st.rerun()
+    st.divider()
+    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
