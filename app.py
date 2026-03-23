@@ -39,12 +39,10 @@ data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-# Obliczenia do kafelków
 s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- STYLIZACJA TABELI ---
 def apply_row_styles(row):
     color = ''
     if row['Typ'] == 'Przychód ogólny':
@@ -55,7 +53,7 @@ def apply_row_styles(row):
         color = 'background-color: #fff3cd; color: #856404'
     return [color] * len(row)
 
-# --- WIDOK GŁÓWNY (KAFELKI) ---
+# --- WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 
 c1, c2, c3 = st.columns(3)
@@ -77,8 +75,8 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"
     brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ Rozlicz Gotówkę", use_container_width=True):
-        @st.dialog("Rozlicz Gotówkę")
+    if st.button("➕ Dodaj Gotówkę", use_container_width=True):
+        @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = {
                 "🏢 Bufet": "Bufet",
@@ -87,13 +85,17 @@ with c2:
                 "🚗 Kierowca 3": "Kierowca 3",
                 "🚗 Kierowca 4": "Kierowca 4"
             }
-            wybor = st.radio("Wybierz osobę:", list(osoby.keys()), horizontal=False)
-            kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
-            da = st.date_input("Z dnia", datetime.now())
-            if st.button("ZAPISZ"):
-                nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {osoby[wybor]}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
-                st.rerun()
+            # Lista wyboru
+            wybor = st.selectbox("Wybierz osobę:", ["---"] + list(osoby.keys()))
+            
+            # Warunek: pokazuj resztę pól tylko jeśli osoba jest wybrana
+            if wybor != "---":
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+                da = st.date_input("Z dnia", datetime.now())
+                if st.button("ZAPISZ"):
+                    nowy = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {osoby[wybor]}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([nowy])], ignore_index=True))
+                    st.rerun()
         add_g()
 
 with c3:
@@ -112,8 +114,6 @@ with c3:
 
 # --- TABELA HISTORII ---
 st.divider()
-st.subheader("📂 Historia zdarzeń")
-
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 sel = st.dataframe(
     df_h.style.apply(apply_row_styles, axis=1), 
@@ -126,17 +126,14 @@ sel = st.dataframe(
     }
 )
 
-# --- SIDEBAR (MENU BOCZNE) ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     if sel.selection.rows:
         if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
             current_all = load_data()
-            indices_to_delete = df_h.index[sel.selection.rows]
-            current_all.loc[indices_to_delete, 'Status'] = 'Usunięty'
+            current_all.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
             save_data(current_all)
             st.rerun()
-    
     st.divider()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True):
         st.rerun()
