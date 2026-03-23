@@ -97,24 +97,21 @@ def apply_row_styles(row):
 # --- WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 
-# NAPRAWIONY PRZYCISK RAPORTU NOCNEGO
+# NAPRAWIONY PRZYCISK: NIE ZNIKA PO POBRANIU
 if os.path.exists(plik_nocny):
-    try:
-        with open(plik_nocny, "rb") as f:
-            pdf_data_night = f.read() # Wczytujemy do RAM, żeby przycisk działał od razu
-        st.success("✅ Masz gotowy raport nocny z godziny 02:00!")
-        st.download_button(
-            label="📥 POBIERZ RAPORT NOCNY",
-            data=pdf_data_night,
-            file_name=os.path.basename(plik_nocny),
-            mime="application/pdf",
-            use_container_width=True,
-            key="night_report_btn"
-        )
-    except:
-        st.error("Błąd odczytu raportu nocnego.")
+    with open(plik_nocny, "rb") as f:
+        pdf_data_night = f.read()
+    st.success("✅ Masz gotowy raport nocny z godziny 02:00!")
+    st.download_button(
+        label="📥 POBIERZ RAPORT NOCNY",
+        data=pdf_data_night,
+        file_name=os.path.basename(plik_nocny),
+        mime="application/pdf",
+        use_container_width=True,
+        key="night_report_persistent" # Stały klucz zapobiega znikaniu
+    )
 
-# --- KAFELKI SUM ---
+# --- KAFELKI ---
 c1, c2, c3 = st.columns(3)
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><b>PRZYCHÓD OGÓLNY</b><br><b style="font-size:20px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -133,13 +130,13 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        if "os_v18" not in st.session_state: st.session_state.os_v18 = None
+        if "os_v19" not in st.session_state: st.session_state.os_v19 = None
         @st.dialog("Dodaj Gotówkę")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v18 = o
-                if st.session_state.get("os_v18") == o:
+                if st.button(o, use_container_width=True, key=f"b_{o}"): st.session_state.os_v19 = o
+                if st.session_state.get("os_v19") == o:
                     with st.container(border=True):
                         kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"k_{o}")
                         da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
@@ -147,10 +144,10 @@ with c2:
                             if kw:
                                 n = {'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v18 = None; st.rerun()
+                                st.session_state.os_v19 = None; st.rerun()
                         if st.button("WYJDŹ", use_container_width=True, key=f"e_{o}"):
-                            st.session_state.os_v18 = None; st.rerun()
-        st.session_state.os_v18 = None
+                            st.session_state.os_v19 = None; st.rerun()
+        st.session_state.os_v19 = None
         add_g()
 
 with c3:
