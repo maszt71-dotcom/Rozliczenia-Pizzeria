@@ -70,36 +70,30 @@ with c2:
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        @st.dialog("Dodaj Gotówkę")
+        @st.dialog("Wybierz Osobę")
         def add_g():
-            # Używamy kontenera wewnątrz dialogu
-            if "wybrany" not in st.session_state: st.session_state.wybrany = None
+            # SPOSÓB NA NIEZAMYKAJĄCE SIĘ OKNO: Formularz wewnątrz dialogu
+            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             
-            # EKRAN 1: BELKI (JAK NA TWOIM ZDJĘCIU)
-            if st.session_state.wybrany is None:
-                st.write("Wybierz osobę:")
-                # Bez st.rerun() przy kliknieciu, zeby nie zamykalo okna
-                if st.button("🏢 Bufet", use_container_width=True): st.session_state.wybrany = "Bufet"; st.rerun()
-                if st.button("🚗 Kierowca 1", use_container_width=True): st.session_state.wybrany = "Kierowca 1"; st.rerun()
-                if st.button("🚗 Kierowca 2", use_container_width=True): st.session_state.wybrany = "Kierowca 2"; st.rerun()
-                if st.button("🚗 Kierowca 3", use_container_width=True): st.session_state.wybrany = "Kierowca 3"; st.rerun()
-                if st.button("🚗 Kierowca 4", use_container_width=True): st.session_state.wybrany = "Kierowca 4"; st.rerun()
+            # Tworzymy belki, które nie odświeżają strony (używając form_submit_button)
+            for os_name in osoby:
+                if st.button(os_name, use_container_width=True, key=f"btn_{os_name}"):
+                    st.session_state.wybrana_osoba = os_name
             
-            # EKRAN 2: FORMULARZ PO KLIKNIĘCIU
-            else:
-                st.subheader(f"Osoba: {st.session_state.wybrany}")
+            if "wybrana_osoba" in st.session_state and st.session_state.wybrana_osoba:
+                st.divider()
+                st.subheader(f"Osoba: {st.session_state.wybrana_osoba}")
                 kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
                 da = st.date_input("Z dnia", datetime.now())
-                c_z, c_w = st.columns(2)
-                if c_z.button("ZAPISZ", type="primary", use_container_width=True):
+                
+                if st.button("ZAPISZ DANE", type="primary", use_container_width=True):
                     if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybrany}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybrana_osoba}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.wybrany = None; st.rerun()
-                if c_w.button("WSTECZ", use_container_width=True):
-                    st.session_state.wybrany = None; st.rerun()
-        # Reset przy każdym otwarciu okna
-        st.session_state.wybrany = None
+                        st.session_state.wybrana_osoba = None
+                        st.rerun()
+        # Czyścimy wybór przy starcie
+        if "wybrana_osoba" in st.session_state: st.session_state.wybrana_osoba = None
         add_g()
 
 with c3:
@@ -116,18 +110,11 @@ with c3:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_w()
 
-# --- TABELA HISTORII ---
+# --- TABELA ---
 st.divider()
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-sel = st.dataframe(
-    df_h.style.apply(apply_row_styles, axis=1), 
-    use_container_width=True, 
-    on_select="rerun", 
-    selection_mode="multi-row",
-    column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")}
-)
+sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     if sel.selection.rows:
