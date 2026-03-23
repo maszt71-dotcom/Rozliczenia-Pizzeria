@@ -19,18 +19,18 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- DANE POCZTOWE ---
-EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl" 
-EMAIL_HASLO = "pizz@123" 
+# --- TWOJE DANE POCZTOWE (ZGODNIE ZE SCREENEM AFTERMARKET) ---
+EMAIL_WYSYLKOWY = "biuro@vantivo.pl" 
+EMAIL_HASLO = "Jebaltopsiak123!" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
 
-# ZMIANA: Cyberfolks na porcie 465 zazwyczaj nie odrzuca połączenia SSL
-SMTP_SERVER = "mail.cyberfolks.pl" 
-SMTP_PORT = 465 
+# Dane dokładnie z Twojego screena:
+SMTP_SERVER = "smtp.aftermarket.pl" 
+SMTP_PORT = 587 
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
-# --- FUNKCJA WYSYŁANIA (BEZPOŚREDNI SSL - NAJMNIEJSZA SZANSA NA REFUSED) ---
+# --- FUNKCJA WYSYŁANIA (DOPASOWANA DO AFTERMARKET) ---
 def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
     try:
         msg = MIMEMultipart()
@@ -38,7 +38,7 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
         msg['To'] = EMAIL_DOCELOWY
         msg['Subject'] = f"🚀 {temat_prefix} - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         
-        body = f"Raport wygenerowany: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+        body = f"Raport wygenerowany: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\nW zalaczniku PDF oraz CSV do przywrocenia danych."
         msg.attach(MIMEText(body, 'plain'))
 
         # Załącznik PDF
@@ -57,14 +57,18 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
                 part2.add_header('Content-Disposition', f'attachment; filename=finanse_data.csv')
                 msg.attach(part2)
 
-        # KLUCZOWA ZMIANA: Używamy SMTP_SSL zamiast zwykłego SMTP
+        # PROCEDURA STARTTLS (Wymagana przez Aftermarket na porcie 587)
         context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
-            server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
-            server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
+        server.ehlo()  # Przedstawienie się
+        server.starttls(context=context)  # Rozpoczęcie szyfrowania SSL/TLS
+        server.ehlo()  # Ponowne przedstawienie się po zaszyfrowaniu
+        server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
+        server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
+        server.quit()
         return True
     except Exception as e:
-        st.error(f"Szczegóły błędu: {e}")
+        st.error(f"Szczegoly bledu poczty: {e}")
         return False
 
 # --- GENERATOR PDF ---
@@ -74,15 +78,16 @@ def create_pdf(dataframe, s_og, s_got, s_wyd):
     def b_t(tekst):
         return str(tekst).replace('ą','a').replace('ć','c').replace('ę','e').replace('ł','l').replace('ń','n').replace('ó','o').replace('ś','s').replace('ź','z').replace('ż','z').replace('Ą','A').replace('Ć','C').replace('Ę','E').replace('Ł','L').replace('Ń','N').replace('Ó','O').replace('Ś','S').replace('Ź','Z').replace('Ż','Z')
     pdf.set_font("Courier", "B", 14)
-    pdf.cell(190, 10, b_t(f"RAPORT - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
+    pdf.cell(190, 10, b_t(f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
     pdf.ln(10)
     pdf.set_font("Courier", "B", 10)
-    pdf.set_fill_color(212, 237, 218); pdf.cell(95, 10, b_t(f"PRZYCHOD: {s_og:.2f} zl"), 1, 0, 'L', True)
-    pdf.set_fill_color(248, 215, 218); pdf.cell(95, 10, b_t(f"WYDATKI: {s_wyd:.2f} zl"), 1, 1, 'R', True)
-    pdf.set_fill_color(255, 243, 205); pdf.cell(190, 10, b_t(f"GOTOWKA: {s_got:.2f} zl"), 1, 1, 'C', True)
-    pdf.ln(5)
+    pdf.set_fill_color(212, 237, 218); pdf.cell(95, 10, b_t("PRZYCHOD OGOLNY:"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_og:.2f} zl", 1, 1, 'R', True)
+    pdf.set_fill_color(248, 215, 218); pdf.cell(95, 10, b_t("WYDATKI GOTOWKOWE:"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_wyd:.2f} zl", 1, 1, 'R', True)
+    pdf.set_fill_color(255, 243, 205); pdf.cell(95, 10, b_t("GOTOWKA (SUMA):"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_got:.2f} zl", 1, 1, 'R', True)
+    pdf.ln(10)
     for _, row in dataframe.iterrows():
-        pdf.cell(190, 8, b_t(f"{row['Data']} | {row['Typ']} | {row['Kwota']:.2f} | {row['Opis']}"), 1, 1)
+        txt = f"{row['Data']} | {row['Typ']} | {row['Kwota']:.2f} | {row['Opis']}"
+        pdf.cell(190, 8, b_t(txt), 1, 1)
     return pdf.output(dest='S').encode('latin-1')
 
 def apply_row_styles(row):
@@ -92,6 +97,12 @@ def apply_row_styles(row):
     elif 'Gotówka' in row['Typ']: color = 'background-color: #fff3cd; color: #856404'
     return [color] * len(row)
 
+# --- ŁADOWANIE DANYCH ---
+def load_data():
+    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
+    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+def save_data(df): df.to_csv(DB_FILE, index=False)
+
 # --- LOGIKA DOSTĘPU ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
@@ -100,12 +111,6 @@ if cookies.get("is_logged") != "true":
         if wpisane == MOJE_HASLO:
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
-
-# --- ŁADOWANIE DANYCH ---
-def load_data():
-    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
-    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-def save_data(df): df.to_csv(DB_FILE, index=False)
 
 st.session_state.data = load_data()
 df_active = st.session_state.data[st.session_state.data['Status'] == 'Aktywny'].copy()
@@ -124,7 +129,7 @@ def modal_quick():
         if wyslij_na_mail(pdf, DB_FILE, "SZYBKI-RAPORT"):
             st.success("Wysłano na Gmail!")
 
-@st.dialog("Zamknij Okres i Reset")
+@st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
     if "step" not in st.session_state: st.session_state.step = 1
     pdf = create_pdf(df_active, s_og, s_got, s_wyd)
@@ -147,7 +152,7 @@ def modal_reset():
             save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
             st.session_state.step = 1; st.rerun()
 
-# --- WYGLĄD GŁÓWNY ---
+# --- WYGLĄD GŁÓWNY (KAFELKI) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -194,3 +199,6 @@ with st.sidebar:
     st.divider()
     if st.button("💾 POBIERZ RAPORT I RESETUJ TABELE", type="primary", use_container_width=True): modal_reset()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
+    if sel.selection.rows:
+        if st.button("🗑️ USUŃ ZAZNACZONE", type="secondary", use_container_width=True):
+            curr = load_data(); curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'; save_data(curr); st.rerun()
