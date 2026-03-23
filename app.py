@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 import smtplib
+import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -10,14 +11,14 @@ from datetime import datetime
 from fpdf import FPDF
 from streamlit_cookies_manager import CookieManager
 
-# --- KONFIGURACJA ---
+# --- KONFIGURACJA STRONY ---
 st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
 
 cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- DANE POCZTOWE ---
+# --- DANE POCZTOWE (Cyberfolks -> Gmail) ---
 EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl" 
 EMAIL_HASLO = "pizz@123" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
@@ -26,7 +27,7 @@ SMTP_PORT = 587
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
-# --- FUNKCJA WYSYŁANIA ---
+# --- FUNKCJA WYSYŁANIA MAILA (PDF + CSV) ---
 def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
     try:
         msg = MIMEMultipart()
@@ -34,7 +35,8 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
         msg['To'] = EMAIL_DOCELOWY
         msg['Subject'] = f"🚀 {temat_prefix} - {datetime.now().strftime('%d.%m.%Y')}"
         
-        msg.attach(MIMEText("W zalaczniku raport PDF oraz plik bazy danych CSV.", 'plain'))
+        body = f"Raport wygenerowany: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\nW zalaczniku PDF oraz CSV do przywrocenia danych."
+        msg.attach(MIMEText(body, 'plain'))
 
         # Załącznik PDF
         part1 = MIMEBase('application', "octet-stream")
@@ -61,94 +63,140 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
     except:
         return False
 
-# --- POMOCNICZE ---
-def load_data():
-    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
-    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-
-def save_data(df): df.to_csv(DB_FILE, index=False)
-
-def b_t(tekst):
-    return str(tekst).replace('ą','a').replace('ć','c').replace('ę','e').replace('ł','l').replace('ń','n').replace('ó','o').replace('ś','s').replace('ź','z').replace('ż','z').replace('Ą','A').replace('Ć','C').replace('Ę','E').replace('Ł','L').replace('Ń','N').replace('Ó','O').replace('Ś','S').replace('Ź','Z').replace('Ż','Z')
-
-def create_pdf(dataframe, s_og, s_got, s_wyd):
+# --- GENERATOR PDF ---
+def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf = FPDF()
     pdf.add_page()
+    def b_t(tekst):
+        return str(tekst).replace('ą','a').replace('ć','c').replace('ę','e').replace('ł','l').replace('ń','n').replace('ó','o').replace('ś','s').replace('ź','z').replace('ż','z').replace('Ą','A').replace('Ć','C').replace('Ę','E').replace('Ł','L').replace('Ń','N').replace('Ó','O').replace('Ś','S').replace('Ź','Z').replace('Ż','Z')
     pdf.set_font("Courier", "B", 14)
-    pdf.cell(190, 10, b_t(f"RAPORT - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
-    pdf.ln(5)
+    pdf.cell(190, 10, b_t(f"RAPORT FINANSOWY - {datetime.now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
+    pdf.ln(10)
     pdf.set_font("Courier", "B", 10)
-    pdf.cell(95, 10, b_t(f"PRZYCHOD: {s_og:.2f} zl"), 1); pdf.cell(95, 10, b_t(f"GOTOWKA: {s_got:.2f} zl"), 1, 1)
-    pdf.cell(190, 10, b_t(f"WYDATKI: {s_wyd:.2f} zl"), 1, 1)
-    pdf.ln(5)
-    for _, r in dataframe.iterrows():
-        txt = f"{r['Data']} | {r['Typ']} | {r['Kwota']:.2f} | {r['Opis']}"
-        pdf.cell(190, 8, b_t(txt), 1, 1)
+    pdf.set_fill_color(212, 237, 218); pdf.cell(95, 10, b_t("PRZYCHOD OGOLNY:"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_ogolny:.2f} zl", 1, 1, 'R', True)
+    pdf.set_fill_color(248, 215, 218); pdf.cell(95, 10, b_t("WYDATKI GOTOWKOWE:"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, 1, 'R', True)
+    pdf.set_fill_color(255, 243, 205); pdf.cell(95, 10, b_t("GOTOWKA (SUMA):"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R', True)
+    pdf.ln(10)
+    headers = ["Data", "Typ", "Kwota", "Z dnia", "Opis"]
+    cols = [25, 45, 25, 15, 80]
+    pdf.set_fill_color(240, 240, 240)
+    for i, h in enumerate(headers): pdf.cell(cols[i], 8, b_t(h), 1, 0, 'C', True)
+    pdf.ln()
+    pdf.set_font("Courier", "", 8)
+    for _, row in dataframe.iterrows():
+        pdf.cell(25, 8, b_t(row['Data']), 1)
+        pdf.cell(45, 8, b_t(row['Typ']), 1)
+        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1)
+        pdf.cell(15, 8, b_t(row['Data zdarzenia']), 1)
+        pdf.cell(80, 8, b_t(row['Opis'])[:45], 1)
+        pdf.ln()
     return pdf.output(dest='S').encode('latin-1')
 
-# --- LOGIKA ---
+def apply_row_styles(row):
+    color = ''
+    if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda; color: #155724'
+    elif row['Typ'] == 'Wydatki gotówkowe': color = 'background-color: #f8d7da; color: #721c24'
+    elif 'Gotówka' in row['Typ']: color = 'background-color: #fff3cd; color: #856404'
+    return [color] * len(row)
+
+# --- LOGIKA DOSTĘPU ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
-    if st.text_input("Haslo", type="password") == MOJE_HASLO:
-        if st.button("Zaloguj"):
+    wpisane = st.text_input("Hasło", type="password")
+    if st.button("Zaloguj się"):
+        if wpisane == MOJE_HASLO:
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
 
-data = load_data()
-df_active = data[data['Status'] == 'Aktywny'].copy()
-s_og = pd.to_numeric(df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota']).sum()
-s_wyd = pd.to_numeric(df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota']).sum()
-s_got = pd.to_numeric(df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota']).sum() - s_wyd
+# --- ŁADOWANIE DANYCH ---
+def load_data():
+    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
+    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+def save_data(df): df.to_csv(DB_FILE, index=False)
+
+st.session_state.data = load_data()
+df_active = st.session_state.data[st.session_state.data['Status'] == 'Aktywny'].copy()
+df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
+
+s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
+s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
 # --- PROCEDURA RESETU (KROK PO KROKU) ---
-@st.dialog("Procedura Zamknięcia Dnia")
+@st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
     if "step" not in st.session_state: st.session_state.step = "pobierz"
-    
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
 
     if st.session_state.step == "pobierz":
-        st.write("1️⃣ KROK: Pobierz raport PDF na telefon/komputer.")
-        if st.download_button("📥 POBIERZ PDF", pdf_file, "raport.pdf", use_container_width=True):
-            st.session_state.step = "wyslij"
-            st.rerun()
-
+        st.write("1️⃣ KROK: Pobierz raport PDF.")
+        if st.download_button("📥 POBIERZ PDF", pdf_file, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
+            st.session_state.step = "wyslij"; st.rerun()
     elif st.session_state.step == "wyslij":
-        st.write("2️⃣ KROK: Wyslij kopie bezpieczenstwa na Gmail.")
-        if st.button("📧 WYSLIJ NA MAIL", use_container_width=True):
+        st.write("2️⃣ KROK: Wyślij kopię (PDF+CSV) na Gmail.")
+        if st.button("📧 WYŚLIJ NA MAIL", use_container_width=True, type="primary"):
             if wyslij_na_mail(pdf_file, DB_FILE, "RECZNY-RESET"):
-                st.session_state.step = "reset"
-                st.success("Wyslano!")
-                st.rerun()
-
+                st.session_state.step = "reset"; st.success("Wysłano!"); st.rerun()
     elif st.session_state.step == "reset":
-        st.write("3️⃣ KROK: Czy chcesz wyczyscic dane w aplikacji?")
+        st.write("3️⃣ KROK: Czy wyczyścić dane w aplikacji?")
         if st.button("🔥 RESETUJ DANE", use_container_width=True, type="primary"):
-            st.session_state.step = "potwierdz"
-            st.rerun()
-
+            st.session_state.step = "potwierdz"; st.rerun()
     elif st.session_state.step == "potwierdz":
-        st.error("4️⃣ KROK: CZY NA PEWNO? Danych nie da sie zwrocic bez pliku z maila.")
+        st.error("4️⃣ KROK: CZY NA PEWNO?")
         if st.button("✅ TAK, JESTEM PEWIEN", use_container_width=True, type="primary"):
-            empty_df = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
-            save_data(empty_df)
-            st.session_state.step = "pobierz"
-            st.session_state.show_reset = False
-            st.rerun()
+            save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
+            st.session_state.step = "pobierz"; st.rerun()
 
-st.title("🍕 Pizzeria")
+# --- WYGLĄD GŁÓWNY (KAFELKI) ---
+st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
-with c1: st.metric("Przychód", f"{s_og:.2f} zł")
-with c2: st.metric("Gotówka", f"{s_got:.2f} zł")
-with c3: st.metric("Wydatki", f"{s_wyd:.2f} zł")
+with c1:
+    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:16px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ Dodaj", key="b1", use_container_width=True):
+        @st.dialog("Dodaj Przychód")
+        def d1():
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+            da = st.date_input("Z dnia", datetime.now())
+            if st.button("ZAPISZ"):
+                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
+        d1()
+with c2:
+    bg_got, brd_got, txt_got = ("#fff3cd", "#ffc107", "#856404") if s_got >= 0 else ("#ff0000", "#8b0000", "#ffffff")
+    st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:16px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ Dodaj ", key="b2", use_container_width=True):
+        @st.dialog("Rozlicz Gotówkę")
+        def d2():
+            nazwa = st.selectbox("Kto?", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+            da = st.date_input("Z dnia", datetime.now())
+            if st.button("ZAPISZ"):
+                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {nazwa}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
+        d2()
+with c3:
+    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:16px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➖ Dodaj", key="b3", use_container_width=True):
+        @st.dialog("Dodaj Wydatek")
+        def d3():
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
+            da = st.date_input("Z dnia", datetime.now()); op = st.text_input("Opis")
+            if st.button("ZAPISZ"):
+                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
+        d3()
 
-# Historia
-st.dataframe(df_active[['Data', 'Typ', 'Kwota', 'Opis']].iloc[::-1], use_container_width=True)
+# --- HISTORIA ---
+st.divider(); st.subheader("📂 Historia")
+df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
+sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł"), "Opis": st.column_config.TextColumn(width="large")})
 
-# Przycisk startu procedury
-if st.sidebar.button("💾 ZAMKNIJ OKRES / RESET", use_container_width=True, type="primary"):
-    st.session_state.step = "pobierz"
-    modal_reset()
-
-# Automatyczna wysyłka o 02:00 rano
-# (Zaplanowane jako zadanie systemowe wywołujące wyslij_na_mail o 02:00)
+with st.sidebar:
+    st.header("⚙️ Opcje")
+    if sel.selection.rows:
+        if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
+            curr = load_data(); curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'; save_data(curr); st.rerun()
+    st.divider()
+    if st.button("💾 ZAMKNIJ OKRES I RESETUJ", type="primary", use_container_width=True):
+        st.session_state.step = "pobierz"; modal_reset()
+    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
