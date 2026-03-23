@@ -72,27 +72,31 @@ with c2:
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
         @st.dialog("Dodaj Gotówkę")
         def add_g():
+            if "os_v5" not in st.session_state: st.session_state.os_v5 = None
+            
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             
-            # Formularz wyboru
             for o in osoby:
-                if st.button(o, use_container_width=True):
-                    st.session_state.wyb_v4 = o
-            
-            # Pojawia się bezpośrednio pod klikniętą belką (na dole listy)
-            if "wyb_v4" in st.session_state and st.session_state.wyb_v4:
-                st.divider()
-                st.write(f"**{st.session_state.wyb_v4}**")
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
-                da = st.date_input("Z dnia", datetime.now())
+                # Wyświetlamy belkę
+                st.button(o, use_container_width=True, key=f"btn_{o}", on_click=lambda x=o: st.session_state.update({"os_v5": x}))
                 
-                if st.button("ZAPISZ", type="primary", use_container_width=True):
-                    if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wyb_v4}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.wyb_v4 = None
-                        st.rerun()
-        st.session_state.wyb_v4 = None
+                # Jeśli ta konkretna belka została kliknięta, pokazujemy formularz OD RAZU pod nią
+                if st.session_state.os_v5 == o:
+                    with st.container(border=True):
+                        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"kw_{o}")
+                        da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
+                        
+                        col_z, col_w = st.columns(2)
+                        if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
+                            if kw:
+                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                                st.session_state.os_v5 = None; st.rerun()
+                        
+                        if col_w.button("WYJDŹ", use_container_width=True, key=f"exit_{o}"):
+                            st.session_state.os_v5 = None; st.rerun()
+
+        st.session_state.os_v5 = None
         add_g()
 
 with c3:
