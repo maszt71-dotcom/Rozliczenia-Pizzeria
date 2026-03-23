@@ -19,18 +19,18 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- TWOJE DANE POCZTOWE (ZGODNIE ZE SCREENEM AFTERMARKET) ---
+# --- TWOJE DANE POCZTOWE (Aftermarket) ---
 EMAIL_WYSYLKOWY = "biuro@vantivo.pl" 
 EMAIL_HASLO = "Jebaltopsiak123!" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
 
-# Dane dokładnie z Twojego screena:
+# ZMIANA: Używamy portu 465 (SSL), który omija błędy "Connection closed"
 SMTP_SERVER = "smtp.aftermarket.pl" 
-SMTP_PORT = 587 
+SMTP_PORT = 465 
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
-# --- FUNKCJA WYSYŁANIA (DOPASOWANA DO AFTERMARKET) ---
+# --- FUNKCJA WYSYŁANIA (WERSJA BEZPOŚREDNIE SSL) ---
 def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
     try:
         msg = MIMEMultipart()
@@ -57,15 +57,11 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
                 part2.add_header('Content-Disposition', f'attachment; filename=finanse_data.csv')
                 msg.attach(part2)
 
-        # PROCEDURA STARTTLS (Wymagana przez Aftermarket na porcie 587)
+        # Kluczowe dla portu 465: SMTP_SSL wymusza połączenie od razu
         context = ssl.create_default_context()
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
-        server.ehlo()  # Przedstawienie się
-        server.starttls(context=context)  # Rozpoczęcie szyfrowania SSL/TLS
-        server.ehlo()  # Ponowne przedstawienie się po zaszyfrowaniu
-        server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
-        server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
-        server.quit()
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context, timeout=20) as server:
+            server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
+            server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
         return True
     except Exception as e:
         st.error(f"Szczegoly bledu poczty: {e}")
@@ -120,14 +116,15 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- MODALE ---
+# --- PROCEDURY (MODALE) ---
 @st.dialog("Szybki Raport na Mail")
 def modal_quick():
     pdf = create_pdf(df_active, s_og, s_got, s_wyd)
     st.download_button("📥 POBIERZ PDF", pdf, "raport_kopia.pdf", use_container_width=True)
     if st.button("📧 WYŚLIJ NA GMAIL", use_container_width=True, type="primary"):
-        if wyslij_na_mail(pdf, DB_FILE, "SZYBKI-RAPORT"):
-            st.success("Wysłano na Gmail!")
+        with st.spinner("Wysyłanie..."):
+            if wyslij_na_mail(pdf, DB_FILE, "SZYBKI-RAPORT"):
+                st.success("Wysłano na Gmail!")
 
 @st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
