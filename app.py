@@ -23,7 +23,7 @@ EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl"
 EMAIL_HASLO = "pizz@123" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
 
-# Cyberfolks: Port 465 to czysty SSL
+# Cyberfolks: Port 465 to czysty SSL (wymaga SMTP_SSL)
 SMTP_SERVER = "mail.cyberfolks.pl" 
 SMTP_PORT = 465 
 MOJE_HASLO = "dup@"
@@ -56,10 +56,11 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
                 part2.add_header('Content-Disposition', f'attachment; filename=finanse_data.csv')
                 msg.attach(part2)
 
-        # Kluczowa poprawka: smtplib.SMTP_SSL zamiast zwykłego SMTP
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-            server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
-            server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
+        # KLUCZOWA POPRAWKA: SMTP_SSL (bezpieczne połączenie od startu)
+        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
+        server.login(EMAIL_WYSYLKOWY, EMAIL_HASLO)
+        server.sendmail(EMAIL_WYSYLKOWY, EMAIL_DOCELOWY, msg.as_string())
+        server.quit()
         return True
     except Exception as e:
         st.error(f"Szczegoly bledu poczty: {e}")
@@ -124,15 +125,15 @@ def modal_quick_report():
     st.write("Wysylka raportu PDF+CSV na Gmail (bez resetu)...")
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
     
-    # Przycisk pobierania (automatycznie do "Pobranych")
-    st.download_button("📥 POBIERZ PDF DO PLIKOW", pdf_file, f"Raport_Kopia_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
+    # Pobieranie do folderu Pobrane
+    st.download_button("📥 POBIERZ PDF DO PLIKOW", pdf_file, f"Kopia_Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True)
     
     if st.button("📧 WYŚLIJ TERAZ NA GMAIL", use_container_width=True, type="primary"):
-        with st.spinner("Wysylanie..."):
+        with st.spinner("Trwa wysylanie..."):
             if wyslij_na_mail(pdf_file, DB_FILE, "SZYBKI-RAPORT"):
                 st.success("Wyslano na Gmail!")
             else:
-                st.error("Blad wysylki. Sprawdz dane logowania.")
+                st.error("Blad wysylki. Sprawdz polaczenie.")
 
 @st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
@@ -140,13 +141,13 @@ def modal_reset():
     pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
 
     if st.session_state.step == "pobierz":
-        st.write("1️⃣ KROK: Pobierz raport PDF (zapisze sie w folderze Pobrane).")
+        st.write("1️⃣ KROK: Pobierz raport PDF (zapisze sie w Twoich pobranych).")
         if st.download_button("📥 POBIERZ PDF I PRZEJDŹ DALEJ", pdf_file, f"Raport_{datetime.now().strftime('%d_%m')}.pdf", use_container_width=True, type="primary"):
             st.session_state.step = "wyslij"; st.rerun()
     elif st.session_state.step == "wyslij":
         st.write("2️⃣ KROK: Wyślij kopię bezpieczenstwa (PDF+CSV) na Gmail.")
         if st.button("📧 WYŚLIJ NA MAIL", use_container_width=True, type="primary"):
-            with st.spinner("Wysylanie..."):
+            with st.spinner("Trwa wysylanie..."):
                 if wyslij_na_mail(pdf_file, DB_FILE, "RECZNY-RESET"):
                     st.session_state.step = "reset"; st.rerun()
     elif st.session_state.step == "reset":
@@ -159,7 +160,7 @@ def modal_reset():
             save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
             st.session_state.step = "pobierz"; st.rerun()
 
-# --- INTERFEJS GŁÓWNY ---
+# --- WYGLĄD GŁÓWNY (KAFELKI) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 with c1:
