@@ -18,7 +18,7 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- DANE POCZTOWE (Cyberfolks -> Gmail) ---
+# --- DANE POCZTOWE ---
 EMAIL_WYSYLKOWY = "kontakt@coolpizza.pl" 
 EMAIL_HASLO = "pizz@123" 
 EMAIL_DOCELOWY = "mange929598@gmail.com" 
@@ -33,19 +33,17 @@ def wyslij_na_mail(pdf_data, csv_path, temat_prefix="RAPORT"):
         msg = MIMEMultipart()
         msg['From'] = EMAIL_WYSYLKOWY
         msg['To'] = EMAIL_DOCELOWY
-        msg['Subject'] = f"🚀 {temat_prefix} - {datetime.now().strftime('%d.%m.%Y')}"
+        msg['Subject'] = f"🚀 {temat_prefix} - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
         
         body = f"Raport wygenerowany: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}\nW zalaczniku PDF oraz CSV do przywrocenia danych."
         msg.attach(MIMEText(body, 'plain'))
 
-        # Załącznik PDF
         part1 = MIMEBase('application', "octet-stream")
         part1.set_payload(pdf_data)
         encoders.encode_base64(part1)
         part1.add_header('Content-Disposition', f'attachment; filename=Raport_{datetime.now().strftime("%d_%m")}.pdf')
         msg.attach(part1)
 
-        # Załącznik CSV
         if os.path.exists(csv_path):
             with open(csv_path, "rb") as f:
                 part2 = MIMEBase('application', "octet-stream")
@@ -77,19 +75,9 @@ def create_pdf(dataframe, s_ogolny, s_gotowka, s_wydatki):
     pdf.set_fill_color(248, 215, 218); pdf.cell(95, 10, b_t("WYDATKI GOTOWKOWE:"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_wydatki:.2f} zl", 1, 1, 'R', True)
     pdf.set_fill_color(255, 243, 205); pdf.cell(95, 10, b_t("GOTOWKA (SUMA):"), 1, 0, 'L', True); pdf.cell(95, 10, f"{s_gotowka:.2f} zl", 1, 1, 'R', True)
     pdf.ln(10)
-    headers = ["Data", "Typ", "Kwota", "Z dnia", "Opis"]
-    cols = [25, 45, 25, 15, 80]
-    pdf.set_fill_color(240, 240, 240)
-    for i, h in enumerate(headers): pdf.cell(cols[i], 8, b_t(h), 1, 0, 'C', True)
-    pdf.ln()
-    pdf.set_font("Courier", "", 8)
     for _, row in dataframe.iterrows():
-        pdf.cell(25, 8, b_t(row['Data']), 1)
-        pdf.cell(45, 8, b_t(row['Typ']), 1)
-        pdf.cell(25, 8, f"{row['Kwota']:.2f}", 1)
-        pdf.cell(15, 8, b_t(row['Data zdarzenia']), 1)
-        pdf.cell(80, 8, b_t(row['Opis'])[:45], 1)
-        pdf.ln()
+        txt = f"{row['Data']} | {row['Typ']} | {row['Kwota']:.2f} | {row['Opis']}"
+        pdf.cell(190, 8, b_t(txt), 1, 1)
     return pdf.output(dest='S').encode('latin-1')
 
 def apply_row_styles(row):
@@ -122,7 +110,18 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- PROCEDURA RESETU (KROK PO KROKU) ---
+# --- PROCEDURY (MODALE) ---
+@st.dialog("Szybki Raport na Mail")
+def modal_quick_report():
+    st.write("Generowanie raportu i wysyłka na Gmail (bez resetowania tabeli)...")
+    pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
+    if st.button("📧 WYŚLIJ TERAZ", use_container_width=True, type="primary"):
+        if wyslij_na_mail(pdf_file, DB_FILE, "SZYBKI-RAPORT"):
+            st.success("Wysłano pomyślnie!")
+            if st.button("Zamknij"): st.rerun()
+        else:
+            st.error("Błąd wysyłki.")
+
 @st.dialog("Procedura Zamknięcia Okresu")
 def modal_reset():
     if "step" not in st.session_state: st.session_state.step = "pobierz"
@@ -147,7 +146,7 @@ def modal_reset():
             save_data(pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']))
             st.session_state.step = "pobierz"; st.rerun()
 
-# --- WYGLĄD GŁÓWNY (KAFELKI) ---
+# --- WYGLĄD GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 with c1:
@@ -169,9 +168,8 @@ with c2:
         def d2():
             nazwa = st.selectbox("Kto?", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
             kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
-            da = st.date_input("Z dnia", datetime.now())
             if st.button("ZAPISZ"):
-                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {nazwa}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {nazwa}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         d2()
 with c3:
@@ -180,9 +178,9 @@ with c3:
         @st.dialog("Dodaj Wydatek")
         def d3():
             kw = st.number_input("Kwota", min_value=0.0, format="%.2f")
-            da = st.date_input("Z dnia", datetime.now()); op = st.text_input("Opis")
+            op = st.text_input("Opis")
             if st.button("ZAPISZ"):
-                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         d3()
 
@@ -193,10 +191,12 @@ sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_wid
 
 with st.sidebar:
     st.header("⚙️ Opcje")
-    if sel.selection.rows:
-        if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-            curr = load_data(); curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'; save_data(curr); st.rerun()
+    if st.button("📧 POBIERZ I WYŚLIJ RAPORT", use_container_width=True):
+        modal_quick_report()
     st.divider()
     if st.button("💾 POBIERZ RAPORT I RESETUJ TABELE", type="primary", use_container_width=True):
         st.session_state.step = "pobierz"; modal_reset()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
+    if sel.selection.rows:
+        if st.button("🗑️ USUŃ ZAZNACZONE", type="secondary", use_container_width=True):
+            curr = load_data(); curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'; save_data(curr); st.rerun()
