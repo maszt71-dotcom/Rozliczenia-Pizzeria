@@ -2,84 +2,125 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
+from streamlit_cookies_manager import CookieManager
 
-# Ustawienia strony - szeroki układ dla kafelków
-st.set_page_config(page_title="Pizzeria Finanse", layout="wide")
+# --- KONFIGURACJA STRONY ---
+st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
 
+cookies = CookieManager()
+if not cookies.ready():
+    st.stop()
+
+# --- USTAWIENIA ---
+MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
+# --- LOGIKA DOSTĘPU ---
+if cookies.get("is_logged") != "true":
+    st.title("🍕 Logowanie")
+    wpisane = st.text_input("Hasło", type="password")
+    if st.button("Zaloguj się"):
+        if wpisane == MOJE_HASLO:
+            cookies["is_logged"] = "true"; cookies.save(); st.rerun()
+    st.stop()
+
+# --- OBSŁUGA DANYCH ---
 def load_data():
-    if os.path.exists(DB_FILE):
-        df = pd.read_csv(DB_FILE)
-        for col in ['Data', 'Typ', 'Kwota', 'Opis', 'Dzień']:
-            if col not in df.columns: df[col] = ""
-        return df
-    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Dzień'])
+    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
+    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
-df = load_data()
-df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
+def save_data(df):
+    df.to_csv(DB_FILE, index=False)
 
-# OBLICZENIA
-s_og = df[df['Typ'] == 'Przychód']['Kwota'].sum()
-s_wyd = df[df['Typ'] == 'Wydatek']['Kwota'].sum()
-s_got = df[df['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
+data = load_data()
+df_active = data[data['Status'] == 'Aktywny'].copy()
+df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-st.title("🍕 System Pizzeria")
+s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
+s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- TWOJE ULUBIONE TRZY KOLOROWE KONTENERY ---
-col1, col2, col3 = st.columns(3)
+def apply_row_styles(row):
+    color = ''
+    if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda; color: #155724'
+    elif row['Typ'] == 'Wydatki gotówkowe': color = 'background-color: #f8d7da; color: #721c24'
+    elif 'Gotówka' in row['Typ']: color = 'background-color: #fff3cd; color: #856404'
+    return [color] * len(row)
 
-with col1:
-    st.markdown(f"""
-        <div style="background-color: #d4edda; padding: 20px; border-radius: 10px; border-left: 10px solid #28a745;">
-            <p style="margin:0; color: #155724; font-weight: bold;">PRZYCHÓD OGÓLNY</p>
-            <h2 style="margin:0; color: #155724;">{s_og:.2f} zł</h2>
-        </div>
-        """, unsafe_allow_html=True)
+# --- WIDOK GŁÓWNY ---
+st.title("🍕 Rozliczenie Pizzerii")
 
-with col2:
-    st.markdown(f"""
-        <div style="background-color: #fff3cd; padding: 20px; border-radius: 10px; border-left: 10px solid #ffc107;">
-            <p style="margin:0; color: #856404; font-weight: bold;">STAN GOTÓWKI</p>
-            <h2 style="margin:0; color: #856404;">{s_got:.2f} zł</h2>
-        </div>
-        """, unsafe_allow_html=True)
+c1, c2, c3 = st.columns(3)
 
-with col3:
-    st.markdown(f"""
-        <div style="background-color: #f8d7da; padding: 20px; border-radius: 10px; border-left: 10px solid #dc3545;">
-            <p style="margin:0; color: #721c24; font-weight: bold;">WYDATKI</p>
-            <h2 style="margin:0; color: #721c24;">{s_wyd:.2f} zł</h2>
-        </div>
-        """, unsafe_allow_html=True)
+with c1:
+    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:18px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ Dodaj Przychód", use_container_width=True):
+        @st.dialog("Dodaj Przychód")
+        def add_p():
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
+            da = st.date_input("Z dnia", datetime.now())
+            if st.button("ZAPISZ"):
+                if kw:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
+        add_p()
 
+with c2:
+    bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
+    st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    
+    if st.button("➕ Dodaj Gotówkę", use_container_width=True):
+        @st.dialog("Wybierz Osobę")
+        def add_g():
+            # SPOSÓB NA NIEZAMYKAJĄCE SIĘ OKNO: Formularz wewnątrz dialogu
+            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+            
+            # Tworzymy belki, które nie odświeżają strony (używając form_submit_button)
+            for os_name in osoby:
+                if st.button(os_name, use_container_width=True, key=f"btn_{os_name}"):
+                    st.session_state.wybrana_osoba = os_name
+            
+            if "wybrana_osoba" in st.session_state and st.session_state.wybrana_osoba:
+                st.divider()
+                st.subheader(f"Osoba: {st.session_state.wybrana_osoba}")
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
+                da = st.date_input("Z dnia", datetime.now())
+                
+                if st.button("ZAPISZ DANE", type="primary", use_container_width=True):
+                    if kw:
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybrana_osoba}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                        st.session_state.wybrana_osoba = None
+                        st.rerun()
+        # Czyścimy wybór przy starcie
+        if "wybrana_osoba" in st.session_state: st.session_state.wybrana_osoba = None
+        add_g()
+
+with c3:
+    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:18px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➖ Dodaj Wydatek", use_container_width=True):
+        @st.dialog("Dodaj Wydatek")
+        def add_w():
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
+            da = st.date_input("Z dnia", datetime.now())
+            op = st.text_input("Opis", placeholder=" ")
+            if st.button("ZAPISZ"):
+                if kw:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
+        add_w()
+
+# --- TABELA ---
 st.divider()
+df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
+sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
 
-# --- PROSTY FORMULARZ POD SPODEM ---
-st.subheader("📝 Dodaj wpis")
-with st.form("form_pizzeria", clear_on_submit=True):
-    typ_glowny = st.selectbox("Typ:", ["Przychód", "Gotówka (Wpłata)", "Wydatek"])
-    
-    osoba = ""
-    if typ_glowny == "Gotówka (Wpłata)":
-        osoba = st.selectbox("Kto?", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
-    
-    opis = ""
-    if typ_glowny == "Wydatek":
-        opis = st.text_input("Opis:")
-        
-    kwota = st.number_input("Kwota (zł):", min_value=0.0, step=1.0)
-    dzien = st.date_input("Data:", datetime.now())
-    
-    if st.form_submit_button("ZAPISZ"):
-        typ_finalny = f"Gotówka - {osoba}" if osoba else typ_glowny
-        nowy = pd.DataFrame([{'Data': datetime.now().strftime("%H:%M"), 'Typ': typ_finalny, 'Kwota': kwota, 'Opis': opis, 'Dzień': dzien}])
-        pd.concat([df, nowy]).to_csv(DB_FILE, index=False)
-        st.rerun()
-
-# --- TABELA NA SAMYM DOLE (RZECZ ŚWIĘTA) ---
-st.divider()
-st.subheader("😇 Rzecz Święta")
-got_df = df[df['Typ'].str.contains('Gotówka', na=False)].copy()
-if not got_df.empty:
-    st.table(got_df.groupby('Typ')['Kwota'].sum().reset_index())
+with st.sidebar:
+    st.header("⚙️ Opcje")
+    if sel.selection.rows:
+        if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
+            curr = load_data()
+            curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
+            save_data(curr); st.rerun()
+    st.divider()
+    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
