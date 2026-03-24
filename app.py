@@ -77,21 +77,26 @@ with c2:
         @st.dialog("Rozlicz osoby")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+            
+            # Pętla generująca harmonijkę
             for o in osoby:
-                # HARMONIJKA - klikasz i rozwija się w dół
                 with st.expander(o, expanded=False):
                     kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
                     da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
                     
                     col_z, col_a = st.columns(2)
+                    
                     if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
                         if kw:
                             n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                             save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                            st.rerun() # Zamyka okno i odświeża kafelki główne
+                            st.rerun()
                     
-                    # ANULUJ - nic nie robi, dzięki czemu okno nie znika
-                    col_a.button("ANULUJ", use_container_width=True, key=f"cancel_{o}")
+                    # Trik: przycisk ANULUJ, który po prostu odświeża TYLKO dialog
+                    if col_a.button("ANULUJ (ZWIŃ)", use_container_width=True, key=f"cancel_{o}"):
+                        st.write("Wybrany kierowca został pominięty.") # Informacja pomocnicza
+                        # Kliknięcie w dowolny przycisk w harmonijce bez rerun i tak nie zamyka dialogu, 
+                        # ale pozwala na "odświeżenie" interakcji.
         add_g()
 
 with c3:
