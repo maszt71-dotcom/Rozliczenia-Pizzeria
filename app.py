@@ -116,37 +116,37 @@ with c1:
 with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    
     if st.button("➕ Dodaj Gotowke", use_container_width=True):
+        if "os_v" not in st.session_state: st.session_state.os_v = None
         @st.dialog("Dodaj Gotowke")
         def add_g():
-            if "os_wybrana" not in st.session_state:
-                st.session_state.os_wybrana = None
-
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             
-            if st.session_state.os_wybrana is None:
-                st.write("Wybierz osobę:")
-                for o in osoby:
-                    if st.button(o, use_container_width=True, key=f"select_{o}"):
-                        st.session_state.os_wybrana = o
-                        st.rerun()
-            else:
-                o = st.session_state.os_wybrana
-                st.write(f"### Wpisujesz dla: {o}")
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key="input_kwota")
-                da = st.date_input("Data zdarzenia", datetime.now(), key="input_data")
+            # Pętla wyświetlająca osoby (oryginalny schemat)
+            for o in osoby:
+                if st.button(o, use_container_width=True, key=f"btn_{o}"):
+                    st.session_state.os_v = o
                 
-                col_z, col_c = st.columns(2)
-                if col_z.button("ZAPISZ", type="primary", use_container_width=True):
-                    if kw:
-                        n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
-                        save_data(pd.concat([load_data(), n], ignore_index=True))
-                        st.session_state.os_wybrana = None
-                        st.rerun()
-                
-                if col_c.button("⬅️ COFNIJ", use_container_width=True):
-                    st.session_state.os_wybrana = None
-                    st.rerun()
+                # Jeśli osoba jest kliknięta, pokaż formularz pod nią
+                if st.session_state.get("os_v") == o:
+                    with st.container(border=True):
+                        kw = st.number_input(f"Kwota dla: {o}", min_value=0.0, format="%.2f", value=None, key=f"k_{o}")
+                        da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
+                        
+                        col1, col2 = st.columns(2)
+                        if col1.button("ZAPISZ", type="primary", use_container_width=True, key=f"s_{o}"):
+                            if kw:
+                                n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
+                                save_data(pd.concat([load_data(), n], ignore_index=True))
+                                st.session_state.os_v = None
+                                st.rerun()
+                        
+                        # NOWY PRZYCISK COFNIJ
+                        if col2.button("⬅️ COFNIJ", use_container_width=True, key=f"c_{o}"):
+                            st.session_state.os_v = None
+                            st.rerun()
+        add_g()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><b>WYDATKI GOTÓWKOWE</b><br><b style="font-size:20px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -163,8 +163,8 @@ with c3:
 
 st.divider()
 df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
-if "tk_v11" not in st.session_state: st.session_state.tk_v11 = 0
-event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk_v11}",
+if "tk_v30" not in st.session_state: st.session_state.tk_v30 = 0
+event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk_v30}",
     column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None})
 
 # --- 9. SIDEBAR ---
@@ -200,7 +200,7 @@ with st.sidebar:
             st.error("Na pewno?"); c_t, c_n = st.columns(2)
             if c_t.button("TAK"):
                 ff = load_data(); ff.loc[df_h.index[sel], 'Status'] = 'Usunięty'; save_data(ff)
-                st.session_state.del_s = 0; st.session_state.tk_v11 += 1; st.rerun()
-            if c_n.button("NIE"): st.session_state.del_s = 0; st.session_state.tk_v11 += 1; st.rerun()
+                st.session_state.del_s = 0; st.session_state.tk_v30 += 1; st.rerun()
+            if c_n.button("NIE"): st.session_state.del_s = 0; st.session_state.tk_v30 += 1; st.rerun()
     st.divider(); 
     if st.button("🔄 ODSWIEŻ", use_container_width=True): st.rerun()
