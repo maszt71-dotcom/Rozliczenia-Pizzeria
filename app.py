@@ -77,24 +77,23 @@ with c2:
         @st.dialog("Rozlicz osoby")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            
-            # Pętla generująca harmonijkę
             for o in osoby:
+                # Expander (harmonijka)
                 with st.expander(o):
-                    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
-                    da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
-                    
-                    col_z, col_a = st.columns(2)
-                    
-                    if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
-                        if kw:
-                            n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                            save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                            st.rerun()
-                    
-                    if col_a.button("ANULUJ", use_container_width=True, key=f"cancel_{o}"):
-                        # Ten trick wymusza odświeżenie samego dialogu, co zwija expandery
-                        st.rerun() 
+                    # Formularz wewnątrz expandera
+                    with st.form(key=f"form_{o}", clear_on_submit=True):
+                        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
+                        da = st.date_input("Z dnia", datetime.now())
+                        
+                        col_z, col_a = st.columns(2)
+                        if col_z.form_submit_button("ZAPISZ", type="primary", use_container_width=True):
+                            if kw:
+                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                                st.rerun()
+                        
+                        # Przycisk Anuluj jako zwykły submit - wyczyści form i zwinie expander bez zamykania dialogu
+                        col_a.form_submit_button("ANULUJ", use_container_width=True)
         add_g()
 
 with c3:
