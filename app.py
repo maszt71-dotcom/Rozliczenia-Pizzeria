@@ -70,30 +70,33 @@ with c2:
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        @st.dialog("Wybierz Osobę")
+        @st.dialog("Dodaj Gotówkę")
         def add_g():
-            # SPOSÓB NA NIEZAMYKAJĄCE SIĘ OKNO: Formularz wewnątrz dialogu
+            if "os_v5" not in st.session_state: st.session_state.os_v5 = None
+            
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             
-            # Tworzymy belki, które nie odświeżają strony (używając form_submit_button)
-            for os_name in osoby:
-                if st.button(os_name, use_container_width=True, key=f"btn_{os_name}"):
-                    st.session_state.wybrana_osoba = os_name
-            
-            if "wybrana_osoba" in st.session_state and st.session_state.wybrana_osoba:
-                st.divider()
-                st.subheader(f"Osoba: {st.session_state.wybrana_osoba}")
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
-                da = st.date_input("Z dnia", datetime.now())
+            for o in osoby:
+                # Wyświetlamy belkę
+                st.button(o, use_container_width=True, key=f"btn_{o}", on_click=lambda x=o: st.session_state.update({"os_v5": x}))
                 
-                if st.button("ZAPISZ DANE", type="primary", use_container_width=True):
-                    if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.wybrana_osoba}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.wybrana_osoba = None
-                        st.rerun()
-        # Czyścimy wybór przy starcie
-        if "wybrana_osoba" in st.session_state: st.session_state.wybrana_osoba = None
+                # Jeśli ta konkretna belka została kliknięta, pokazujemy formularz OD RAZU pod nią
+                if st.session_state.os_v5 == o:
+                    with st.container(border=True):
+                        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"kw_{o}")
+                        da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
+                        
+                        col_z, col_w = st.columns(2)
+                        if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
+                            if kw:
+                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                                st.session_state.os_v5 = None; st.rerun()
+                        
+                        if col_w.button("WYJDŹ", use_container_width=True, key=f"exit_{o}"):
+                            st.session_state.os_v5 = None; st.rerun()
+
+        st.session_state.os_v5 = None
         add_g()
 
 with c3:
