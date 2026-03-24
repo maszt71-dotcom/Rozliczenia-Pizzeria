@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - PRECYZYJNE ZWĘŻENIE OKIENKA ---
+# --- 3. WYGLĄD (CSS) - KLUCZOWA POPRAWKA WARSTWY WYŻSZEJ ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -43,33 +43,22 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* --- DOPASOWANIE OKIENKA DO WĄSKIEJ KOLUMNY --- */
+    /* --- TO JEST ROZWIĄZANIE TWOJEGO PROBLEMU --- */
     
-    /* Wymuszamy na przycisku 100% szerokości kolumny */
-    div[data-testid="stPopover"] {
-        width: 100% !important;
-    }
-    div[data-testid="stPopover"] > button {
-        width: 100% !important;
-    }
-
-    /* GŁÓWNA POPRAWKA: Okienko (body) dopasowane do kolumny */
+    /* Celujemy w "pływający" kontener Streamlit, który trzyma okienko popover */
     div[data-testid="stPopoverBody"] {
-        /* Szerokość 100% względem kolumny, w której „siedzi” przycisk */
-        width: 100% !important; 
-        min-width: 100% !important;
-        /* Blokujemy rozlewanie się na boki powyżej szerokości kafelka */
-        max-width: 100% !important; 
-        left: 0 !important;
-        transform: none !important;
-    }
-    
-    /* Stylizacja wnętrza okienka, żeby pola nie były zbyt ciasne */
-    div[data-testid="stPopoverBody"] > div {
-        padding: 15px !important;
+        /* Ustawiamy szerokość na sztywno, żeby pasowała do kolumny (ok. 30% szerokości przy layout wide) */
+        width: 30vw !important; 
+        min-width: 250px !important;
+        max-width: 450px !important;
+        position: relative !important;
     }
 
-    /* KOLORY PRZYCISKÓW */
+    /* Rozciągnięcie przycisków w kolumnach */
+    div[data-testid="stPopover"] { width: 100% !important; }
+    div[data-testid="stPopover"] > button { width: 100% !important; }
+
+    /* Kolory przycisków */
     div[data-testid="stColumn"]:nth-of-type(1) button { background-color: #2980b9 !important; color: white !important; }
     div[data-testid="stColumn"]:nth-of-type(2) button { background-color: #27ae60 !important; color: white !important; }
     div[data-testid="stColumn"]:nth-of-type(3) button { background-color: #e67e22 !important; color: white !important; }
@@ -94,13 +83,13 @@ with st.sidebar:
     st.markdown("---")
     if not st.session_state.data_log.empty:
         lista = st.session_state.data_log.apply(lambda x: f"{x['Godzina']} | {x['Kwota']} zł", axis=1).tolist()
-        wybrane = st.multiselect("Zaznacz do usunięcia:", lista)
-        if st.button("USUŃ WYBRANE", use_container_width=True):
+        wybrane = st.multiselect("Usuń wpis:", lista)
+        if st.button("WYCZYŚĆ ZAZNACZONE", use_container_width=True):
             idx = [lista.index(w) for w in wybrane]
             st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
             zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 6. KOLUMNY (3 wąskie kolumny) ---
+# --- 6. KOLUMNY ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
@@ -134,7 +123,7 @@ with c3:
                 st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
                 zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- 7. PODSUMOWANIE ---
+# --- 7. HISTORIA ---
 st.markdown("---")
 st.subheader(f"BILANS: {bilans:.2f} zł")
 st.dataframe(st.session_state.data_log, use_container_width=True, hide_index=True)
