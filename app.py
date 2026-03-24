@@ -74,39 +74,24 @@ with c2:
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        # Resetujemy wybór przed otwarciem dialogu
-        if "wybor_v10" not in st.session_state: st.session_state.wybor_v10 = None
-        
         @st.dialog("Rozlicz osoby")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            
-            # Jeśli nikt nie jest wybrany - POKAZUJEMY LISTĘ OSÓB
-            if st.session_state.wybor_v10 is None:
-                for o in osoby:
-                    # Funkcja anonimowa (lambda) ustawia wybór bez zamykania okna
-                    st.button(o, use_container_width=True, key=f"os_{o}", on_click=lambda x=o: st.session_state.update({"wybor_v10": x}))
-            
-            # Jeśli osoba jest wybrana - POKAZUJEMY FORMULARZ
-            else:
-                wybrany = st.session_state.wybor_v10
-                st.subheader(f"Wpłata: {wybrany}")
-                kw = st.number_input("Kwota (zł)", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
-                da = st.date_input("Z dnia", datetime.now())
-                
-                col_z, col_a = st.columns(2)
-                
-                if col_z.button("ZAPISZ", type="primary", use_container_width=True):
-                    if kw:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {wybrany}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.wybor_v10 = None # Czyścimy wybór na przyszłość
-                        st.rerun() # Zamyka okno i odświeża kafelki główne
-
-                if col_a.button("ANULUJ (POWRÓT)", use_container_width=True):
-                    st.session_state.wybor_v10 = None # CZYŚCIMY WYBÓR
-                    st.rerun() # Przeładowuje TYLKO wnętrze dialogu, wracając do listy osób
-
+            for o in osoby:
+                # HARMONIJKA - klikasz i rozwija się w dół
+                with st.expander(o, expanded=False):
+                    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
+                    da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
+                    
+                    col_z, col_a = st.columns(2)
+                    if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
+                        if kw:
+                            n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                            save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                            st.rerun() # Zamyka okno i odświeża kafelki główne
+                    
+                    # ANULUJ - nic nie robi, dzięki czemu okno nie znika
+                    col_a.button("ANULUJ", use_container_width=True, key=f"cancel_{o}")
         add_g()
 
 with c3:
