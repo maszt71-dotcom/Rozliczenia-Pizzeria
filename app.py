@@ -78,32 +78,32 @@ with c2:
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             
-            # Zapamiętujemy, kogo kliknięto
-            if "clicked_os" not in st.session_state: st.session_state.clicked_os = None
+            # Inicjalizacja stanu kliknięcia
+            if "wybrany" not in st.session_state: st.session_state.wybrany = None
 
             for o in osoby:
-                # Belka (przycisk) osoby
+                # BELKA (Przycisk osoby)
                 if st.button(o, use_container_width=True, key=f"btn_{o}"):
-                    st.session_state.clicked_os = o if st.session_state.clicked_os != o else None
-                
-                # Jeśli osoba jest kliknięta - "puchnie" miejsce na dane
-                if st.session_state.clicked_os == o:
+                    st.session_state.wybrany = o if st.session_state.wybrany != o else None
+
+                # FORMULARZ (Pojawia się pod belką jeśli wybrana)
+                if st.session_state.wybrany == o:
                     with st.container(border=True):
-                        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
+                        kw = st.number_input(f"Kwota ({o})", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
                         da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
                         
                         col_z, col_a = st.columns(2)
+                        
                         if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
                             if kw:
                                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.clicked_os = None # Zwija belkę
-                                st.rerun()
+                                st.session_state.wybrany = None # "Chudnie" po zapisie
+                                st.rerun() # Odświeża kafelki główne
                         
                         if col_a.button("ANULUJ", use_container_width=True, key=f"can_{o}"):
-                            st.session_state.clicked_os = None # NATYCHMIAST ZWIJA i wraca do menu
-                            st.rerun() 
-
+                            st.session_state.wybrany = None # "CHUDNIE" (wraca do menu wyboru)
+                            # BRAK st.rerun() - to sprawia, że okno NIE znika!
         add_g()
 
 with c3:
