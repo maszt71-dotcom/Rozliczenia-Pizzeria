@@ -2,135 +2,139 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-from streamlit_cookies_manager import CookieManager
 
-# --- KONFIGURACJA STRONY ---
-st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
+# --- 1. USTAWIENIA STRONY ---
+st.set_page_config(page_title="System Pizza", layout="wide")
 
-cookies = CookieManager()
-if not cookies.ready():
-    st.stop()
+# --- 2. BAZA DANYCH ---
+DB_FILE = "baza_pizza.csv"
 
-# --- USTAWIENIA ---
-MOJE_HASLO = "dup@"
-DB_FILE = 'finanse_data.csv'
-
-# --- LOGIKA DOSTĘPU ---
-if cookies.get("is_logged") != "true":
-    st.title("🍕 Logowanie")
-    wpisane = st.text_input("Hasło", type="password")
-    if st.button("Zaloguj się"):
-        if wpisane == MOJE_HASLO:
-            cookies["is_logged"] = "true"; cookies.save(); st.rerun()
-    st.stop()
-
-# --- OBSŁUGA DANYCH ---
-def load_data():
+def wczytaj_dane():
     if os.path.exists(DB_FILE):
-        df = pd.read_csv(DB_FILE)
-        for col in ['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']:
-            if col not in df.columns: df[col] = ""
-        return df
-    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+        try:
+            return pd.read_csv(DB_FILE)
+        except:
+            return pd.DataFrame(columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+    return pd.DataFrame(columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
 
-def save_data(df):
+def zapisz_dane(df):
     df.to_csv(DB_FILE, index=False)
 
-data = load_data()
-df_active = data[data['Status'] == 'Aktywny'].copy()
-df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
+if 'data_log' not in st.session_state:
+    st.session_state.data_log = wczytaj_dane()
 
-s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
-s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
-s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
+# --- 3. WYGLĄD (CSS) - PRECYZYJNE ZWĘŻENIE OKIENKA ---
+st.markdown("""
+    <style>
+    [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
+    
+    .card {
+        padding: 20px;
+        border-radius: 12px;
+        color: white;
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .bg-p { background: #2980b9 !important; } 
+    .bg-g { background: #27ae60 !important; } 
+    .bg-w { background: #e67e22 !important; } 
+    
+    .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-def apply_row_styles(row):
-    color = ''
-    if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda; color: #155724'
-    elif row['Typ'] == 'Wydatki gotówkowe': color = 'background-color: #f8d7da; color: #721c24'
-    elif 'Gotówka' in row['Typ']: color = 'background-color: #fff3cd; color: #856404'
-    return [color] * len(row)
+    /* --- DOPASOWANIE OKIENKA DO WĄSKIEJ KOLUMNY --- */
+    
+    /* Wymuszamy na przycisku 100% szerokości kolumny */
+    div[data-testid="stPopover"] {
+        width: 100% !important;
+    }
+    div[data-testid="stPopover"] > button {
+        width: 100% !important;
+    }
 
-# --- WIDOK GŁÓWNY ---
-st.title("🍕 Rozliczenie Pizzerii")
+    /* GŁÓWNA POPRAWKA: Okienko (body) dopasowane do kolumny */
+    div[data-testid="stPopoverBody"] {
+        /* Szerokość 100% względem kolumny, w której „siedzi” przycisk */
+        width: 100% !important; 
+        min-width: 100% !important;
+        /* Blokujemy rozlewanie się na boki powyżej szerokości kafelka */
+        max-width: 100% !important; 
+        left: 0 !important;
+        transform: none !important;
+    }
+    
+    /* Stylizacja wnętrza okienka, żeby pola nie były zbyt ciasne */
+    div[data-testid="stPopoverBody"] > div {
+        padding: 15px !important;
+    }
 
+    /* KOLORY PRZYCISKÓW */
+    div[data-testid="stColumn"]:nth-of-type(1) button { background-color: #2980b9 !important; color: white !important; }
+    div[data-testid="stColumn"]:nth-of-type(2) button { background-color: #27ae60 !important; color: white !important; }
+    div[data-testid="stColumn"]:nth-of-type(3) button { background-color: #e67e22 !important; color: white !important; }
+
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 4. OBLICZENIA ---
+df = st.session_state.data_log.copy()
+df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
+
+s_p = df[df['Typ'] == "Przychód"]['Kwota'].sum()
+s_g = df[df['Typ'] == "Gotówka"]['Kwota'].sum()
+s_w = df[df['Typ'] == "Wydatek"]['Kwota'].sum()
+bilans = s_p + s_g - s_w
+
+# --- 5. MENU BOCZNE ---
+with st.sidebar:
+    st.markdown('<h2 style="color:white; text-align:center;">MENU</h2>', unsafe_allow_html=True)
+    st.markdown("---")
+    if not st.session_state.data_log.empty:
+        lista = st.session_state.data_log.apply(lambda x: f"{x['Godzina']} | {x['Kwota']} zł", axis=1).tolist()
+        wybrane = st.multiselect("Zaznacz do usunięcia:", lista)
+        if st.button("USUŃ WYBRANE", use_container_width=True):
+            idx = [lista.index(w) for w in wybrane]
+            st.session_state.data_log = st.session_state.data_log.drop(st.session_state.data_log.index[idx]).reset_index(drop=True)
+            zapisz_dane(st.session_state.data_log); st.rerun()
+
+# --- 6. KOLUMNY (3 wąskie kolumny) ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:18px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ Dodaj Przychód", use_container_width=True):
-        @st.dialog("Dodaj Przychód")
-        def add_p():
-            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
-            da = st.date_input("Z dnia", datetime.now())
-            if st.button("ZAPISZ"):
-                if kw:
-                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
-        add_p()
+    st.markdown(f'<div class="card bg-p">PRZYCHÓD<span class="card-val">{s_p:.2f} zł</span></div>', unsafe_allow_html=True)
+    with st.popover("➕ DODAJ", use_container_width=True):
+        val = st.number_input("P", value=None, key="pk", placeholder="0.00", label_visibility="collapsed")
+        if st.button("Zatwierdź Przychód", use_container_width=True):
+            if val:
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Przychód", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+                st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
+                zapisz_dane(st.session_state.data_log); st.rerun()
 
 with c2:
-    bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
-    st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    
-    if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        @st.dialog("Rozlicz osoby")
-        def add_g():
-            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            
-            # Inicjalizacja stanu kliknięcia
-            if "wybrany" not in st.session_state: st.session_state.wybrany = None
-
-            for o in osoby:
-                # BELKA (Przycisk osoby)
-                if st.button(o, use_container_width=True, key=f"btn_{o}"):
-                    st.session_state.wybrany = o if st.session_state.wybrany != o else None
-
-                # FORMULARZ (Pojawia się pod belką jeśli wybrana)
-                if st.session_state.wybrany == o:
-                    with st.container(border=True):
-                        kw = st.number_input(f"Kwota ({o})", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
-                        da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
-                        
-                        col_z, col_a = st.columns(2)
-                        
-                        if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
-                            if kw:
-                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.wybrany = None # "Chudnie" po zapisie
-                                st.rerun() # Odświeża kafelki główne
-                        
-                        if col_a.button("ANULUJ", use_container_width=True, key=f"can_{o}"):
-                            st.session_state.wybrany = None # "CHUDNIE" (wraca do menu wyboru)
-                            # BRAK st.rerun() - to sprawia, że okno NIE znika!
-        add_g()
+    st.markdown(f'<div class="card bg-g">GOTÓWKA<span class="card-val">{s_g:.2f} zł</span></div>', unsafe_allow_html=True)
+    with st.popover("➕ DODAJ", use_container_width=True):
+        val = st.number_input("G", value=None, key="gk", placeholder="0.00", label_visibility="collapsed")
+        if st.button("Zatwierdź Gotówkę", use_container_width=True):
+            if val:
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Gotówka", val, ""]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+                st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
+                zapisz_dane(st.session_state.data_log); st.rerun()
 
 with c3:
-    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:18px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➖ Dodaj Wydatek", use_container_width=True):
-        @st.dialog("Dodaj Wydatek")
-        def add_w():
-            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ")
-            da = st.date_input("Z dnia", datetime.now())
-            op = st.text_input("Opis", placeholder=" ")
-            if st.button("ZAPISZ"):
-                if kw:
-                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
-        add_w()
+    st.markdown(f'<div class="card bg-w">WYDATKI<span class="card-val">{s_w:.2f} zł</span></div>', unsafe_allow_html=True)
+    with st.popover("➕ DODAJ", use_container_width=True):
+        val = st.number_input("W", value=None, key="wk", placeholder="0.00", label_visibility="collapsed")
+        opis = st.text_input("Opisz wydatek", key="wo", placeholder="na co poszło?")
+        if st.button("Zatwierdź Wydatek", use_container_width=True):
+            if val:
+                n = pd.DataFrame([[datetime.now().strftime("%Y-%m-%d"), datetime.now().strftime("%H:%M:%S"), "Wydatek", val, opis]], columns=['Data', 'Godzina', 'Typ', 'Kwota', 'Opis'])
+                st.session_state.data_log = pd.concat([n, st.session_state.data_log], ignore_index=True)
+                zapisz_dane(st.session_state.data_log); st.rerun()
 
-# --- TABELA ---
-st.divider()
-df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
-
-with st.sidebar:
-    st.header("⚙️ Opcje")
-    if sel.selection.rows:
-        if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-            curr = load_data()
-            curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
-            save_data(curr); st.rerun()
-    st.divider()
-    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
+# --- 7. PODSUMOWANIE ---
+st.markdown("---")
+st.subheader(f"BILANS: {bilans:.2f} zł")
+st.dataframe(st.session_state.data_log, use_container_width=True, hide_index=True)
