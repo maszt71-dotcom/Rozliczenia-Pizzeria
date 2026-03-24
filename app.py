@@ -32,28 +32,45 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# --- STYLIZACJA CSS (DOPASOWANIE SZEROKOŚCI) ---
+# --- KLUCZOWY CSS: ZSUWANIE Z KONTENERA ---
 st.markdown("""
     <style>
-    /* Szerokość okienka popover na 100% kolumny */
-    div[data-testid="stPopover"] { width: 100% !important; }
-    div[data-testid="stPopover"] > button { 
-        width: 100% !important; 
-        border-radius: 10px !important;
+    /* 1. Ustawienie kolumny jako punktu odniesienia */
+    [data-testid="stColumn"] {
+        position: relative !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* 2. Przycisk popover na całą szerokość kolumny */
+    div[data-testid="stPopover"] {
+        width: 100% !important;
+    }
+    div[data-testid="stPopover"] > button {
+        width: 100% !important;
+        border-radius: 0 0 10px 10px !important;
         height: 40px !important;
         font-weight: bold !important;
+        border: none !important;
     }
+
+    /* 3. WYMUSZENIE ZSUWANIA POD PRZYCISKIEM */
     div[data-testid="stPopoverBody"] {
+        position: absolute !important;
         width: 100% !important;
         min-width: 100% !important;
         max-width: 100% !important;
         left: 0 !important;
+        top: 0px !important; /* Przyklejenie do spodu przycisku */
+        transform: none !important;
+        box-shadow: 0px 8px 16px rgba(0,0,0,0.2) !important;
+        z-index: 9999 !important;
     }
-    
-    /* Kolory przycisków wewnątrz popoverów */
-    div[data-testid="stColumn"]:nth-of-type(1) button[kind="secondary"] { background-color: #d4edda; color: #155724; border: 1px solid #28a745; }
-    div[data-testid="stColumn"]:nth-of-type(2) button[kind="secondary"] { background-color: #fff3cd; color: #856404; border: 1px solid #ffc107; }
-    div[data-testid="stColumn"]:nth-of-type(3) button[kind="secondary"] { background-color: #f8d7da; color: #721c24; border: 1px solid #dc3545; }
+
+    /* Kolory przycisków DODAJ */
+    div[data-testid="stColumn"]:nth-of-type(1) button { background-color: #d4edda !important; color: #155724 !important; }
+    div[data-testid="stColumn"]:nth-of-type(2) button { background-color: #fff3cd !important; color: #856404 !important; }
+    div[data-testid="stColumn"]:nth-of-type(3) button { background-color: #f8d7da !important; color: #721c24 !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -86,7 +103,7 @@ with c2:
     with st.popover("➕ DODAJ", use_container_width=True):
         osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
         wybrana = st.selectbox("Wybierz osobę", osoby)
-        kw = st.number_input(f"Kwota ({wybrana})", min_value=0.0, format="%.2f", value=None, placeholder=" ")
+        kw = st.number_input(f"Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key="g_kw")
         da = st.date_input("Z dnia", datetime.now(), key="g_da")
         if st.button("ZAPISZ GOTÓWKĘ", use_container_width=True):
             if kw:
@@ -104,7 +121,7 @@ with c3:
                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
 
-# --- TABELA I USUWANIE ---
+# --- TABELA ---
 st.divider()
 def apply_row_styles(row):
     color = ''
@@ -114,14 +131,7 @@ def apply_row_styles(row):
     return [color] * len(row)
 
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
+st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, hide_index=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
 
 with st.sidebar:
-    st.header("⚙️ Opcje")
-    if sel.selection.rows:
-        if st.button("🗑️ USUŃ ZAZNACZONE", type="primary", use_container_width=True):
-            curr = load_data()
-            curr.loc[df_h.index[sel.selection.rows], 'Status'] = 'Usunięty'
-            save_data(curr); st.rerun()
-    st.divider()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
