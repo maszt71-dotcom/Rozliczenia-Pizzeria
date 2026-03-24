@@ -77,12 +77,15 @@ with c2:
         @st.dialog("Rozlicz osoby")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+            
+            # Pętla generująca harmonijkę
             for o in osoby:
-                with st.expander(o, expanded=False):
+                with st.expander(o):
                     kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
                     da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
                     
                     col_z, col_a = st.columns(2)
+                    
                     if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
                         if kw:
                             n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
@@ -90,7 +93,8 @@ with c2:
                             st.rerun()
                     
                     if col_a.button("ANULUJ", use_container_width=True, key=f"cancel_{o}"):
-                        st.empty() # Czyści widok bez komunikatów i zwija formularz
+                        # Ten trick wymusza odświeżenie samego dialogu, co zwija expandery
+                        st.rerun() 
         add_g()
 
 with c3:
