@@ -76,25 +76,24 @@ with c2:
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
         @st.dialog("Rozlicz osoby")
         def add_g():
-            # Inicjalizacja wyboru
-            if "wybrana_osoba" not in st.session_state:
-                st.session_state.wybrana_osoba = None
-
+            # Używamy session_state, żeby pamiętać kogo wybrano bez zamykania okna
+            if "wyb" not in st.session_state: st.session_state.wyb = None
+            
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-
-            # Jeśli nikt nie jest wybrany -> Pokaż listę przycisków
-            if st.session_state.wybrana_osoba is None:
+            
+            # WIDOK 1: LISTA OSÓB
+            if st.session_state.wyb is None:
                 for o in osoby:
                     if st.button(o, use_container_width=True, key=f"btn_{o}"):
-                        st.session_state.wybrana_osoba = o
-                        st.rerun()
+                        st.session_state.wyb = o
+                        st.rerun() # To jedno rerun wewnątrz dialogu jest bezpieczne przy zmianie stanu
             
-            # Jeśli osoba wybrana -> Pokaż formularz dla tej osoby
+            # WIDOK 2: FORMULARZ DLA WYBRANEJ OSOBY
             else:
-                o = st.session_state.wybrana_osoba
+                o = st.session_state.wyb
                 st.subheader(f"Wpłata: {o}")
-                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key="kw_input")
-                da = st.date_input("Z dnia", datetime.now(), key="date_input")
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00")
+                da = st.date_input("Z dnia", datetime.now())
                 
                 col_z, col_a = st.columns(2)
                 
@@ -102,12 +101,15 @@ with c2:
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.wybrana_osoba = None # Wraca do menu wyboru
-                        st.rerun()
+                        st.session_state.wyb = None # Reset wyboru
+                        st.rerun() # Zapisuje i odświeża kafelki (zamknie okno)
 
                 if col_a.button("ANULUJ (POWRÓT)", use_container_width=True):
-                    st.session_state.wybrana_osoba = None # Czyści wybór i wraca do menu
-                    st.rerun()
+                    st.session_state.wyb = None # Czyści wybór
+                    st.rerun() # Wraca do listy osób w tym samym oknie
+        
+        # Resetujemy wybór przy każdym NOWYM otwarciu okna przyciskiem głównym
+        st.session_state.wyb = None 
         add_g()
 
 with c3:
