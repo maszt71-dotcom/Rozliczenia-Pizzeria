@@ -1,155 +1,95 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 
-# Konfiguracja strony
-st.set_page_config(page_title="System Rozliczeń Pizzeria", layout="wide", initial_sidebar_state="expanded")
+# Konfiguracja
+st.set_page_config(page_title="Rozliczenia Pizzeria", layout="wide")
 
-# --- STYLE CSS (Przywrócenie wyglądu i naprawa zer) ---
+# --- STYLE CSS (Naprawa wyglądu i zer) ---
 st.markdown("""
     <style>
-    /* Główna czcionka i tło */
-    html, body, [data-testid="stAppViewContainer"] {
-        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    }
-
-    /* Stylizacja paska bocznego */
     [data-testid="stSidebar"] {
-        background-color: #2c3e50 !important;
+        background-color: #2c3e50;
         color: white;
     }
-
-    /* Kafelki w menu */
-    .menu-card {
-        background: #34495e;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 10px;
-        border-left: 5px solid #e67e22;
-        transition: 0.3s;
-        cursor: pointer;
-    }
-    .menu-card:hover {
-        background: #3e5871;
-        transform: translateX(5px);
-    }
-    .menu-header {
-        color: #e67e22;
-        font-weight: bold;
-        margin-bottom: 5px;
+    /* Stylizacja trzech kontenerów na górze */
+    .stats-container {
         display: flex;
-        align-items: center;
-        gap: 10px;
+        gap: 20px;
+        margin-bottom: 25px;
     }
+    .stat-card {
+        flex: 1;
+        padding: 20px;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+    }
+    .card-1 { background-color: #2ecc71; } /* Zielony */
+    .card-2 { background-color: #e74c3c; } /* Czerwony */
+    .card-3 { background-color: #3498db; } /* Niebieski */
+    
+    .stat-value { font-size: 24px; font-weight: bold; }
+    .stat-label { font-size: 14px; opacity: 0.9; }
 
-    /* Naprawa pól liczbowych - usuwanie strzałek i formatowanie */
-    input[type=number] {
-        -moz-appearance: textfield;
-    }
+    /* Naprawa pól liczbowych */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { 
-        -webkit-appearance: none;
-        margin: 0; 
+        -webkit-appearance: none; margin: 0; 
     }
-    
-    /* Ukrycie dekoracji Streamlit */
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
     </style>
-    
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 """, unsafe_allow_html=True)
 
-# --- LOGIKA SESJI (Baza danych w pamięci) ---
-if 'history' not in st.session_state:
-    st.session_state.history = []
+# --- INICJALIZACJA DANYCH ---
+if 'obrot' not in st.session_state: st.session_state.obrot = 0.0
+if 'wydatki' not in st.session_state: st.session_state.wydatki = 0.0
 
-# --- PASEK BOCZNY ---
+# --- PASEK BOCZNY (MENU) ---
 with st.sidebar:
-    st.markdown('<h1 style="color: #e67e22; text-align: center;">PIZZA SYSTEM</h1>', unsafe_allow_html=True)
-    st.markdown('<hr style="border-color: #465a6d;">', unsafe_allow_html=True)
-
-    # PRZYWRÓCONE KAFELKI MENU
-    st.markdown('<div class="menu-header"><i class="fas fa-database"></i> OPERACJE</div>', unsafe_allow_html=True)
-    
+    st.title("🍕 Menu")
     if st.button("📥 Pobierz i Zapisz", use_container_width=True):
-        if st.session_state.history:
-            st.toast("Dane zarchiwizowane pomyślnie!")
-        else:
-            st.warning("Brak danych do zapisu.")
+        st.success("Zapisano!")
+    if st.button("💾 Pobierz", use_container_width=True):
+        st.info("Pobieranie...")
+    st.markdown("---")
+    if st.button("⚙️ Ustawienia", use_container_width=True):
+        pass
 
-    if st.button("💾 Pobierz dane", use_container_width=True):
-        st.toast("Generowanie raportu Excel/CSV...")
+# --- TRZY KONTENERY NA GÓRZE ---
+bilans = st.session_state.obrot - st.session_state.wydatki
 
-    st.markdown('<div style="margin-top: 20px;" class="menu-header"><i class="fas fa-tools"></i> SYSTEM</div>', unsafe_allow_html=True)
-    
-    if st.button("🔄 Odśwież system", use_container_width=True):
-        st.rerun()
+st.markdown(f"""
+    <div class="stats-container">
+        <div class="stat-card card-1">
+            <div class="stat-label">OBRÓT CAŁKOWITY</div>
+            <div class="stat-value">{st.session_state.obrot:.2f} zł</div>
+        </div>
+        <div class="stat-card card-2">
+            <div class="stat-label">WYDATKI GOTÓWKOWE</div>
+            <div class="stat-value">{st.session_state.wydatki:.2f} zł</div>
+        </div>
+        <div class="stat-card card-3">
+            <div class="stat-label">DO ROZLICZENIA</div>
+            <div class="stat-value">{bilans:.2f} zł</div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
-    if st.button("⚙️ Ustawienia pizzerii", use_container_width=True):
-        st.sidebar.info("Moduł ustawień w budowie.")
+# --- FORMULARZ WPISYWANIA ---
+st.subheader("Nowy wpis")
+col1, col2 = st.columns(2)
 
-# --- GŁÓWNY PANEL ---
-col_main, col_hist = st.columns([0.6, 0.4])
+with col1:
+    nowa_kwota = st.number_input("Wpisz kwotę zamówienia:", min_value=0.0, value=None, step=0.01, placeholder="0.00")
+with col2:
+    nowe_wydatki = st.number_input("Wpisz wydatki:", min_value=0.0, value=None, step=0.01, placeholder="0.00")
 
-with col_main:
-    st.markdown("## 🍕 Nowe Rozliczenie")
-    
-    with st.container():
-        # NAPRAWA ZER: value=None sprawia, że pole jest puste na starcie
-        kwota_brutto = st.number_input(
-            "Kwota całkowita z raportu (zł)", 
-            min_value=0.0, 
-            value=None, 
-            step=0.01, 
-            format="%.2f",
-            placeholder="Wpisz kwotę..."
-        )
-        
-        wydatki_gotowkowe = st.number_input(
-            "Wydatki gotówkowe (zakupy/paliwo)", 
-            min_value=0.0, 
-            value=None, 
-            step=0.01, 
-            format="%.2f",
-            placeholder="0.00"
-        )
-        
-        pracownik = st.text_input("Osoba rozliczająca", placeholder="Imię i nazwisko")
+if st.button("Aktualizuj liczniki", type="primary"):
+    if nowa_kwota: st.session_state.obrot += nowa_kwota
+    if nowe_wydatki: st.session_state.wydatki += nowe_wydatki
+    st.rerun()
 
-        if st.button("✅ ZATWIERDŹ I OBLICZ", use_container_width=True, type="primary"):
-            if kwota_brutto is not None:
-                do_oddania = kwota_brutto - (wydatki_gotowkowe if wydatki_gotowkowe else 0)
-                
-                # Dodanie do historii
-                nowy_wpis = {
-                    "Data": datetime.now().strftime("%H:%M:%S"),
-                    "Pracownik": pracownik if pracownik else "Brak danych",
-                    "Brutto": kwota_brutto,
-                    "Wydatki": wydatki_gotowkowe if wydatki_gotowkowe else 0,
-                    "Netto": do_oddania
-                }
-                st.session_state.history.insert(0, nowy_wpis)
-                
-                st.balloons()
-                st.success(f"### DO ODDANIA: {do_oddania:.2f} zł")
-            else:
-                st.error("BŁĄD: Musisz podać kwotę brutto!")
-
-# --- SEKCJA HISTORII (Prawa strona) ---
-with col_hist:
-    st.markdown("### 📂 Ostatnie wpisy")
-    if st.session_state.history:
-        for entry in st.session_state.history[:5]:  # Pokaż 5 ostatnich
-            with st.expander(f"🕒 {entry['Data']} - {entry['Pracownik']}"):
-                st.write(f"**Brutto:** {entry['Brutto']:.2f} zł")
-                st.write(f"**Wydatki:** {entry['Wydatki']:.2f} zł")
-                st.write(f"---")
-                st.write(f"**Suma:** {entry['Netto']:.2f} zł")
-    else:
-        st.info("Historia jest obecnie pusta.")
-
-# --- STOPKA ---
+# --- HISTORIA ---
 st.markdown("---")
-st.caption(f"Zalogowano jako: Administrator | Data: {datetime.now().strftime('%Y-%m-%d')}")
+st.markdown("### 📁 Historia")
+# Tutaj możesz dodać tabelę z historią
