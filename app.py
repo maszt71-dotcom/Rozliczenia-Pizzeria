@@ -26,12 +26,7 @@ if cookies.get("is_logged") != "true":
 
 # --- OBSŁUGA DANYCH ---
 def load_data():
-    if os.path.exists(DB_FILE): 
-        df = pd.read_csv(DB_FILE)
-        # Upewniamy się, że kolumny istnieją
-        for col in ['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']:
-            if col not in df.columns: df[col] = ""
-        return df
+    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
 def save_data(df):
@@ -41,7 +36,6 @@ data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-# OBLICZENIA DO KAFELKÓW
 s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
@@ -76,24 +70,34 @@ with c2:
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ Dodaj Gotówkę", use_container_width=True):
-        @st.dialog("Dodaj Gotówkę")
+        @st.dialog("Wybierz osobę")
         def add_g():
             if "os_v5" not in st.session_state: st.session_state.os_v5 = None
-            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            for o in osoby:
-                st.button(o, use_container_width=True, key=f"btn_{o}", on_click=lambda x=o: st.session_state.update({"os_v5": x}))
-                if st.session_state.os_v5 == o:
-                    with st.container(border=True):
-                        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"kw_{o}")
-                        da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
-                        col_z, col_w = st.columns(2)
-                        if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
-                            if kw:
-                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.os_v5 = None; st.rerun()
-                        if col_w.button("WYJDŹ", use_container_width=True, key=f"exit_{o}"):
-                            st.session_state.os_v5 = None; st.rerun()
+            
+            # Jeśli nikt nie jest wybrany, pokaż listę osób
+            if st.session_state.os_v5 is None:
+                osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+                for o in osoby:
+                    st.button(o, use_container_width=True, key=f"sel_{o}", on_click=lambda x=o: st.session_state.update({"os_v5": x}))
+            
+            # Jeśli osoba wybrana, pokaż formularz
+            else:
+                o = st.session_state.os_v5
+                st.subheader(f"Wpłata: {o}")
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder=" ", key=f"kw_{o}")
+                da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
+                
+                col_z, col_w = st.columns(2)
+                if col_z.button("ZAPISZ", type="primary", use_container_width=True):
+                    if kw:
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                        st.session_state.os_v5 = None # Wraca do listy
+                        st.rerun()
+                
+                if col_w.button("WYJDŹ (POWRÓT)", use_container_width=True):
+                    st.session_state.os_v5 = None # Wraca do listy
+                    st.rerun()
         add_g()
 
 with c3:
@@ -110,25 +114,11 @@ with c3:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.rerun()
         add_w()
 
-# --- TABELA GŁÓWNA ---
+# --- TABELA ---
 st.divider()
-st.subheader("📜 Ostatnie operacje")
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 sel = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
 
-# --- RZECZ ŚWIĘTA (ROZLICZENIE) ---
-st.divider()
-st.subheader("😇 Rzecz Święta")
-df_got_only = df_active[df_active['Typ'].str.contains('Gotówka', na=False)].copy()
-
-if not df_got_only.empty:
-    summary = df_got_only.groupby('Typ')['Kwota'].sum().reset_index()
-    summary.columns = ['Osoba / Punkt', 'Suma wpłat (zł)']
-    st.table(summary)
-else:
-    st.write("Brak wpłat do rozliczenia.")
-
-# --- PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     if sel.selection.rows:
