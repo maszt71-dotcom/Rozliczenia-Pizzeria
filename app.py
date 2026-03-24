@@ -3,81 +3,96 @@ import pandas as pd
 import os
 from datetime import datetime
 
-# Konfiguracja strony
-st.set_page_config(page_title="Finanse Pizzeria", layout="wide")
+# Ustawienia strony na szeroką, żeby kontenery ładnie leżały obok siebie
+st.set_page_config(page_title="Pizzeria - Finanse", layout="wide")
+
 DB_FILE = 'finanse_data.csv'
 
-# Funkcja do ładowania danych
 def load_data():
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
-        # Sprawdzamy, czy są wszystkie potrzebne kolumny
-        for col in ['Data_wpisu', 'Typ', 'Kwota', 'Opis', 'Data_zdarzenia']:
+        for col in ['Data', 'Typ', 'Kwota', 'Opis', 'Dzień']:
             if col not in df.columns: df[col] = ""
         return df
-    return pd.DataFrame(columns=['Data_wpisu', 'Typ', 'Kwota', 'Opis', 'Data_zdarzenia'])
+    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Dzień'])
 
 df = load_data()
-
-# Nagłówek aplikacji
-st.title("🍕 System Finansowy Pizzerii")
-
-# --- LICZENIE SUM DO KAFELKÓW ---
 df['Kwota'] = pd.to_numeric(df['Kwota'], errors='coerce').fillna(0)
-s_og = df[df['Typ'] == 'Przychód ogólny']['Kwota'].sum()
-s_wyd = df[df['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
-# Gotówka w kasie to wpłaty od osób minus wydatki
+
+# --- OBLICZENIA ---
+s_og = df[df['Typ'] == 'Przychód']['Kwota'].sum()
+s_wyd = df[df['Typ'] == 'Wydatek']['Kwota'].sum()
 s_got = df[df['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- WYŚWIETLANIE KAFELKÓW (METRYKI) ---
+# --- TRZY KOLOROWE KONTENERY (TWOJE ULUBIONE) ---
+st.markdown("""
+    <style>
+    .stMetric {
+        background-color: #ffffff;
+        padding: 15px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    /* Stylizacja kolorów dla kontenerów */
+    [data-testid="stMetricValue"] { font-size: 28px; font-weight: bold; }
+    </style>
+    """, unsafe_allow_html=True)
+
 col1, col2, col3 = st.columns(3)
-col1.metric("PRZYCHÓD OGÓLNY", f"{s_og:.2f} zł")
-col2.metric("GOTÓWKA (Stan)", f"{s_got:.2f} zł")
-col3.metric("WYDATKI", f"{s_wyd:.2f} zł")
+
+with col1:
+    st.markdown('<div style="background-color: #d4edda; padding: 20px; border-radius: 10px; border-left: 10px solid #28a745;">', unsafe_allow_html=True)
+    st.metric("PRZYCHÓD OGÓLNY", f"{s_og:.2f} zł")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col2:
+    st.markdown('<div style="background-color: #fff3cd; padding: 20px; border-radius: 10px; border-left: 10px solid #ffc107;">', unsafe_allow_html=True)
+    st.metric("STAN GOTÓWKI", f"{s_got:.2f} zł")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with col3:
+    st.markdown('<div style="background-color: #f8d7da; padding: 20px; border-radius: 10px; border-left: 10px solid #dc3545;">', unsafe_allow_html=True)
+    st.metric("WYDATKI", f"{s_wyd:.2f} zł")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
-# --- FORMULARZ DODAWANIA WPISU ---
-st.subheader("Dodaj nową operację")
-
-# Wybór co robimy (to zmienia pola w formularzu)
-kategoria = st.radio("Co chcesz dodać?", ["Przychód", "Gotówka (Wpłata)", "Wydatek"], horizontal=True)
-
-with st.form("dodaj_wpis", clear_on_submit=True):
-    typ_finalny = ""
+# --- FORMULARZ WPISYWANIA ---
+st.subheader("📝 Dodaj nowy wpis")
+with st.form("formularz", clear_on_submit=True):
+    typ_glowny = st.selectbox("Co dodajesz?", ["Przychód", "Gotówka (Wpłata)", "Wydatek"])
+    
+    osoba = ""
+    if typ_glowny == "Gotówka (Wpłata)":
+        osoba = st.selectbox("Kto wpłaca?", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
+    
     opis = ""
-    
-    if kategoria == "Przychód":
-        typ_finalny = "Przychód ogólny"
+    if typ_glowny == "Wydatek":
+        opis = st.text_input("Na co? (Opis)")
         
-    elif kategoria == "Gotówka (Wpłata)":
-        # Tu pojawił się wybór osoby
-        kto = st.selectbox("Kto wpłaca?", ["Bufet", "Kierowca 1", "Kierowca 2", "Kierowca 3", "Kierowca 4"])
-        typ_finalny = f"Gotówka - {kto}"
-        
-    elif kategoria == "Wydatek":
-        typ_finalny = "Wydatki gotówkowe"
-        opis = st.text_input("Na co wydano? (Opis)")
-
-    kwota = st.number_input("Kwota (zł)", min_value=0.0, step=0.01)
-    data_zd = st.date_input("Z jakiego dnia?", datetime.now())
+    kwota = st.number_input("Kwota (zł):", min_value=0.0, step=1.0)
+    dzien = st.date_input("Data:", datetime.now())
     
-    submit = st.form_submit_button("ZAPISZ DANE")
-
+    submit = st.form_submit_button("ZAPISZ DO BAZY")
+    
     if submit:
-        nowy_wpis = {
-            'Data_wpisu': datetime.now().strftime("%Y-%m-%d %H:%M"),
+        typ_finalny = f"Gotówka - {osoba}" if osoba else typ_glowny
+        nowy_wpis = pd.DataFrame([{
+            'Data': datetime.now().strftime("%H:%M"),
             'Typ': typ_finalny,
             'Kwota': kwota,
             'Opis': opis,
-            'Data_zdarzenia': data_zd.strftime("%Y-%m-%d")
-        }
-        # Łączymy stare dane z nowymi i zapisujemy do CSV
-        df = pd.concat([df, pd.DataFrame([nowy_wpis])], ignore_index=True)
-        df.to_csv(DB_FILE, index=False)
-        st.success(f"Zapisano: {typ_finalny} - {kwota} zł")
-        st.rerun() # Odśwież stronę, żeby kafelki na górze się zmieniły
+            'Dzień': dzien.strftime("%Y-%m-%d")
+        }])
+        pd.concat([df, nowy_wpis]).to_csv(DB_FILE, index=False)
+        st.success("Zapisano pomyślnie!")
+        st.rerun()
 
-# Opcjonalny podgląd tabeli
-if st.checkbox("Pokaż historię wpisów"):
-    st.dataframe(df.tail(10), use_container_width=True)
+# --- RZECZ ŚWIĘTA NA DOLE ---
+st.divider()
+st.subheader("😇 Rzecz Święta (Rozliczenie Kierowców)")
+gotowka_df = df[df['Typ'].str.contains('Gotówka', na=False)].copy()
+if not gotowka_df.empty:
+    summary = gotowka_df.groupby('Typ')['Kwota'].sum().reset_index()
+    summary.columns = ['Osoba', 'Suma wpłat']
+    st.table(summary)
