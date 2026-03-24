@@ -142,20 +142,35 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotowke", use_container_width=True):
-        if "os_v_30" not in st.session_state: st.session_state.os_v_30 = None
+        if "os_v_final" not in st.session_state: st.session_state.os_v_final = None
         @st.dialog("Dodaj Gotowke")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            for o in osoby:
-                if st.button(o, use_container_width=True): st.session_state.os_v_30 = o
-                if st.session_state.os_v_30 == o:
-                    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key=f"k_{o}")
-                    da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
-                    if st.button("ZAPISZ", type="primary", use_container_width=True):
-                        if kw:
-                            n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
-                            save_data(pd.concat([load_data(), n], ignore_index=True))
-                            st.session_state.os_v_30 = None; st.rerun()
+            
+            # Jeśli nikt nie jest wybrany, pokaż listę przycisków
+            if st.session_state.os_v_final is None:
+                for o in osoby:
+                    if st.button(o, use_container_width=True):
+                        st.session_state.os_v_final = o
+                        st.rerun()
+            else:
+                # Jeśli osoba jest wybrana, pokaż formularz i przycisk WRÓĆ
+                o = st.session_state.os_v_final
+                st.subheader(f"Wpisujesz dla: {o}")
+                kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key=f"k_{o}")
+                da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
+                
+                col_save, col_back = st.columns(2)
+                if col_save.button("ZAPISZ", type="primary", use_container_width=True):
+                    if kw:
+                        n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
+                        save_data(pd.concat([load_data(), n], ignore_index=True))
+                        st.session_state.os_v_final = None
+                        st.rerun()
+                
+                if col_back.button("⬅️ WRÓĆ / ZMIEŃ", use_container_width=True):
+                    st.session_state.os_v_final = None
+                    st.rerun()
         add_g()
 
 with c3:
@@ -174,11 +189,11 @@ with c3:
 
 st.divider()
 df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
-if "tk_30" not in st.session_state: st.session_state.tk_30 = 0
-event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk_30}",
+if "tk_final" not in st.session_state: st.session_state.tk_final = 0
+event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk_final}",
     column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None})
 
-# --- 9. SIDEBAR (TWOJA NOWA LOGIKA) ---
+# --- 9. SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     pdf_bytes = create_pdf(df_h, s_og, s_got, s_wyd)
@@ -187,7 +202,6 @@ with st.sidebar:
 
     if "step" not in st.session_state: st.session_state.step = 0
 
-    # KROK 1: WYSYŁKA
     if st.session_state.step == 0:
         if st.button("🚀 POBIERZ RAPORT I WYŚLIJ", type="primary", use_container_width=True):
             with st.spinner("Wysyłam raport na maila..."):
@@ -199,7 +213,6 @@ with st.sidebar:
                     st.session_state.step = 1
                     st.rerun()
 
-    # KROK 2: USUWANIE
     elif st.session_state.step == 1:
         st.success("✅ Raport wysłany na maila!")
         if st.button("🗑️ USUŃ DANE Z SYSTEMU", type="primary", use_container_width=True):
@@ -208,7 +221,6 @@ with st.sidebar:
         if st.button("ANULUJ", use_container_width=True):
             st.session_state.step = 0; st.rerun()
 
-    # KROK 3: OSTATECZNE POTWIERDZENIE
     elif st.session_state.step == 2:
         st.error("JESTEŚ PEWIEN? Tej czynności nie można cofnąć!")
         if st.button("POTWIERDZAM - USUŃ WSZYSTKO", type="primary", use_container_width=True):
@@ -232,7 +244,7 @@ with st.sidebar:
             st.error("Na pewno usunąć?"); c_t, c_n = st.columns(2)
             if c_t.button("TAK"):
                 ff = load_data(); ff.loc[df_h.index[sel], 'Status'] = 'Usunięty'; save_data(ff)
-                st.session_state.del_s = 0; st.session_state.tk_30 += 1; st.rerun()
-            if c_n.button("NIE"): st.session_state.del_s = 0; st.session_state.tk_30 += 1; st.rerun()
+                st.session_state.del_s = 0; st.session_state.tk_final += 1; st.rerun()
+            if c_n.button("NIE"): st.session_state.del_s = 0; st.session_state.tk_final += 1; st.rerun()
     st.divider()
     if st.button("🔄 ODSWIEŻ", use_container_width=True): st.rerun()
