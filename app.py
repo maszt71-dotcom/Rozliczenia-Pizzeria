@@ -96,82 +96,77 @@ def apply_row_styles(row):
     elif 'Gotówka' in typ: color = 'background-color: #fff3cd; color: #856404'
     return [color] * len(row)
 
-# --- 8. WIDOK ---
-st.title("🍕 Rozliczenie Pizzerii")
-c1, c2, c3 = st.columns(3)
+# --- 8. OKNA DIALOGOWE (SCHEMAT PANCERNY) ---
+@st.dialog("Dodaj Przychod")
+def modal_p():
+    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
+    da = st.date_input("Data zdarzenia", datetime.now())
+    if st.button("ZAPISZ"):
+        if kw:
+            n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
+            save_data(pd.concat([load_data(), n], ignore_index=True)); st.rerun()
 
-with c1:
-    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><b>PRZYCHÓD OGÓLNY</b><br><b style="font-size:20px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ Dodaj Przychod", use_container_width=True):
-        @st.dialog("Dodaj Przychod")
-        def add_p():
-            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
-            da = st.date_input("Data zdarzenia", datetime.now())
-            if st.button("ZAPISZ"):
-                if kw:
-                    n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
-                    save_data(pd.concat([load_data(), n], ignore_index=True)); st.rerun()
-        add_p()
+@st.dialog("Dodaj Wydatek")
+def modal_w():
+    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
+    da = st.date_input("Data zdarzenia", datetime.now()); op = st.text_input("Opis")
+    if st.button("ZAPISZ"):
+        if kw:
+            n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
+            save_data(pd.concat([load_data(), n], ignore_index=True)); st.rerun()
 
-# --- FUNKCJA OKNA GOTÓWKI (POPRAWIONA) ---
 @st.dialog("Dodaj Gotowke")
-def show_gotowka_dialog():
-    if "os_temp" not in st.session_state:
-        st.session_state.os_temp = None
+def modal_g():
+    if "os_wybrana" not in st.session_state: st.session_state.os_wybrana = None
     
     osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
     
-    if st.session_state.os_temp is None:
+    if st.session_state.os_wybrana is None:
         st.write("Wybierz osobę:")
         for o in osoby:
-            if st.button(o, use_container_width=True, key=f"sel_{o}"):
-                st.session_state.os_temp = o
+            if st.button(o, use_container_width=True, key=f"btn_{o}"):
+                st.session_state.os_wybrana = o
                 st.rerun()
     else:
-        o = st.session_state.os_temp
-        st.markdown(f"### Wprowadź dla: **{o}**")
-        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key=f"val_{o}")
-        da = st.date_input("Data zdarzenia", datetime.now(), key=f"dat_{o}")
-        
+        o = st.session_state.os_wybrana
+        st.write(f"### Wprowadź dla: {o}")
+        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key="input_kw")
+        da = st.date_input("Data zdarzenia", datetime.now(), key="input_da")
         col1, col2 = st.columns(2)
         if col1.button("ZAPISZ", type="primary", use_container_width=True):
             if kw:
                 n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
                 save_data(pd.concat([load_data(), n], ignore_index=True))
-                st.session_state.os_temp = None
-                st.rerun()
-        
+                st.session_state.os_wybrana = None; st.rerun()
         if col2.button("⬅️ COFNIJ", use_container_width=True):
-            st.session_state.os_temp = None
-            st.rerun()
+            st.session_state.os_wybrana = None; st.rerun()
+
+# --- 9. WIDOK GŁÓWNY ---
+st.title("🍕 Rozliczenie Pizzerii")
+c1, c2, c3 = st.columns(3)
+
+with c1:
+    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><b>PRZYCHÓD OGÓLNY</b><br><b style="font-size:20px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ Dodaj Przychod", use_container_width=True): modal_p()
 
 with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotowke", use_container_width=True):
-        st.session_state.os_temp = None # Resetujemy przy otwarciu
-        show_gotowka_dialog()
+        st.session_state.os_wybrana = None
+        modal_g()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><b>WYDATKI GOTÓWKOWE</b><br><b style="font-size:20px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➖ Dodaj Wydatek", use_container_width=True):
-        @st.dialog("Dodaj Wydatek")
-        def add_w():
-            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None)
-            da = st.date_input("Data zdarzenia", datetime.now()); op = st.text_input("Opis")
-            if st.button("ZAPISZ"):
-                if kw:
-                    n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
-                    save_data(pd.concat([load_data(), n], ignore_index=True)); st.rerun()
-        add_w()
+    if st.button("➖ Dodaj Wydatek", use_container_width=True): modal_w()
 
 st.divider()
 df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
-if "tk_final" not in st.session_state: st.session_state.tk_final = 0
-event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk_final}",
+if "tk_v31" not in st.session_state: st.session_state.tk_v31 = 0
+event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk_v31}",
     column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None})
 
-# --- 9. SIDEBAR ---
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     pdf_bytes = create_pdf(df_h, s_og, s_got, s_wyd)
@@ -204,7 +199,7 @@ with st.sidebar:
             st.error("Na pewno?"); c_t, c_n = st.columns(2)
             if c_t.button("TAK"):
                 ff = load_data(); ff.loc[df_h.index[sel], 'Status'] = 'Usunięty'; save_data(ff)
-                st.session_state.del_s = 0; st.session_state.tk_final += 1; st.rerun()
-            if c_n.button("NIE"): st.session_state.del_s = 0; st.session_state.tk_final += 1; st.rerun()
+                st.session_state.del_s = 0; st.session_state.tk_v31 += 1; st.rerun()
+            if c_n.button("NIE"): st.session_state.del_s = 0; st.session_state.tk_v31 += 1; st.rerun()
     st.divider(); 
     if st.button("🔄 ODSWIEŻ", use_container_width=True): st.rerun()
