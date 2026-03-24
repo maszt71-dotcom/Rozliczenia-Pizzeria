@@ -23,7 +23,7 @@ def zapisz_dane(df):
 if 'data_log' not in st.session_state:
     st.session_state.data_log = wczytaj_dane()
 
-# --- 3. WYGLĄD (CSS) - PRECYZYJNE ZWĘŻENIE OKIENKA ---
+# --- 3. WYGLĄD (CSS) - TYLKO POPRAWKA SZEROKOŚCI ---
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background-color: #2c3e50 !important; }
@@ -43,33 +43,25 @@ st.markdown("""
     
     .card-val { font-size: 30px; display: block; margin-top: 5px; }
 
-    /* --- DOPASOWANIE OKIENKA DO WĄSKIEJ KOLUMNY --- */
-    
-    /* Wymuszamy na przycisku 100% szerokości kolumny */
+    /* KLUCZOWA POPRAWKA: Wymuszenie szerokości okienka do kolumny */
     div[data-testid="stPopover"] {
         width: 100% !important;
     }
+    
     div[data-testid="stPopover"] > button {
         width: 100% !important;
     }
 
-    /* GŁÓWNA POPRAWKA: Okienko (body) dopasowane do kolumny */
+    /* To sprawia, że okienko nie jest szersze niż kafelek */
     div[data-testid="stPopoverBody"] {
-        /* Szerokość 100% względem kolumny, w której „siedzi” przycisk */
-        width: 100% !important; 
+        width: 100% !important;
         min-width: 100% !important;
-        /* Blokujemy rozlewanie się na boki powyżej szerokości kafelka */
-        max-width: 100% !important; 
+        max-width: 100% !important;
         left: 0 !important;
         transform: none !important;
     }
-    
-    /* Stylizacja wnętrza okienka, żeby pola nie były zbyt ciasne */
-    div[data-testid="stPopoverBody"] > div {
-        padding: 15px !important;
-    }
 
-    /* KOLORY PRZYCISKÓW */
+    /* Przywrócenie kolorów przycisków */
     div[data-testid="stColumn"]:nth-of-type(1) button { background-color: #2980b9 !important; color: white !important; }
     div[data-testid="stColumn"]:nth-of-type(2) button { background-color: #27ae60 !important; color: white !important; }
     div[data-testid="stColumn"]:nth-of-type(3) button { background-color: #e67e22 !important; color: white !important; }
