@@ -26,25 +26,25 @@ EMAIL_ODBIORCA = "mange929598@gmail.com"
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 
-# --- 4. FUNKCJA WYSYŁKI RAPORTU + KOPII RATUNKOWEJ ---
+# --- 4. FUNKCJA WYSYŁKI I BACKUPU ---
 def send_email_with_backup(pdf_content, csv_content, date_str):
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_ADRES
         msg['To'] = EMAIL_ODBIORCA
-        msg['Subject'] = f"🍕 RAPORT I KOPIA RATUNKOWA - {date_str}"
+        msg['Subject'] = f"🍕 KOPIA I RAPORT - {date_str}"
         
-        body = "W zalaczniku: \n1. Raport PDF (do czytania)\n2. Plik CSV (KOPIA RATUNKOWA - nie usuwaj!)"
+        body = "W zalaczniku przesyłam raport PDF oraz surowy plik CSV (kopia ratunkowa)."
         msg.attach(MIMEText(body, 'plain'))
 
-        # Załącznik 1: PDF
+        # PDF
         part1 = MIMEBase('application', 'octet-stream')
         part1.set_payload(pdf_content)
         encoders.encode_base64(part1)
         part1.add_header('Content-Disposition', f"attachment; filename= raport_{date_str}.pdf")
         msg.attach(part1)
 
-        # Załącznik 2: CSV (Kopia zapasowa)
+        # CSV (Kopia ratunkowa)
         part2 = MIMEBase('application', 'octet-stream')
         part2.set_payload(csv_content.encode('utf-8'))
         encoders.encode_base64(part2)
@@ -99,7 +99,7 @@ def create_pdf(df_to_pdf, s_og, s_got, s_wyd):
 # --- 6. LOGOWANIE ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
-    wpisane = st.text_input("Podaj haslo", type="password")
+    wpisane = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
         if wpisane == MOJE_HASLO:
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
@@ -142,20 +142,20 @@ with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ Dodaj Gotowke", use_container_width=True):
-        if "os_v_28" not in st.session_state: st.session_state.os_v_28 = None
+        if "os_v_29" not in st.session_state: st.session_state.os_v_29 = None
         @st.dialog("Dodaj Gotowke")
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                if st.button(o, use_container_width=True): st.session_state.os_v_28 = o
-                if st.session_state.os_v_28 == o:
+                if st.button(o, use_container_width=True): st.session_state.os_v_29 = o
+                if st.session_state.os_v_29 == o:
                     kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key=f"k_{o}")
                     da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
                     if st.button("ZAPISZ", type="primary", use_container_width=True):
                         if kw:
                             n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
                             save_data(pd.concat([load_data(), n], ignore_index=True))
-                            st.session_state.os_v_28 = None; st.rerun()
+                            st.session_state.os_v_29 = None; st.rerun()
         add_g()
 
 with c3:
@@ -174,45 +174,54 @@ with c3:
 
 st.divider()
 df_h = df_active[['Data', 'Kwota', 'Data zdarzenia', 'Opis', 'Typ']].iloc[::-1]
-if "tk_28" not in st.session_state: st.session_state.tk_28 = 0
-event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk_28}",
+if "tk_29" not in st.session_state: st.session_state.tk_29 = 0
+event = st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, on_select="rerun", selection_mode="multi-row", key=f"table_{st.session_state.tk_29}",
     column_config={"Data": st.column_config.TextColumn("Data zapisu"), "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"), "Data zdarzenia": st.column_config.TextColumn("Data zdarzenia"), "Typ": None})
 
-# --- 9. SIDEBAR ---
+# --- 9. SIDEBAR (TWOJE NOWE NAPISY) ---
 with st.sidebar:
     st.header("⚙️ Opcje")
     pdf_bytes = create_pdf(df_h, s_og, s_got, s_wyd)
     st.download_button(label="📥 POBIERZ RAPORT PDF", data=pdf_bytes, file_name=f"raport_{datetime.now().strftime('%Y%m%d')}.pdf", mime="application/pdf", use_container_width=True)
     st.divider()
 
-    if "wipe_28" not in st.session_state: st.session_state.wipe_28 = 0
-    if st.session_state.wipe_28 == 0:
-        if st.button("🚀 WYSLIJ RAPORT I ZERUJ", type="primary", use_container_width=True):
-            st.session_state.wipe_28 = 1; st.rerun()
-    elif st.session_state.wipe_28 == 1:
-        st.warning("Czy wyslac kopie ratunkowa i wyzerowac system?")
-        if st.button("TAK, WYSLIJ I CZYSC", type="primary", use_container_width=True):
-            with st.spinner("Trwa zabezpieczanie danych..."):
+    if "wipe_29" not in st.session_state: st.session_state.wipe_29 = 0
+    if st.session_state.wipe_29 == 0:
+        # KROK 1: GŁÓWNY PRZYCISK
+        if st.button("🚀 POBIERZ RAPORT I USUŃ DANE", type="primary", use_container_width=True):
+            st.session_state.wipe_29 = 1; st.rerun()
+    elif st.session_state.wipe_29 == 1:
+        # KROK 2: POTWIERDZENIE
+        st.warning("Tak, pobierz i wyślij?")
+        if st.button("TAK, POBIERZ I WYŚLIJ", type="primary", use_container_width=True):
+            st.session_state.wipe_29 = 2; st.rerun()
+        if st.button("ANULUJ", use_container_width=True): st.session_state.wipe_29 = 0; st.rerun()
+    elif st.session_state.wipe_29 == 2:
+        # KROK 3: OSTATECZNA DECYZJA
+        st.error("JESTEŚ PEWIEN? Tej czynności nie można cofnąć!")
+        if st.button("POTWIERDZAM - USUŃ WSZYSTKO", type="primary", use_container_width=True):
+            with st.spinner("Zabezpieczanie i usuwanie..."):
                 d_full = load_data()
-                csv_str = d_full.to_csv(index=False) # To jest Twoja kopia ratunkowa
+                csv_str = d_full.to_csv(index=False)
                 date_str = datetime.now().strftime('%Y%m%d_%H%M')
                 
                 if send_email_with_backup(pdf_bytes, csv_str, date_str):
+                    # Zerowanie - zmiana statusu na archiwalny
                     d_full.loc[d_full['Status'] == 'Aktywny', 'Status'] = f"Arch_{date_str}"
-                    save_data(d_full); st.success("Dane bezpieczne na mailu!"); st.session_state.wipe_28 = 0; st.rerun()
-        if st.button("ANULUJ", use_container_width=True): st.session_state.wipe_28 = 0; st.rerun()
+                    save_data(d_full); st.success("Dane usunięte i wysłane na maila!"); st.session_state.wipe_29 = 0; st.rerun()
+        if st.button("POWRÓT", use_container_width=True): st.session_state.wipe_29 = 0; st.rerun()
 
     st.divider()
     sel = event.selection.rows
     if sel:
-        if "del_28" not in st.session_state: st.session_state.del_28 = 0
-        if st.session_state.del_28 == 0:
-            if st.button("🗑️ USUN ZAZNACZONE", use_container_width=True): st.session_state.del_28 = 1; st.rerun()
-        elif st.session_state.del_28 == 1:
-            st.error("Na pewno usunac?"); c_t, c_n = st.columns(2)
+        if "del_29" not in st.session_state: st.session_state.del_29 = 0
+        if st.session_state.del_29 == 0:
+            if st.button("🗑️ USUŃ ZAZNACZONE", use_container_width=True): st.session_state.del_29 = 1; st.rerun()
+        elif st.session_state.del_29 == 1:
+            st.error("Na pewno usunąć?"); c_t, c_n = st.columns(2)
             if c_t.button("TAK"):
                 ff = load_data(); ff.loc[df_h.index[sel], 'Status'] = 'Usunięty'; save_data(ff)
-                st.session_state.del_28 = 0; st.session_state.tk_28 += 1; st.rerun()
-            if c_n.button("NIE"): st.session_state.del_28 = 0; st.session_state.tk_28 += 1; st.rerun()
+                st.session_state.del_29 = 0; st.session_state.tk_29 += 1; st.rerun()
+            if c_n.button("NIE"): st.session_state.del_29 = 0; st.session_state.tk_29 += 1; st.rerun()
     st.divider()
     if st.button("🔄 ODSWIEŻ", use_container_width=True): st.rerun()
