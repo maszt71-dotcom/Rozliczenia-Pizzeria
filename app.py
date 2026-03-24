@@ -78,25 +78,32 @@ with c2:
         def add_g():
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             
-            # Pętla generująca harmonijkę
+            # Zapamiętujemy, kogo kliknięto
+            if "clicked_os" not in st.session_state: st.session_state.clicked_os = None
+
             for o in osoby:
-                with st.expander(o, expanded=False):
-                    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
-                    da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
-                    
-                    col_z, col_a = st.columns(2)
-                    
-                    if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
-                        if kw:
-                            n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
-                            save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                            st.rerun()
-                    
-                    # Trik: przycisk ANULUJ, który po prostu odświeża TYLKO dialog
-                    if col_a.button("ANULUJ (ZWIŃ)", use_container_width=True, key=f"cancel_{o}"):
-                        st.write("Wybrany kierowca został pominięty.") # Informacja pomocnicza
-                        # Kliknięcie w dowolny przycisk w harmonijce bez rerun i tak nie zamyka dialogu, 
-                        # ale pozwala na "odświeżenie" interakcji.
+                # Belka (przycisk) osoby
+                if st.button(o, use_container_width=True, key=f"btn_{o}"):
+                    st.session_state.clicked_os = o if st.session_state.clicked_os != o else None
+                
+                # Jeśli osoba jest kliknięta - "puchnie" miejsce na dane
+                if st.session_state.clicked_os == o:
+                    with st.container(border=True):
+                        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, placeholder="0.00", key=f"kw_{o}")
+                        da = st.date_input("Z dnia", datetime.now(), key=f"da_{o}")
+                        
+                        col_z, col_a = st.columns(2)
+                        if col_z.button("ZAPISZ", type="primary", use_container_width=True, key=f"save_{o}"):
+                            if kw:
+                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                                st.session_state.clicked_os = None # Zwija belkę
+                                st.rerun()
+                        
+                        if col_a.button("ANULUJ", use_container_width=True, key=f"can_{o}"):
+                            st.session_state.clicked_os = None # NATYCHMIAST ZWIJA i wraca do menu
+                            st.rerun() 
+
         add_g()
 
 with c3:
