@@ -113,42 +113,44 @@ with c1:
                     save_data(pd.concat([load_data(), n], ignore_index=True)); st.rerun()
         add_p()
 
+# --- FUNKCJA OKNA GOTÓWKI (POPRAWIONA) ---
+@st.dialog("Dodaj Gotowke")
+def show_gotowka_dialog():
+    if "os_temp" not in st.session_state:
+        st.session_state.os_temp = None
+    
+    osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+    
+    if st.session_state.os_temp is None:
+        st.write("Wybierz osobę:")
+        for o in osoby:
+            if st.button(o, use_container_width=True, key=f"sel_{o}"):
+                st.session_state.os_temp = o
+                st.rerun()
+    else:
+        o = st.session_state.os_temp
+        st.markdown(f"### Wprowadź dla: **{o}**")
+        kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key=f"val_{o}")
+        da = st.date_input("Data zdarzenia", datetime.now(), key=f"dat_{o}")
+        
+        col1, col2 = st.columns(2)
+        if col1.button("ZAPISZ", type="primary", use_container_width=True):
+            if kw:
+                n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
+                save_data(pd.concat([load_data(), n], ignore_index=True))
+                st.session_state.os_temp = None
+                st.rerun()
+        
+        if col2.button("⬅️ COFNIJ", use_container_width=True):
+            st.session_state.os_temp = None
+            st.rerun()
+
 with c2:
     bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><b>GOTÓWKA (SUMA)</b><br><b style="font-size:20px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    
     if st.button("➕ Dodaj Gotowke", use_container_width=True):
-        if "wybor_osoby" not in st.session_state: st.session_state.wybor_osoby = None
-        @st.dialog("Dodaj Gotowke")
-        def add_g():
-            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            
-            # Jeśli nikt nie jest wybrany, pokaż listę przycisków
-            if st.session_state.wybor_osoby is None:
-                for o in osoby:
-                    if st.button(o, use_container_width=True, key=f"sel_{o}"):
-                        st.session_state.wybor_osoby = o
-                        st.rerun()
-            else:
-                # Jeśli osoba wybrana, pokaż formularz
-                o = st.session_state.wybor_osoby
-                with st.container():
-                    st.markdown(f"### Wprowadź dla: **{o}**")
-                    kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key=f"k_{o}")
-                    da = st.date_input("Data zdarzenia", datetime.now(), key=f"d_{o}")
-                    
-                    col1, col2 = st.columns(2)
-                    if col1.button("ZAPISZ", type="primary", use_container_width=True, key=f"s_{o}"):
-                        if kw:
-                            n = pd.DataFrame([{'Data': datetime.now().strftime("%Y-%m-%d %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%Y-%m-%d")}])
-                            save_data(pd.concat([load_data(), n], ignore_index=True))
-                            st.session_state.wybor_osoby = None
-                            st.rerun()
-                    
-                    if col2.button("⬅️ COFNIJ", use_container_width=True, key=f"c_{o}"):
-                        st.session_state.wybor_osoby = None
-                        st.rerun()
-        add_g()
+        st.session_state.os_temp = None # Resetujemy przy otwarciu
+        show_gotowka_dialog()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><b>WYDATKI GOTÓWKOWE</b><br><b style="font-size:20px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
