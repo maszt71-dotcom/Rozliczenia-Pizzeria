@@ -3,7 +3,6 @@ import pandas as pd
 import os
 import io
 import smtplib
-import unicodedata
 from fpdf import FPDF
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -11,14 +10,6 @@ from email.mime.text import MIMEText
 from email import encoders
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
-
-# --- FUNKCJA NAPRAWCZA (ZAMIANA Ó -> O, Ł -> L ITP. TYLKO DLA PDF) ---
-def bez_ogonkow(tekst):
-    if not tekst: return ""
-    t = str(tekst)
-    t = t.replace('ł', 'l').replace('Ł', 'L').replace('ó', 'o').replace('Ó', 'O')
-    nfkd = unicodedata.normalize('NFKD', t)
-    return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
 # --- 1. KONFIGURACJA ---
 st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
@@ -33,26 +24,41 @@ DB_FILE = 'finanse_data.csv'
 EMAIL_KONTO = "mange929598@gmail.com"  
 HASLO_APP = "hlqivtidxgchoqdi" 
 
-# --- 3. GENERATOR PDF (NAPRAWIONY) ---
+# --- 3. GENERATOR PDF (Z OBSŁUGĄ POLSKICH ZNAKÓW) ---
 def create_pdf(df, s_og, s_got, s_wyd):
+    # Używamy czcionki DejaVu, która obsługuje polskie znaki (standard w fpdf2)
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", 'B', 16)
+    
+    # Dodanie wbudowanej czcionki Unicode
+    pdf.add_font('DejaVu', '', 'font/DejaVuSans.ttf', uni=True)
+    pdf.add_font('DejaVu', 'B', 'font/DejaVuSans-Bold.ttf', uni=True)
+    
+    # Jeśli powyższe pliki nie są dostępne na serwerze, fpdf2 użyje czcionki FreeSans
+    try:
+        pdf.set_font("DejaVu", 'B', 16)
+    except:
+        pdf.set_font("Arial", 'B', 16) # Fallback
+
     pdf.cell(0, 10, f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}", ln=True, align='C')
     pdf.ln(10)
 
-    # KOLOROWE PODSUMOWANIE (Formatowanie bezpieczne)
-    pdf.set_font("Helvetica", 'B', 12)
+    # PODSUMOWANIE
+    try: pdf.set_font("DejaVu", 'B', 12)
+    except: pdf.set_font("Arial", 'B', 12)
+    
     pdf.set_fill_color(212, 237, 218)
-    pdf.cell(60, 15, f"PRZYCHOD: {s_og:,.2f} zl", border=1, align='C', fill=True)
+    pdf.cell(60, 15, f"PRZYCHÓD: {s_og:,.2f} zł", border=1, align='C', fill=True)
     pdf.set_fill_color(255, 243, 205)
-    pdf.cell(60, 15, f"GOTOWKA: {s_got:,.2f} zl", border=1, align='C', fill=True)
+    pdf.cell(60, 15, f"GOTÓWKA: {s_got:,.2f} zł", border=1, align='C', fill=True)
     pdf.set_fill_color(248, 215, 218)
-    pdf.cell(60, 15, f"WYDATKI: {s_wyd:,.2f} zl", border=1, ln=True, align='C', fill=True)
+    pdf.cell(60, 15, f"WYDATKI: {s_wyd:,.2f} zł", border=1, ln=True, align='C', fill=True)
     pdf.ln(10)
 
     # TABELA
-    pdf.set_font("Helvetica", 'B', 10)
+    try: pdf.set_font("DejaVu", 'B', 10)
+    except: pdf.set_font("Arial", 'B', 10)
+    
     pdf.set_fill_color(230, 230, 230)
     pdf.cell(30, 10, "Data", border=1, fill=True)
     pdf.cell(60, 10, "Typ", border=1, fill=True)
@@ -60,13 +66,14 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(70, 10, "Opis", border=1, fill=True)
     pdf.ln()
 
-    pdf.set_font("Helvetica", size=10)
+    try: pdf.set_font("DejaVu", '', 10)
+    except: pdf.set_font("Arial", '', 10)
+    
     for _, row in df.iterrows():
-        # Tutaj automatycznie czyścimy tekst z "ogonków" przed zapisem do PDF
-        pdf.cell(30, 10, bez_ogonkow(row['Data zdarzenia']), border=1)
-        pdf.cell(60, 10, bez_ogonkow(row['Typ'])[:25], border=1)
-        pdf.cell(30, 10, f"{row['Kwota']:.2f} zl", border=1)
-        pdf.cell(70, 10, bez_ogonkow(row['Opis'])[:30], border=1)
+        pdf.cell(30, 10, str(row['Data zdarzenia']), border=1)
+        pdf.cell(60, 10, str(row['Typ']), border=1)
+        pdf.cell(30, 10, f"{row['Kwota']:.2f} zł", border=1)
+        pdf.cell(70, 10, str(row['Opis']), border=1)
         pdf.ln()
     
     return bytes(pdf.output())
@@ -78,7 +85,7 @@ def wyslij_raporty_final(df, s_og, s_got, s_wyd):
         msg['From'] = EMAIL_KONTO
         msg['To'] = EMAIL_KONTO
         msg['Subject'] = f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m %H:%M')}"
-        msg.attach(MIMEText("W zalaczniku raporty PDF i CSV.", 'plain'))
+        msg.attach(MIMEText("W załączniku raporty PDF i CSV.", 'plain', 'utf-8'))
 
         csv_data = df.to_csv(index=False).encode('utf-8')
         pdf_data = create_pdf(df, s_og, s_got, s_wyd)
@@ -96,7 +103,7 @@ def wyslij_raporty_final(df, s_og, s_got, s_wyd):
         server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Blad wysylki: {e}")
+        st.sidebar.error(f"Błąd wysyłki: {e}")
         return False
 
 # --- 5. LOGIKA DANYCH ---
@@ -132,8 +139,8 @@ st.markdown("""
 # --- 7. LOGOWANIE ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
-    wpisane = st.text_input("Haslo", type="password")
-    if st.button("Zaloguj sie"):
+    wpisane = st.text_input("Hasło", type="password")
+    if st.button("Zaloguj się"):
         if wpisane == MOJE_HASLO:
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
@@ -143,7 +150,7 @@ st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; height: 100px;">Przychod: {s_og:,.2f} zl</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; height: 100px;">Przychód: {s_og:,.2f} zł</div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"):
         st.session_state.open_section = "P" if getattr(st.session_state, "open_section", None) != "P" else None; st.rerun()
     if getattr(st.session_state, "open_section", None) == "P":
@@ -158,7 +165,7 @@ with c1:
 
 with c2:
     bg = "#fff3cd" if s_got >= 0 else "#ff0000"; txt = "#856404" if s_got >= 0 else "#ffffff"
-    st.markdown(f'<div style="background-color:{bg}; color:{txt}; padding:10px; border-radius:10px; text-align:center; height: 100px;">Gotowka: {s_got:,.2f} zl</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:{bg}; color:{txt}; padding:10px; border-radius:10px; text-align:center; height: 100px;">Gotówka: {s_got:,.2f} zł</div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="g"):
         st.session_state.open_section = "G" if getattr(st.session_state, "open_section", None) != "G" else None; st.session_state.osoba_sel = None; st.rerun()
     if getattr(st.session_state, "open_section", None) == "G":
@@ -179,7 +186,7 @@ with c2:
                 if st.button("COFNIJ"): st.session_state.osoba_sel = None; st.rerun()
 
 with c3:
-    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; height: 100px;">Wydatki: {s_wyd:,.2f} zl</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; height: 100px;">Wydatki: {s_wyd:,.2f} zł</div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"):
         st.session_state.open_section = "W" if getattr(st.session_state, "open_section", None) != "W" else None; st.rerun()
     if getattr(st.session_state, "open_section", None) == "W":
@@ -196,25 +203,23 @@ with c3:
 # --- 9. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu Raportów")
-    
-    # Przygotowanie raportu PDF (z czyszczeniem ogonków) i CSV (z ogonkami)
     csv_rep = df_active.to_csv(index=False).encode('utf-8')
     pdf_rep = create_pdf(df_active, s_og, s_got, s_wyd)
 
     st.download_button("📥 Pobierz CSV", data=csv_rep, file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=pdf_rep, file_name="raport.pdf", use_container_width=True)
 
-    if st.button("📧 Wyslij raporty", use_container_width=True):
+    if st.button("📧 Wyślij raporty", use_container_width=True):
         if wyslij_raporty_final(df_active, s_og, s_got, s_wyd):
-            st.success("✅ RAPORTY WYSLANE!")
+            st.success("✅ RAPORTY WYSŁANE!")
 
     st.divider()
-    if st.button("🗑️ USUN HISTORIE", type="primary", use_container_width=True):
+    if st.button("🗑️ USUŃ HISTORIĘ", type="primary", use_container_width=True):
         st.session_state.confirm = True; st.rerun()
     
     if getattr(st.session_state, "confirm", False):
-        st.error("CZY JESTES PEWIEN? Nie mozna cofnac!")
-        if st.button("TAK, USUN WSZYSTKO"):
+        st.error("CZY JESTEŚ PEWIEN? Nie można cofnąć!")
+        if st.button("TAK, USUŃ WSZYSTKO"):
             full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'
             save_data(full); st.session_state.confirm = False; st.rerun()
         if st.button("NIE"): st.session_state.confirm = False; st.rerun()
