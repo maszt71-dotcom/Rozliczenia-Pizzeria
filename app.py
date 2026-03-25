@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import os
@@ -7,7 +6,7 @@ from fpdf import FPDF
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- FUNKCJA NAPRAWCZA DLA PDF ---
+# --- FUNKCJA NAPRAWCZA DLA PDF (ZAMIANA OGONKÓW) ---
 def pdf_safe(txt):
     if not txt: return ""
     rep = {"ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z",
@@ -23,7 +22,7 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- 2. LOGOWANIE (PRZYWRÓCONE) ---
+# --- 2. LOGOWANIE (TWOJA WERSJA) ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
@@ -69,7 +68,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
         pdf.cell(0, 10, pdf_safe(f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"), ln=True, border=1)
     return bytes(pdf.output())
 
-# --- 5. WIDOK GŁÓWNY ---
+# --- 5. WIDOK GŁÓWNY (PRZYWRÓCONE TWOJE KAFELKI HTML) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
