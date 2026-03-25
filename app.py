@@ -3,7 +3,6 @@ import pandas as pd
 import os
 import io
 import smtplib
-import base64
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
@@ -96,6 +95,7 @@ if cookies.get("is_logged") != "true":
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
+# PRZYCHÓD
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; height: 100px;">Przychód: {s_og:,.2f} zł</div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"): st.session_state.open_section = "P" if getattr(st.session_state, "open_section", None) != "P" else None; st.rerun()
@@ -109,6 +109,7 @@ with c1:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                     st.session_state.open_section = None; st.rerun()
 
+# GOTÓWKA
 with c2:
     bg = "#fff3cd" if s_got >= 0 else "#ff0000"; txt = "#856404" if s_got >= 0 else "#ffffff"
     st.markdown(f'<div style="background-color:{bg}; color:{txt}; padding:10px; border-radius:10px; text-align:center; height: 100px;">Gotówka: {s_got:,.2f} zł</div>', unsafe_allow_html=True)
@@ -129,6 +130,7 @@ with c2:
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                         st.session_state.open_section = None; st.session_state.selected_person = None; st.rerun()
 
+# WYDATKI
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; height: 100px;">Wydatki: {s_wyd:,.2f} zł</div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"): st.session_state.open_section = "W" if getattr(st.session_state, "open_section", None) != "W" else None; st.rerun()
@@ -147,42 +149,23 @@ with c3:
 with st.sidebar:
     st.header("⚙️ Menu Raportów")
     
-    # Dane raportu
-    report_df = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']]
-    csv_data = report_df.to_csv(index=False).encode('utf-8')
-    
-    # SZTUCZKA NA POBIERANIE DWÓCH PLIKÓW JEDNYM PRZYCISKIEM
-    if st.button("📥 Pobierz raport (PDF + CSV)", use_container_width=True):
-        # Przygotowanie danych w Base64 dla JS
-        csv_b64 = base64.b64encode(csv_data).decode()
-        pdf_b64 = base64.b64encode(csv_data).decode() # Tutaj też CSV jako symulacja PDF
-        
-        js = f"""
-            <script>
-                function download(filename, text) {{
-                    var element = document.createElement('a');
-                    element.setAttribute('href', 'data:text/csv;base64,' + text);
-                    element.setAttribute('download', filename);
-                    element.style.display = 'none';
-                    document.body.appendChild(element);
-                    element.click();
-                    document.body.removeChild(element);
-                }}
-                download('raport.csv', '{csv_b64}');
-                download('raport.pdf', '{pdf_b64}');
-            </script>
-        """
-        st.components.v1.html(js, height=0)
-        st.info("Pobieranie rozpoczęte...")
+    # Dane do plików
+    csv_data = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].to_csv(index=False).encode('utf-8')
 
-    # Wyślij
+    # DWA ODDZIELNE PRZYCISKI POBIERANIA
+    st.download_button("📥 Pobierz raport CSV", data=csv_data, file_name="raport.csv", use_container_width=True)
+    st.download_button("📥 Pobierz raport PDF", data=csv_data, file_name="raport.pdf", use_container_width=True)
+
+    st.divider()
+
+    # WYŚLIJ
     if st.button("📧 Wyślij raport", use_container_width=True):
         if wyslij_raporty_final(df_active):
             st.success("✅ RAPORTY WYSŁANE!")
 
     st.divider()
 
-    # Usuń historię
+    # USUŃ HISTORIĘ
     if "confirm_delete" not in st.session_state: st.session_state.confirm_delete = False
     if not st.session_state.confirm_delete:
         if st.button("🗑️ USUŃ HISTORIĘ", type="primary", use_container_width=True):
@@ -197,6 +180,9 @@ with st.sidebar:
         if c_no.button("NIE"):
             st.session_state.confirm_delete = False; st.rerun()
 
+    st.divider()
+    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
+
 # --- 9. TABELA ---
 st.divider()
-st.dataframe(report_df.iloc[::-1], use_container_width=True, hide_index=True)
+st.dataframe(df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1], use_container_width=True, hide_index=True)
