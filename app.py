@@ -29,14 +29,23 @@ if cookies.get("is_logged") != "true":
             cookies["is_logged"] = "true"
             cookies.save()
             st.rerun()
+        else:
+            st.error("Nieprawidłowe hasło")
     st.stop()
 
 # --- 2. DANE ---
 DB_FILE = 'finanse_data.csv'
 
 def load_data():
-    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
-    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+    if os.path.exists(DB_FILE): 
+        df = pd.read_csv(DB_FILE)
+    else: 
+        df = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+    
+    # Upewnienie się, że wszystkie kolumny istnieją
+    for col in ['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia']:
+        if col not in df.columns: df[col] = ""
+    return df
 
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
@@ -61,7 +70,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"
+        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return bytes(pdf.output())
 
@@ -78,7 +87,7 @@ with c1:
     if getattr(st.session_state, "s", "") == "P":
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
-            kw_p = st.number_input("Kwota", min_value=0.0, step=1.0, key="val_p")
+            kw_p = st.number_input("Kwota", min_value=0.0, step=1.0, key="p_v")
             if st.button("ZAPISZ", key="save_p"):
                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -96,16 +105,20 @@ with c2:
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             if not getattr(st.session_state, "os", None):
                 for o in osoby:
-                    if st.button(o, key=f"os_{o}"): st.session_state.os = o; st.rerun()
+                    if st.button(o, key=f"os_{o}"): 
+                        st.session_state.os = o
+                        st.rerun()
             else:
                 st.write(f"Wybrano: **{st.session_state.os}**")
                 d_g = st.date_input("Data zdarzenia", datetime.now(), key="date_g")
-                kw_g = st.number_input("Kwota", min_value=0.0, step=1.0, key="val_g")
-                if st.button("ZAPISZ G"):
+                kw_g = st.number_input(f"Kwota", min_value=0.0, step=1.0, key="g_v")
+                if st.button("ZAPISZ G", key="save_g"):
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                     st.session_state.s = ""; st.session_state.os = None; st.rerun()
-                if st.button("COFNIJ"): st.session_state.os = None; st.rerun()
+                if st.button("COFNIJ"): 
+                    st.session_state.os = None
+                    st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -116,9 +129,9 @@ with c3:
     if getattr(st.session_state, "s", "") == "W":
         with st.container(border=True):
             d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
-            kw_w = st.number_input("Kwota", min_value=0.0, step=1.0, key="val_w")
-            op_w = st.text_input("Opis", key="desc_w")
-            if st.button("ZAPISZ W"):
+            kw_w = st.number_input("Kwota", min_value=0.0, step=1.0, key="w_v")
+            op_w = st.text_input("Opis", key="w_d")
+            if st.button("ZAPISZ W", key="save_w"):
                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                 st.session_state.s = ""; st.rerun()
@@ -128,8 +141,17 @@ with st.sidebar:
     st.header("⚙️ Menu")
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
+    
     if st.button("🗑️ USUŃ HISTORIĘ", type="primary", use_container_width=True):
-        full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'; save_data(full); st.rerun()
+        full = load_data()
+        full.loc[full["Status"] == "Aktywny", "Status"] = "Archiwum"
+        save_data(full)
+        st.rerun()
 
 st.divider()
-st.dataframe(df_active[['Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1], use_container_width=True, hide_index=True)
+if not df_active.empty:
+    show_df = df_active[['Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1].copy()
+    show_df['Kwota'] = show_df['Kwota'].map(lambda x: f"{x:,.2f} zł")
+    st.dataframe(show_df, use_container_width=True, hide_index=True)
+else:
+    st.info("Brak aktywnych danych.")
