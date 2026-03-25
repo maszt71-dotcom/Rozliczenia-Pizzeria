@@ -10,7 +10,7 @@ from email import encoders
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- FUNKCJA CZYSZCZĄCA TEKST DLA PDF (ŻEBY NIE BYŁO BŁĘDU UNICODE) ---
+# --- TA FUNKCJA TYLKO PODMIENIA LITERY DLA PDF, ŻEBY NIE BYŁO BŁĘDU ---
 def pdf_safe(txt):
     if not txt: return ""
     rep = {"ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z",
@@ -19,12 +19,14 @@ def pdf_safe(txt):
     for k, v in rep.items(): t = t.replace(k, v)
     return t
 
-# --- 1. KONFIGURACJA I LOGOWANIE ---
+# --- 1. KONFIGURACJA I CIASTECZKA ---
 st.set_page_config(page_title="Pizzeria", layout="wide")
 
 cookies = CookieManager()
-if not cookies.ready(): st.stop()
+if not cookies.ready():
+    st.stop()
 
+# --- 2. LOGOWANIE (TAK JAK BYŁO WCZEŚNIEJ) ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
@@ -33,9 +35,11 @@ if cookies.get("is_logged") != "true":
             cookies["is_logged"] = "true"
             cookies.save()
             st.rerun()
+        else:
+            st.error("Błędne hasło")
     st.stop()
 
-# --- 2. DANE ---
+# --- 3. DANE I PLIKI ---
 DB_FILE = 'finanse_data.csv'
 EMAIL_KONTO = "mange929598@gmail.com"  
 HASLO_APP = "hlqivtidxgchoqdi" 
@@ -44,7 +48,8 @@ def load_data():
     if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
-def save_data(df): df.to_csv(DB_FILE, index=False)
+def save_data(df):
+    df.to_csv(DB_FILE, index=False)
 
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
@@ -54,7 +59,7 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF (BEZ DODATKOWYCH CZCIONEK) ---
+# --- 4. GENERATOR PDF (UŻYWA HELVETICA - STANDARD) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -63,18 +68,17 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.ln(10)
     
     pdf.set_font("Helvetica", 'B', 12)
-    res = f"Przychod: {s_og:.2f} zl | Gotowka: {s_got:.2f} zl | Wydatki: {s_wyd:.2f} zl"
-    pdf.cell(0, 10, pdf_safe(res), ln=True)
+    pdf.cell(0, 10, pdf_safe(f"Przychod: {s_og:.2f} zl | Gotowka: {s_got:.2f} zl | Wydatki: {s_wyd:.2f} zl"), ln=True)
     pdf.ln(5)
 
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"
-        pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
+        # Każda komórka musi być przepuszczona przez pdf_safe
+        pdf.cell(0, 10, pdf_safe(f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"), ln=True, border=1)
     
     return bytes(pdf.output())
 
-# --- 4. WIDOK GŁÓWNY ---
+# --- 5. WIDOK GŁÓWNY (KAFELKI) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -97,9 +101,8 @@ with c2:
             for o in osoby:
                 if st.button(o): st.session_state.os = o; st.rerun()
         else:
-            st.write(f"Osoba: {st.session_state.os}")
-            kw = st.number_input("Kwota", value=None)
-            if st.button("ZAPISZ GOTÓWKĘ"):
+            kw = st.number_input(f"Kwota ({st.session_state.os})", value=None)
+            if st.button("ZAPISZ G"):
                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                 st.session_state.s = ""; st.rerun()
@@ -109,19 +112,18 @@ with c3:
     if st.button("➕ DODAJ", key="w"): st.session_state.s = "W"; st.rerun()
     if getattr(st.session_state, "s", "") == "W":
         kw = st.number_input("Kwota", value=None); op = st.text_input("Opis")
-        if st.button("ZAPISZ WYDATEK"):
+        if st.button("ZAPISZ W"):
             n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
             save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
             st.session_state.s = ""; st.rerun()
 
-# --- 5. PASEK BOCZNY ---
+# --- 6. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     
-    # Tutaj naprawiony generator PDF
-    pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
-    st.download_button("📥 Pobierz PDF", data=pdf_file, file_name="raport.pdf", use_container_width=True)
+    # Naprawione pobieranie PDF
+    st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
 
     if st.button("🗑️ USUŃ HISTORIĘ", type="primary", use_container_width=True):
         full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'
