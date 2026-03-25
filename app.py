@@ -70,9 +70,7 @@ if cookies.get("is_logged") != "true":
 # --- 2. DANE ---
 DB_FILE = 'finanse_data.csv'
 def load_data():
-    if os.path.exists(DB_FILE): 
-        df = pd.read_csv(DB_FILE)
-        return df
+    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
 def save_data(df): df.to_csv(DB_FILE, index=False)
@@ -173,24 +171,25 @@ with st.sidebar:
 
     st.divider()
     
-    # USUWANIE ZAZNACZONYCH
-    if 'selected_rows' in st.session_state and len(st.session_state.selected_rows) > 0:
-        if st.button(f"🗑️ USUŃ ZAZNACZONE ({len(st.session_state.selected_rows)})", use_container_width=True, type="primary"):
-            st.session_state.confirm_multi = True
+    # OBSŁUGA USUWANIA LINII
+    if 'to_del' in st.session_state and st.session_state.to_del:
+        if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.to_del)})", use_container_width=True, type="primary"):
+            st.session_state.ask_del = True
         
-        if st.session_state.get('confirm_multi'):
-            with st.container(border=True):
-                st.warning("Usunąć wybrane wpisy?")
-                c_y, c_n = st.columns(2)
-                if c_y.button("TAK"):
-                    full = load_data()
-                    full.loc[st.session_state.selected_rows, 'Status'] = 'Archiwum'
-                    save_data(full)
-                    st.session_state.confirm_multi = False
-                    st.rerun()
-                if c_n.button("NIE"):
-                    st.session_state.confirm_multi = False
-                    st.rerun()
+        if st.session_state.get('ask_del'):
+            st.warning("Usunąć wybrane?")
+            col_y, col_n = st.columns(2)
+            if col_y.button("TAK", use_container_width=True):
+                full = load_data()
+                # Usuwamy wybrane po indeksach
+                full = full.drop(st.session_state.to_del)
+                save_data(full)
+                st.session_state.to_del = []
+                st.session_state.ask_del = False
+                st.rerun()
+            if col_n.button("NIE", use_container_width=True):
+                st.session_state.ask_del = False
+                st.rerun()
 
     st.divider()
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
@@ -215,24 +214,19 @@ with st.sidebar:
 
 st.divider()
 
-# --- 6. TABELA (TWOJA ORYGINALNA) Z DODANYM WYBOREM ---
+# --- 6. HISTORIA I WYBÓR (PTASZKI) ---
 st.subheader("Historia wpisów")
 if not df_active.empty:
-    # Stworzenie tabeli z checkboxami (ptaszkami)
-    df_with_selections = df_active.copy()
-    df_with_selections.insert(0, "Wybierz", False)
+    # Wybór linii za pomocą prostego multiselecta z opisem
+    options = df_active.index.tolist()
+    def format_func(i):
+        r = df_active.loc[i]
+        return f"{r['Data']} - {r['Typ']} - {r['Kwota']} zł"
     
-    edited_df = st.data_editor(
-        df_with_selections.iloc[::-1],
-        column_config={"Wybierz": st.column_config.CheckboxColumn(required=True)},
-        disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis", "Status"],
-        hide_index=True,
-        use_container_width=True,
-        key="data_editor"
-    )
+    selected = st.multiselect("Zaznacz wpisy do usunięcia (ptaszki):", options, format_func=format_func)
+    st.session_state.to_del = selected
 
-    # Zapisywanie zaznaczonych indeksów do sesji
-    selected_indices = edited_df[edited_df["Wybierz"] == True].index
-    st.session_state.selected_rows = selected_indices
+    # TWOJA ORYGINALNA TABELA - NIETKNIĘTA
+    st.dataframe(df_active[['Data', 'Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1], use_container_width=True, hide_index=True)
 else:
     st.info("Brak aktywnych wpisów.")
