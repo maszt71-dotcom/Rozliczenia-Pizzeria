@@ -32,10 +32,9 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# --- CSS: TYLKO SZEROKOŚĆ PRZYCISKU ---
+# --- CSS: SZEROKOŚĆ PRZYCISKU ---
 st.markdown("""
     <style>
-    /* Wymuszenie szerokości przycisku na 100% kolumny */
     div[data-testid="stColumn"] .stButton {
         width: 100% !important;
     }
@@ -47,12 +46,10 @@ st.markdown("""
         margin-top: 5px !important;
     }
     
-    /* Kolory przycisków DODAJ */
     div[data-testid="stColumn"]:nth-of-type(1) .stButton > button { background-color: #d4edda !important; color: #155724 !important; }
     div[data-testid="stColumn"]:nth-of-type(2) .stButton > button { background-color: #fff3cd !important; color: #856404 !important; }
     div[data-testid="stColumn"]:nth-of-type(3) .stButton > button { background-color: #f8d7da !important; color: #721c24 !important; }
 
-    /* Ukrycie strzałek w polach liczbowych */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -92,8 +89,14 @@ with c1:
                     st.session_state.open_section = None; st.rerun()
 
 with c2:
-    bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
-    st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    # --- DYNAMICZNY KOLOR DLA GOTÓWKI ---
+    if s_got >= 0:
+        bg_got = "#fff3cd"; brd_got = "#ffc107"; txt_got = "#856404"
+    else:
+        bg_got = "#ff0000"; brd_got = "#990000"; txt_got = "#ffffff" # MOCNY CZERWONY I BIAŁY NAPIS
+        
+    st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    
     if st.button("➕ DODAJ", key="btn_g"):
         st.session_state.open_section = "G" if st.session_state.open_section != "G" else None
         st.session_state.selected_person = None 
