@@ -72,9 +72,8 @@ DB_FILE = 'finanse_data.csv'
 def load_data():
     if os.path.exists(DB_FILE): 
         df = pd.read_csv(DB_FILE)
-        if 'id' not in df.columns: df['id'] = range(len(df))
         return df
-    return pd.DataFrame(columns=['id', 'Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
 def save_data(df): df.to_csv(DB_FILE, index=False)
 
@@ -123,7 +122,7 @@ with c1:
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
-                    n = {'id': int(datetime.now().timestamp()), 'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
@@ -143,7 +142,7 @@ with c2:
                         cs, cb = st.columns(2)
                         if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g:
-                                n = {'id': int(datetime.now().timestamp()), 'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
+                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.session_state.s = ""; st.session_state.os = None; st.rerun()
                         if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun()
             st.divider()
@@ -159,13 +158,11 @@ with c3:
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w:
-                    n = {'id': int(datetime.now().timestamp()), 'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 # --- 5. PASEK BOCZNY ---
-selected_ids = []
-
 with st.sidebar:
     st.header("⚙️ Menu")
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
@@ -176,28 +173,24 @@ with st.sidebar:
 
     st.divider()
     
-    # OBSŁUGA USUWANIA ZAZNACZONYCH
-    if 'to_delete' in st.session_state and st.session_state.to_delete:
-        st.error(f"Wybrano linii: {len(st.session_state.to_delete)}")
-        if 'confirm_multi' not in st.session_state: st.session_state.confirm_multi = False
+    # USUWANIE ZAZNACZONYCH
+    if 'selected_rows' in st.session_state and len(st.session_state.selected_rows) > 0:
+        if st.button(f"🗑️ USUŃ ZAZNACZONE ({len(st.session_state.selected_rows)})", use_container_width=True, type="primary"):
+            st.session_state.confirm_multi = True
         
-        if not st.session_state.confirm_multi:
-            if st.button("🗑️ USUŃ ZAZNACZONE", use_container_width=True, type="primary"):
-                st.session_state.confirm_multi = True
-                st.rerun()
-        else:
-            st.warning("Czy na pewno usunąć wybrane?")
-            c_y, c_n = st.columns(2)
-            if c_y.button("TAK", use_container_width=True):
-                full = load_data()
-                full.loc[full['id'].isin(st.session_state.to_delete), 'Status'] = 'Archiwum'
-                save_data(full)
-                st.session_state.to_delete = []
-                st.session_state.confirm_multi = False
-                st.rerun()
-            if c_n.button("NIE", use_container_width=True):
-                st.session_state.confirm_multi = False
-                st.rerun()
+        if st.session_state.get('confirm_multi'):
+            with st.container(border=True):
+                st.warning("Usunąć wybrane wpisy?")
+                c_y, c_n = st.columns(2)
+                if c_y.button("TAK"):
+                    full = load_data()
+                    full.loc[st.session_state.selected_rows, 'Status'] = 'Archiwum'
+                    save_data(full)
+                    st.session_state.confirm_multi = False
+                    st.rerun()
+                if c_n.button("NIE"):
+                    st.session_state.confirm_multi = False
+                    st.rerun()
 
     st.divider()
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
@@ -222,33 +215,24 @@ with st.sidebar:
 
 st.divider()
 
-# --- 6. TABELA Z PTASZKAMI ---
+# --- 6. TABELA (TWOJA ORYGINALNA) Z DODANYM WYBOREM ---
 st.subheader("Historia wpisów")
 if not df_active.empty:
-    df_disp = df_active.iloc[::-1]
+    # Stworzenie tabeli z checkboxami (ptaszkami)
+    df_with_selections = df_active.copy()
+    df_with_selections.insert(0, "Wybierz", False)
     
-    # Przygotowanie listy do zaznaczania
-    if 'to_delete' not in st.session_state: st.session_state.to_delete = []
+    edited_df = st.data_editor(
+        df_with_selections.iloc[::-1],
+        column_config={"Wybierz": st.column_config.CheckboxColumn(required=True)},
+        disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis", "Status"],
+        hide_index=True,
+        use_container_width=True,
+        key="data_editor"
+    )
 
-    for idx, row in df_disp.iterrows():
-        cols = st.columns([0.5, 1, 1, 1, 1, 2])
-        
-        # Checkbox (ptaszek)
-        is_checked = cols[0].checkbox("", key=f"check_{row['id']}", value=(row['id'] in st.session_state.to_delete))
-        
-        # Logika zaznaczania
-        if is_checked and row['id'] not in st.session_state.to_delete:
-            st.session_state.to_delete.append(row['id'])
-            st.rerun()
-        elif not is_checked and row['id'] in st.session_state.to_delete:
-            st.session_state.to_delete.remove(row['id'])
-            st.rerun()
-
-        cols[1].write(row['Data'])
-        cols[2].write(row['Data zdarzenia'])
-        cols[3].write(row['Typ'])
-        cols[4].write(f"**{row['Kwota']:.2f}**")
-        cols[5].write(row['Opis'])
-        st.divider()
+    # Zapisywanie zaznaczonych indeksów do sesji
+    selected_indices = edited_df[edited_df["Wybierz"] == True].index
+    st.session_state.selected_rows = selected_indices
 else:
     st.info("Brak aktywnych wpisów.")
