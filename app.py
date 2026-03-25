@@ -89,23 +89,27 @@ with c2:
         st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
-            if not st.session_state.os:
-                osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-                for o in osoby:
-                    if st.button(o, key=f"os_{o}", use_container_width=True): 
-                        st.session_state.os = o; st.rerun()
-            else:
-                st.write(f"Dla: **{st.session_state.os}**")
-                d_g = st.date_input("Data zdarzenia", datetime.now(), key="date_g")
-                kw_g = st.number_input("Kwota", value=None, step=1.0, key="val_g")
-                cs, cb = st.columns(2)
-                if cs.button("ZAPISZ", key="save_g", use_container_width=True):
-                    if kw_g:
-                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
-                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                        st.session_state.s = ""; st.session_state.os = None; st.rerun()
-                if cb.button("COFNIJ", use_container_width=True):
-                    st.session_state.os = None; st.rerun()
+            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+            for o in osoby:
+                if st.button(o, key=f"os_{o}", use_container_width=True):
+                    # Jeśli klikniesz tę samą osobę drugi raz, zamknij formularz (toggle)
+                    st.session_state.os = o if st.session_state.os != o else None
+                    st.rerun()
+                
+                # Formularz pojawia się bezpośrednio pod klikniętą osobą
+                if st.session_state.os == o:
+                    with st.container(border=True):
+                        st.markdown(f"Wpisujesz dla: **{o}**")
+                        d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
+                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"val_g_{o}")
+                        c_s, c_c = st.columns(2)
+                        if c_s.button("ZAPISZ", key=f"save_g_{o}", use_container_width=True):
+                            if kw_g:
+                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
+                                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                                st.session_state.s = ""; st.session_state.os = None; st.rerun()
+                        if c_c.button("COFNIJ", key=f"back_{o}", use_container_width=True):
+                            st.session_state.os = None; st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -132,5 +136,5 @@ with st.sidebar:
         full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'; save_data(full); st.rerun()
 
 st.divider()
-# Wyświetlamy: Czas wpisu (Data), Dzień zdarzenia, Typ, Kwotę i Opis
+# Tabela z automatyczną datą i godziną (Data) oraz wybranym dniem (Data zdarzenia)
 st.dataframe(df_active[['Data', 'Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1], use_container_width=True, hide_index=True)
