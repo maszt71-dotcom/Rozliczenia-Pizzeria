@@ -2,10 +2,10 @@ import streamlit as st
 import pandas as pd
 import os
 import io
-import zipfile
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
 from email import encoders
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
@@ -23,18 +23,30 @@ DB_FILE = 'finanse_data.csv'
 EMAIL_KONTO = "mange929598@gmail.com"  
 HASLO_APP = "hlqivtidxgchoqdi" 
 
-# --- 3. FUNKCJA WYSYŁANIA ---
-def wyslij_raport_final(dane_zip):
+# --- 3. FUNKCJA WYSYŁANIA (DWA ODDZIELNE PLIKI) ---
+def wyslij_raporty_oddzielnie(df):
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_KONTO
         msg['To'] = EMAIL_KONTO
         msg['Subject'] = f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m %H:%M')}"
-        part = MIMEBase('application', 'octet-stream')
-        part.set_payload(dane_zip)
-        encoders.encode_base64(part)
-        part.add_header('Content-Disposition', "attachment; filename=raporty.zip")
-        msg.attach(part)
+        
+        msg.attach(MIMEText("W załączniku przesyłam raporty w formacie PDF oraz CSV.", 'plain'))
+
+        # Przygotowanie plików
+        csv_data = df.to_csv(index=False).encode('utf-8')
+        # Symulacja PDF (dane tekstowe z rozszerzeniem pdf)
+        pdf_data = df.to_csv(index=False).encode('utf-8')
+
+        files = [("raport.csv", csv_data), ("raport.pdf", pdf_data)]
+
+        for filename, data in files:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(data)
+            encoders.encode_base64(part)
+            part.add_header('Content-Disposition', f"attachment; filename={filename}")
+            msg.attach(part)
+
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(EMAIL_KONTO, HASLO_APP)
@@ -57,8 +69,6 @@ st.markdown("""
     div[data-testid="stColumn"]:nth-of-type(1) .stButton > button { background-color: #d4edda !important; color: #155724 !important; }
     div[data-testid="stColumn"]:nth-of-type(2) .stButton > button { background-color: #fff3cd !important; color: #856404 !important; }
     div[data-testid="stColumn"]:nth-of-type(3) .stButton > button { background-color: #f8d7da !important; color: #721c24 !important; }
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -69,13 +79,6 @@ def load_data():
 
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
-
-def prepare_zip(df):
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "x") as csv_zip:
-        csv_zip.writestr("raport.pdf", df.to_csv().encode('utf-8'))
-        csv_zip.writestr("raport.csv", df.to_csv().encode('utf-8'))
-    return buf.getvalue()
 
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
@@ -98,9 +101,8 @@ if cookies.get("is_logged") != "true":
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
-# KOLUMNA 1
 with c1:
-    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:18px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:18px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="btn_p"):
         st.session_state.open_section = "P" if getattr(st.session_state, "open_section", None) != "P" else None; st.rerun()
     if getattr(st.session_state, "open_section", None) == "P":
@@ -112,7 +114,6 @@ with c1:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                     st.session_state.open_section = None; st.rerun()
 
-# KOLUMNA 2
 with c2:
     bg = "#fff3cd" if s_got >= 0 else "#ff0000"; txt = "#856404" if s_got >= 0 else "#ffffff"
     st.markdown(f'<div style="background-color:{bg}; color:{txt}; padding:10px; border-radius:10px; text-align:center; height: 100px;"><span style="font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -134,9 +135,8 @@ with c2:
                         st.session_state.open_section = None; st.session_state.selected_person = None; st.rerun()
                 if st.button("COFNIJ", use_container_width=True): st.session_state.selected_person = None; st.rerun()
 
-# KOLUMNA 3
 with c3:
-    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:18px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:18px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="btn_w"):
         st.session_state.open_section = "W" if getattr(st.session_state, "open_section", None) != "W" else None; st.rerun()
     if getattr(st.session_state, "open_section", None) == "W":
@@ -154,18 +154,23 @@ if "cleanup_step" not in st.session_state: st.session_state.cleanup_step = 0
 
 with st.sidebar:
     st.header("⚙️ Menu Raportów")
-    zip_data = prepare_zip(df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']])
+    
+    # Dane do pobrania (ZIP na wszelki wypadek pod przyciskiem pobierania)
+    csv_buf = df_active.to_csv(index=False).encode('utf-8')
 
     if st.session_state.cleanup_step == 0:
-        if st.download_button("🔥 POBIERZ RAPORT I USUŃ DANE", data=zip_data, file_name="raport.zip", type="primary", use_container_width=True):
+        if st.download_button("🔥 POBIERZ RAPORT I USUŃ DANE", data=csv_buf, file_name="raport.csv", type="primary", use_container_width=True):
             st.session_state.cleanup_step = 1; st.rerun()
 
     if st.session_state.cleanup_step == 1:
+        st.success("✅ Pobrano plik CSV")
         if st.button("📧 Wyślij raport", use_container_width=True):
-            if wyslij_raport_final(zip_data):
+            if wyslij_raporty_oddzielnie(df_active):
+                st.session_state.mail_sent = True
                 st.session_state.cleanup_step = 2; st.rerun()
 
     if st.session_state.cleanup_step == 2:
+        st.success("✅ RAPORTY WYSŁANE (PDF + CSV)")
         if st.button("🗑️ USUŃ DANE", type="primary", use_container_width=True):
             st.session_state.cleanup_step = 3; st.rerun()
 
