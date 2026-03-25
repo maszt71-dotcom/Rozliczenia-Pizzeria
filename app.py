@@ -12,13 +12,11 @@ from email import encoders
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- FUNKCJA CZYSZCZĄCA (ZAMIANA Ó -> O, Ł -> L ITP.) ---
+# --- FUNKCJA NAPRAWCZA (ZAMIANA Ó -> O, Ł -> L ITP. TYLKO DLA PDF) ---
 def bez_ogonkow(tekst):
     if not tekst: return ""
     t = str(tekst)
-    # Ręczna zamiana problematycznych liter, których unicodedata czasem nie łapie
     t = t.replace('ł', 'l').replace('Ł', 'L').replace('ó', 'o').replace('Ó', 'O')
-    # Reszta (ą, ć, ę, ń, ś, ź, ż)
     nfkd = unicodedata.normalize('NFKD', t)
     return "".join([c for c in nfkd if not unicodedata.combining(c)])
 
@@ -29,13 +27,13 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- 2. DANE ---
+# --- 2. DANE DOSTĘPOWE ---
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 EMAIL_KONTO = "mange929598@gmail.com"  
 HASLO_APP = "hlqivtidxgchoqdi" 
 
-# --- 3. GENERATOR PDF (PANCERNY) ---
+# --- 3. GENERATOR PDF (NAPRAWIONY) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -43,17 +41,17 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(0, 10, f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}", ln=True, align='C')
     pdf.ln(10)
 
-    # KOLOROWE PODSUMOWANIE
+    # KOLOROWE PODSUMOWANIE (Formatowanie bezpieczne)
     pdf.set_font("Helvetica", 'B', 12)
-    pdf.set_fill_color(212, 237, 218) # Przychód
+    pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 15, f"PRZYCHOD: {s_og:,.2f} zl", border=1, align='C', fill=True)
-    pdf.set_fill_color(255, 243, 205) # Gotówka
+    pdf.set_fill_color(255, 243, 205)
     pdf.cell(60, 15, f"GOTOWKA: {s_got:,.2f} zl", border=1, align='C', fill=True)
-    pdf.set_fill_color(248, 215, 218) # Wydatki
+    pdf.set_fill_color(248, 215, 218)
     pdf.cell(60, 15, f"WYDATKI: {s_wyd:,.2f} zl", border=1, ln=True, align='C', fill=True)
     pdf.ln(10)
 
-    # TABELA (CZYSZCZENIE KAŻDEJ KOMÓRKI)
+    # TABELA
     pdf.set_font("Helvetica", 'B', 10)
     pdf.set_fill_color(230, 230, 230)
     pdf.cell(30, 10, "Data", border=1, fill=True)
@@ -64,6 +62,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
 
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
+        # Tutaj automatycznie czyścimy tekst z "ogonków" przed zapisem do PDF
         pdf.cell(30, 10, bez_ogonkow(row['Data zdarzenia']), border=1)
         pdf.cell(60, 10, bez_ogonkow(row['Typ'])[:25], border=1)
         pdf.cell(30, 10, f"{row['Kwota']:.2f} zl", border=1)
@@ -72,14 +71,14 @@ def create_pdf(df, s_og, s_got, s_wyd):
     
     return bytes(pdf.output())
 
-# --- 4. WYSYŁKA ---
+# --- 4. FUNKCJA WYSYŁANIA ---
 def wyslij_raporty_final(df, s_og, s_got, s_wyd):
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_KONTO
         msg['To'] = EMAIL_KONTO
         msg['Subject'] = f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m %H:%M')}"
-        msg.attach(MIMEText("W zalaczniku raport PDF oraz CSV (bez polskich znakow w PDF).", 'plain'))
+        msg.attach(MIMEText("W zalaczniku raporty PDF i CSV.", 'plain'))
 
         csv_data = df.to_csv(index=False).encode('utf-8')
         pdf_data = create_pdf(df, s_og, s_got, s_wyd)
@@ -97,7 +96,7 @@ def wyslij_raporty_final(df, s_og, s_got, s_wyd):
         server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Blad: {e}")
+        st.sidebar.error(f"Blad wysylki: {e}")
         return False
 
 # --- 5. LOGIKA DANYCH ---
@@ -197,6 +196,8 @@ with c3:
 # --- 9. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu Raportów")
+    
+    # Przygotowanie raportu PDF (z czyszczeniem ogonków) i CSV (z ogonkami)
     csv_rep = df_active.to_csv(index=False).encode('utf-8')
     pdf_rep = create_pdf(df_active, s_og, s_got, s_wyd)
 
@@ -213,7 +214,7 @@ with st.sidebar:
     
     if getattr(st.session_state, "confirm", False):
         st.error("CZY JESTES PEWIEN? Nie mozna cofnac!")
-        if st.button("TAK, USUN"):
+        if st.button("TAK, USUN WSZYSTKO"):
             full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'
             save_data(full); st.session_state.confirm = False; st.rerun()
         if st.button("NIE"): st.session_state.confirm = False; st.rerun()
