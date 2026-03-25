@@ -174,25 +174,32 @@ with st.sidebar:
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
     
     st.divider()
-    # POTRÓJNE ZABEZPIECZENIE USUWANIA
-    if 'confirm_del' not in st.session_state: st.session_state.confirm_del = False
+    # POTRÓJNE ZABEZPIECZENIE
+    if 'del_step' not in st.session_state: st.session_state.del_step = 0
     
-    if st.button("🗑️ USUŃ HISTORIĘ", use_container_width=True, type="secondary"):
-        st.session_state.confirm_del = True
+    if st.button("🗑️ USUŃ HISTORIĘ", use_container_width=True):
+        st.session_state.del_step = 1
     
-    if st.session_state.confirm_del:
+    if st.session_state.del_step >= 1:
         with st.container(border=True):
-            st.warning("⚠️ Czy na pewno chcesz usunąć historię?")
-            check = st.checkbox("Potwierdzam chęć usunięcia")
+            st.warning("⚠️ Krok 1: Potwierdź usunięcie")
+            check = st.checkbox("Zgadzam się na usunięcie danych")
+            
             if check:
-                if st.button("🔥 WYCZYŚĆ DANE", use_container_width=True, type="primary"):
+                if st.button("🔥 Krok 2: WYCZYŚĆ DANE", use_container_width=True, type="primary"):
+                    st.session_state.del_step = 2
+            
+            if st.session_state.del_step == 2:
+                st.error("❗ OSTATNI KROK:")
+                if st.button("🧨 CZY JESTEŚ PEWIEN?", use_container_width=True):
                     full = load_data()
                     full.loc[df_active.index, 'Status'] = 'Archiwum'
                     save_data(full)
-                    st.session_state.confirm_del = False
+                    st.session_state.del_step = 0
                     st.rerun()
-            if st.button("Anuluj"):
-                st.session_state.confirm_del = False
+            
+            if st.button("Anuluj", key="cancel_del"):
+                st.session_state.del_step = 0
                 st.rerun()
 
 st.divider()
