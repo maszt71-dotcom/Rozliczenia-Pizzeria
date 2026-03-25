@@ -76,7 +76,6 @@ def load_data():
 def save_data(df): df.to_csv(DB_FILE, index=False)
 
 data = load_data()
-# Ważne: musimy zachować oryginalne indeksy z pliku CSV, by móc usuwać konkretne wiersze
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
@@ -126,7 +125,12 @@ with c1:
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 with c2:
-    st.markdown(f'<div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center; color: black;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    # --- DYNAMIKA KOLORU GOTÓWKI ---
+    bg_got = "#ff0000" if s_got < 0 else "#fff3cd"
+    txt_got = "white" if s_got < 0 else "black"
+    
+    st.markdown(f'<div style="background-color:{bg_got}; padding:15px; border-radius:10px; text-align:center; color: {txt_got};">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    
     if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
@@ -161,64 +165,66 @@ with c3:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)); st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
 
-# --- 5. HISTORIA I EDYCJA ---
-st.divider()
-st.subheader("Historia wpisów")
+# --- 5. PASEK BOCZNY ---
+with st.sidebar:
+    st.header("⚙️ Menu")
+    if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
+        pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
+        csv_file = df_active.to_csv(index=False).encode('utf-8')
+        with st.spinner("Wysyłanie..."):
+            if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
 
-if not df_active.empty:
-    # Przygotowanie danych do edytora (odwrócona kolejność - najnowsze na górze)
-    df_display = df_active.copy()
-    df_display.insert(0, "Wybierz", False)
+    st.divider()
     
-    # Edytor danych
+    # Zarządzanie zaznaczonymi wierszami do usunięcia
+    if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
+        if st.button(f"🗑️ USUŃ ZAZNACZONE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
+            full = load_data()
+            full.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum'
+            save_data(full)
+            st.session_state.selected_indices = []
+            st.rerun()
+
+    st.divider()
+    st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
+    st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
+    
+    st.divider()
+    if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True):
+        full = load_data()
+        full.loc[df_active.index, 'Status'] = 'Archiwum'
+        save_data(full)
+        st.rerun()
+
+st.divider()
+
+# --- 6. HISTORIA ---
+st.subheader("Historia wpisów")
+if not df_active.empty:
+    df_editor = df_active.copy()
+    cols_to_show = ["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"]
+    df_editor = df_editor[cols_to_show]
+    df_editor.insert(0, "Wybierz", False)
+    
     res = st.data_editor(
-        df_display.iloc[::-1],
+        df_editor.iloc[::-1],
         column_config={
-            "Wybierz": st.column_config.CheckboxColumn("Usuń", width="small", default=False),
-            "Data": st.column_config.TextColumn("Data wpisu", disabled=True),
-            "Data zdarzenia": st.column_config.TextColumn("Dzień", disabled=True),
-            "Typ": st.column_config.TextColumn("Kategoria", disabled=True),
-            "Kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł", disabled=True),
-            "Opis": st.column_config.TextColumn("Opis", disabled=True),
-            "Status": None # Ukrywamy status
+            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small", default=False),
+            "Data": st.column_config.TextColumn("Data wpisu", width="medium"),
+            "Data zdarzenia": st.column_config.TextColumn("Dzień", width="small"),
+            "Typ": st.column_config.TextColumn("Typ", width="medium"),
+            "Kwota": st.column_config.NumberColumn("Kwota", width="small", format="%.2f zł"),
+            "Opis": st.column_config.TextColumn("Opis", width="large")
         },
-        hide_index=False, # Indeks jest nam potrzebny do identyfikacji wierszy
+        disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"],
+        hide_index=False,
         use_container_width=True,
         key="pizza_editor"
     )
-
-    # --- 6. PASEK BOCZNY ---
-    with st.sidebar:
-        st.header("⚙️ Menu")
-        if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
-            pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
-            csv_file = df_active.to_csv(index=False).encode('utf-8')
-            with st.spinner("Wysyłanie..."):
-                if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
-
-        st.divider()
-        
-        # Logika usuwania zaznaczonych
-        to_delete = res[res["Wybierz"] == True].index.tolist()
-        if len(to_delete) > 0:
-            if st.button(f"🗑️ USUŃ ZAZNACZONE ({len(to_delete)})", use_container_width=True, type="primary"):
-                full_data = load_data()
-                full_data.loc[to_delete, 'Status'] = 'Archiwum'
-                save_data(full_data)
-                st.rerun()
-
-        st.divider()
-        st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
-        st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
-        
-        st.divider()
-        if st.button("🗑️ WYCZYŚĆ WSZYSTKO", use_container_width=True):
-            full = load_data()
-            full.loc[df_active.index, 'Status'] = 'Archiwum'
-            save_data(full)
-            st.rerun()
+    
+    # Aktualizacja zaznaczonych indeksów bez automatycznego rerun (zapobiega pętli)
+    current_selected = res[res["Wybierz"] == True].index.tolist()
+    if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
+        st.session_state.selected_indices = current_selected
 else:
     st.info("Brak aktywnych wpisów.")
-    with st.sidebar:
-        st.header("⚙️ Menu")
-        st.write("Brak danych do raportu.")
