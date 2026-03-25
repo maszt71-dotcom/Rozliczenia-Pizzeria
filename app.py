@@ -43,7 +43,7 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF ---
+# --- 3. GENERATOR PDF (TWOJA POPRAWKA) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -59,7 +59,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return pdf.output(dest="S").encode("latin-1")
 
-# --- 4. WIDOK GŁÓWNY ---
+# --- 4. WIDOK GŁÓWNY (KAFELKI) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -71,16 +71,6 @@ with c1:
     if st.button("➕ DODAJ", key="p"):
         st.session_state.s = "P" if st.session_state.s != "P" else ""
         st.rerun()
-    
-    if st.session_state.s == "P":
-        st.write("---") # Oddzielenie dla lepszego spychu
-        d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
-        kw_p = st.number_input("Kwota", value=None, step=1.0, key="val_p")
-        if st.button("ZAPISZ", key="save_p", use_container_width=True):
-            if kw_p:
-                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
-                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                st.session_state.s = ""; st.rerun()
 
 with c2:
     st.markdown(f'<div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -88,45 +78,60 @@ with c2:
         st.session_state.s = "G" if st.session_state.s != "G" else ""
         st.session_state.os = None
         st.rerun()
-    
-    if st.session_state.s == "G":
-        st.write("---")
-        if not st.session_state.os:
-            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            for o in osoby:
-                if st.button(o, key=f"os_{o}", use_container_width=True): 
-                    st.session_state.os = o; st.rerun()
-        else:
-            st.markdown(f"Dla: **{st.session_state.os}**")
-            d_g = st.date_input("Data", datetime.now(), key="date_g")
-            kw_g = st.number_input("Kwota", value=None, step=1.0, key="val_g")
-            c_s, c_c = st.columns(2)
-            if c_s.button("ZAPISZ", key="save_g", use_container_width=True):
-                if kw_g:
-                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                    st.session_state.s = ""; st.session_state.os = None; st.rerun()
-            if c_c.button("COFNIJ", use_container_width=True):
-                st.session_state.os = None; st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"):
         st.session_state.s = "W" if st.session_state.s != "W" else ""
         st.rerun()
-    
-    if st.session_state.s == "W":
-        st.write("---")
-        d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
-        kw_w = st.number_input("Kwota", value=None, step=1.0, key="val_w")
-        op_w = st.text_input("Opis", key="desc_w")
-        if st.button("ZAPISZ W", key="save_w", use_container_width=True):
-            if kw_w:
-                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
-                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                st.session_state.s = ""; st.rerun()
 
-# --- 5. PASEK BOCZNY ---
+# --- 5. FORMULARZE (POZA KOLUMNAMI - ŻEBY SPYCHAŁY W DÓŁ) ---
+if st.session_state.s != "":
+    st.write("---")
+    with st.container(border=True):
+        if st.session_state.s == "P":
+            st.subheader("Dodaj Przychód")
+            d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
+            kw_p = st.number_input("Kwota", value=None, step=1.0, key="val_p")
+            if st.button("ZAPISZ", use_container_width=True):
+                if kw_p:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.s = ""; st.rerun()
+
+        elif st.session_state.s == "G":
+            st.subheader("Dodaj Gotówkę")
+            if not st.session_state.os:
+                os_cols = st.columns(5)
+                osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+                for idx, o in enumerate(osoby):
+                    if os_cols[idx].button(o, key=f"os_{o}", use_container_width=True):
+                        st.session_state.os = o; st.rerun()
+            else:
+                st.markdown(f"Dla: **{st.session_state.os}**")
+                d_g = st.date_input("Data zdarzenia", datetime.now(), key="date_g")
+                kw_g = st.number_input("Kwota", value=None, step=1.0, key="val_g")
+                c_s, c_c = st.columns(2)
+                if c_s.button("ZAPISZ G", use_container_width=True):
+                    if kw_g:
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
+                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                        st.session_state.s = ""; st.session_state.os = None; st.rerun()
+                if c_c.button("COFNIJ", use_container_width=True):
+                    st.session_state.os = None; st.rerun()
+
+        elif st.session_state.s == "W":
+            st.subheader("Dodaj Wydatek")
+            d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
+            kw_w = st.number_input("Kwota", value=None, step=1.0, key="val_w")
+            op_w = st.text_input("Opis", key="desc_w")
+            if st.button("ZAPISZ W", use_container_width=True):
+                if kw_w:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.s = ""; st.rerun()
+
+# --- 6. PASEK BOCZNY I TABELA ---
 with st.sidebar:
     st.header("⚙️ Menu")
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
