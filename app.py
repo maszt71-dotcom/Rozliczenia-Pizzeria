@@ -32,15 +32,10 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# --- WYGLĄD (CSS) - PRECYZYJNA SZEROKOŚĆ ---
+# --- WYGLĄD (CSS) - PRECYZYJNE DOPASOWANIE SZEROKOŚCI ---
 st.markdown("""
     <style>
-    /* Usunięcie domyślnych odstępów Streamlit w kolumnach */
-    [data-testid="stHorizontalBlock"] {
-        gap: 1rem !important;
-    }
-
-    /* Styl dla przycisków DODAJ - szerokość 100% kontenera */
+    /* Wymuszenie szerokości przycisków na 100% szerokości kolumny */
     .stButton > button {
         width: 100% !important;
         border-radius: 10px !important;
@@ -48,10 +43,9 @@ st.markdown("""
         height: 45px !important;
         margin-top: 5px !important;
         border: none !important;
-        display: block !important;
     }
     
-    /* Kolory przycisków identyczne jak kontenery */
+    /* Kolory przycisków identyczne jak kontenery powyżej */
     div[data-testid="stColumn"]:nth-of-type(1) .stButton > button { background-color: #d4edda !important; color: #155724 !important; }
     div[data-testid="stColumn"]:nth-of-type(2) .stButton > button { background-color: #fff3cd !important; color: #856404 !important; }
     div[data-testid="stColumn"]:nth-of-type(3) .stButton > button { background-color: #f8d7da !important; color: #721c24 !important; }
@@ -66,6 +60,7 @@ st.markdown("""
         flex-direction: column;
         justify-content: center;
         width: 100%;
+        box-sizing: border-box;
     }
 
     /* Ukrycie strzałek w polach liczb */
