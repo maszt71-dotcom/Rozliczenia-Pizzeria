@@ -76,6 +76,8 @@ def load_data():
 def save_data(df): df.to_csv(DB_FILE, index=False)
 
 data = load_data()
+# Resetujemy index, żeby edytor poprawnie przypisywał zaznaczenia
+data = data.reset_index(drop=True)
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
@@ -171,24 +173,23 @@ with st.sidebar:
 
     st.divider()
     
-    # OBSŁUGA USUWANIA LINII
-    if 'to_del' in st.session_state and st.session_state.to_del:
-        if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.to_del)})", use_container_width=True, type="primary"):
-            st.session_state.ask_del = True
+    # OBSŁUGA USUWANIA ZAZNACZONYCH LINII
+    if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
+        if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
+            st.session_state.ask_del_line = True
         
-        if st.session_state.get('ask_del'):
-            st.warning("Usunąć wybrane?")
-            col_y, col_n = st.columns(2)
-            if col_y.button("TAK", use_container_width=True):
+        if st.session_state.get('ask_del_line'):
+            st.warning("Usunąć zaznaczone?")
+            cy, cn = st.columns(2)
+            if cy.button("TAK", key="line_y"):
                 full = load_data()
-                # Usuwamy wybrane po indeksach
-                full = full.drop(st.session_state.to_del)
+                full.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum'
                 save_data(full)
-                st.session_state.to_del = []
-                st.session_state.ask_del = False
+                st.session_state.ask_del_line = False
+                st.session_state.selected_indices = []
                 st.rerun()
-            if col_n.button("NIE", use_container_width=True):
-                st.session_state.ask_del = False
+            if cn.button("NIE", key="line_n"):
+                st.session_state.ask_del_line = False
                 st.rerun()
 
     st.divider()
@@ -214,19 +215,27 @@ with st.sidebar:
 
 st.divider()
 
-# --- 6. HISTORIA I WYBÓR (PTASZKI) ---
+# --- 6. HISTORIA Z OKIENKIEM NA PTASZKA ---
 st.subheader("Historia wpisów")
 if not df_active.empty:
-    # Wybór linii za pomocą prostego multiselecta z opisem
-    options = df_active.index.tolist()
-    def format_func(i):
-        r = df_active.loc[i]
-        return f"{r['Data']} - {r['Typ']} - {r['Kwota']} zł"
+    # Tworzymy kopię danych do edytora z dodatkową kolumną na ptaszka
+    df_editor = df_active.copy()
+    df_editor.insert(0, "Wybierz", False)
     
-    selected = st.multiselect("Zaznacz wpisy do usunięcia (ptaszki):", options, format_func=format_func)
-    st.session_state.to_del = selected
-
-    # TWOJA ORYGINALNA TABELA - NIETKNIĘTA
-    st.dataframe(df_active[['Data', 'Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1], use_container_width=True, hide_index=True)
+    # Wyświetlamy edytor danych (wygląda jak Twoja stara tabela)
+    edited_data = st.data_editor(
+        df_editor.iloc[::-1], # Od najnowszego
+        column_config={
+            "Wybierz": st.column_config.CheckboxColumn("Wybierz", default=False),
+            "Status": None # Ukrywamy kolumnę status
+        },
+        disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"],
+        hide_index=True,
+        use_container_width=True,
+        key="pizza_editor"
+    )
+    
+    # Pobieramy indeksy zaznaczonych wierszy
+    st.session_state.selected_indices = edited_data[edited_data["Wybierz"] == True].index.tolist()
 else:
     st.info("Brak aktywnych wpisów.")
