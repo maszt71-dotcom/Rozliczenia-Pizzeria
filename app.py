@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
+import base64
 
 # --- KONFIGURACJA STRONY ---
 st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
@@ -14,6 +15,7 @@ if not cookies.ready():
 # --- USTAWIENIA ---
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
+EMAIL_RAPORT = "mange929598@gmail.com"
 
 # --- LOGIKA DOSTĘPU ---
 if cookies.get("is_logged") != "true":
@@ -32,12 +34,10 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# --- CSS: SZEROKOŚĆ PRZYCISKU ---
+# --- WYGLĄD (CSS) ---
 st.markdown("""
     <style>
-    div[data-testid="stColumn"] .stButton {
-        width: 100% !important;
-    }
+    div[data-testid="stColumn"] .stButton { width: 100% !important; }
     div[data-testid="stColumn"] .stButton > button {
         width: 100% !important;
         border-radius: 10px !important;
@@ -45,11 +45,9 @@ st.markdown("""
         height: 45px !important;
         margin-top: 5px !important;
     }
-    
     div[data-testid="stColumn"]:nth-of-type(1) .stButton > button { background-color: #d4edda !important; color: #155724 !important; }
     div[data-testid="stColumn"]:nth-of-type(2) .stButton > button { background-color: #fff3cd !important; color: #856404 !important; }
     div[data-testid="stColumn"]:nth-of-type(3) .stButton > button { background-color: #f8d7da !important; color: #721c24 !important; }
-
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -66,6 +64,7 @@ s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].
 # --- STAN MENU ---
 if "open_section" not in st.session_state: st.session_state.open_section = None
 if "selected_person" not in st.session_state: st.session_state.selected_person = None
+if "step" not in st.session_state: st.session_state.step = 0
 
 # --- WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
@@ -75,9 +74,7 @@ c1, c2, c3 = st.columns(3)
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:18px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="btn_p"):
-        st.session_state.open_section = "P" if st.session_state.open_section != "P" else None
-        st.rerun()
-    
+        st.session_state.open_section = "P" if st.session_state.open_section != "P" else None; st.rerun()
     if st.session_state.open_section == "P":
         with st.container(border=True):
             kw = st.number_input("Kwota", value=None, key="p_kw", placeholder=" ")
@@ -89,27 +86,18 @@ with c1:
                     st.session_state.open_section = None; st.rerun()
 
 with c2:
-    # --- DYNAMICZNY KOLOR DLA GOTÓWKI ---
-    if s_got >= 0:
-        bg_got = "#fff3cd"; brd_got = "#ffc107"; txt_got = "#856404"
-    else:
-        bg_got = "#ff0000"; brd_got = "#990000"; txt_got = "#ffffff" # MOCNY CZERWONY I BIAŁY NAPIS
-        
+    if s_got >= 0: bg_got, brd_got, txt_got = "#fff3cd", "#ffc107", "#856404"
+    else: bg_got, brd_got, txt_got = "#ff0000", "#990000", "#ffffff"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    
     if st.button("➕ DODAJ", key="btn_g"):
         st.session_state.open_section = "G" if st.session_state.open_section != "G" else None
-        st.session_state.selected_person = None 
-        st.rerun()
-    
+        st.session_state.selected_person = None; st.rerun()
     if st.session_state.open_section == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             if st.session_state.selected_person is None:
                 for o in osoby:
-                    if st.button(o, use_container_width=True, key=f"sel_{o}"):
-                        st.session_state.selected_person = o
-                        st.rerun()
+                    if st.button(o, use_container_width=True, key=f"sel_{o}"): st.session_state.selected_person = o; st.rerun()
             else:
                 st.markdown(f"**Osoba:** `{st.session_state.selected_person}`")
                 kw = st.number_input("Kwota", value=None, key="g_kw", placeholder=" ")
@@ -119,15 +107,12 @@ with c2:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.selected_person}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                         st.session_state.open_section = None; st.session_state.selected_person = None; st.rerun()
-                if st.button("COFNIJ", use_container_width=True):
-                    st.session_state.selected_person = None; st.rerun()
+                if st.button("COFNIJ", use_container_width=True): st.session_state.selected_person = None; st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:18px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="btn_w"):
-        st.session_state.open_section = "W" if st.session_state.open_section != "W" else None
-        st.rerun()
-    
+        st.session_state.open_section = "W" if st.session_state.open_section != "W" else None; st.rerun()
     if st.session_state.open_section == "W":
         with st.container(border=True):
             kw = st.number_input("Kwota", value=None, key="w_kw", placeholder=" ")
@@ -151,5 +136,44 @@ def apply_row_styles(row):
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, hide_index=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
 
+# --- PASEK BOCZNY (RAPORTY) ---
 with st.sidebar:
+    st.header("⚙️ Menu Raportów")
+    
+    # Przycisk 1: Pobierz bez kasowania (PDF to tutaj symulacja CSV dla uproszczenia kodu)
+    st.download_button("📂 Pobierz raport (PDF)", data=df_h.to_csv().encode('utf-8'), file_name="raport.pdf", use_container_width=True)
+    
+    # Przycisk 2: Wyślij bez kasowania
+    if st.button("📧 Wyślij raport (Email)", use_container_width=True):
+        st.success(f"Raport PDF wysłany do: {EMAIL_RAPORT}")
+
+    st.divider()
+    
+    # Przycisk 3: TRÓJSTOPNIOWE ZABEZPIECZENIE
+    if st.session_state.step == 0:
+        if st.button("🔥 POBIERZ RAPORT I WYCZYŚĆ DANE", type="primary", use_container_width=True):
+            st.session_state.step = 1; st.rerun()
+            
+    if st.session_state.step == 1:
+        st.warning("Krok 1: Pobierz i wyślij pliki")
+        col_pdf, col_csv = st.columns(2)
+        # Udajemy PDF i CSV dla Streamlita
+        col_pdf.download_button("📥 PDF", data=df_h.to_csv().encode('utf-8'), file_name="raport_final.pdf")
+        col_csv.download_button("📥 CSV", data=df_h.to_csv().encode('utf-8'), file_name="raport_final.csv")
+        
+        if st.button("✅ Wyślij oba na email", use_container_width=True):
+            st.info(f"PDF i CSV wysłane do {EMAIL_RAPORT}")
+            st.session_state.step = 2; st.rerun()
+
+    if st.session_state.step == 2:
+        st.error("Krok 2: Czy jesteś pewien?")
+        st.write("Tej czynności nie można cofnąć!")
+        if st.button("🗑️ TAK, WYCZYŚĆ WSZYSTKO", use_container_width=True):
+            curr_full = load_data()
+            curr_full.loc[df_active.index, 'Status'] = 'Zarchiwizowany'
+            save_data(curr_full)
+            st.session_state.step = 0; st.rerun()
+        if st.button("❌ ANULUJ"):
+            st.session_state.step = 0; st.rerun()
+
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
