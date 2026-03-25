@@ -32,12 +32,16 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# --- WYGLĄD (CSS) - PRECYZYJNE DOPASOWANIE SZEROKOŚCI ---
+# --- WYGLĄD (CSS) - NAPRAWA SZEROKOŚCI PRZYCISKÓW ---
 st.markdown("""
     <style>
-    /* Wymuszenie szerokości przycisków na 100% szerokości kolumny */
-    .stButton > button {
+    /* Wymuszenie szerokości przycisków na 100% kolumny */
+    .stButton, .stButton > button {
         width: 100% !important;
+        display: block !important;
+    }
+    
+    .stButton > button {
         border-radius: 10px !important;
         font-weight: bold !important;
         height: 45px !important;
@@ -45,12 +49,12 @@ st.markdown("""
         border: none !important;
     }
     
-    /* Kolory przycisków identyczne jak kontenery powyżej */
+    /* Kolory przycisków dopasowane do kafelków */
     div[data-testid="stColumn"]:nth-of-type(1) .stButton > button { background-color: #d4edda !important; color: #155724 !important; }
     div[data-testid="stColumn"]:nth-of-type(2) .stButton > button { background-color: #fff3cd !important; color: #856404 !important; }
     div[data-testid="stColumn"]:nth-of-type(3) .stButton > button { background-color: #f8d7da !important; color: #721c24 !important; }
 
-    /* Nagłówki - kontenery główne */
+    /* Kontenery nagłówkowe */
     .main-card {
         padding: 20px;
         border-radius: 10px;
@@ -63,7 +67,7 @@ st.markdown("""
         box-sizing: border-box;
     }
 
-    /* Ukrycie strzałek w polach liczb */
+    /* Ukrycie strzałek w polach liczbowych */
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
@@ -97,7 +101,7 @@ with c1:
         with st.container(border=True):
             kw = st.number_input("Kwota", value=None, key="p_kw", placeholder="0.00")
             da = st.date_input("Data zdarzenia", datetime.now(), key="p_da")
-            if st.button("ZAPISZ PRZYCHÓD", type="primary", use_container_width=True):
+            if st.button("ZAPISZ PRZYCHÓD", type="primary", key="save_p"):
                 if kw:
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -118,20 +122,20 @@ with c2:
             if st.session_state.selected_person is None:
                 st.write("**Wybierz osobę:**")
                 for o in osoby:
-                    if st.button(o, use_container_width=True, key=f"sel_{o}"):
+                    if st.button(o, key=f"sel_{o}"):
                         st.session_state.selected_person = o
                         st.rerun()
             else:
                 st.markdown(f"**Osoba:** `{st.session_state.selected_person}`")
                 kw = st.number_input("Kwota", value=None, key="g_kw", placeholder="0.00")
                 da = st.date_input("Z dnia", datetime.now(), key="g_da")
-                col_save, col_back = st.columns(2)
-                if col_save.button("ZAPISZ", type="primary", use_container_width=True):
+                c_s, c_b = st.columns(2)
+                if c_s.button("ZAPISZ", type="primary", key="save_g"):
                     if kw:
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.selected_person}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                         st.session_state.open_section = None; st.session_state.selected_person = None; st.rerun()
-                if col_back.button("COFNIJ", use_container_width=True):
+                if c_b.button("COFNIJ", key="back_g"):
                     st.session_state.selected_person = None; st.rerun()
 
 # --- KOLUMNA 3: WYDATKI ---
@@ -146,7 +150,7 @@ with c3:
             kw = st.number_input("Kwota", value=None, key="w_kw", placeholder="0.00")
             da = st.date_input("Z dnia", datetime.now(), key="w_da")
             op = st.text_input("Opis wydatku")
-            if st.button("ZAPISZ WYDATEK", type="primary", use_container_width=True):
+            if st.button("ZAPISZ WYDATEK", type="primary", key="save_w"):
                 if kw:
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -165,4 +169,4 @@ df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, hide_index=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
 
 with st.sidebar:
-    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
+    if st.button("🔄 ODŚWIEŻ", key="refresh_sidebar"): st.rerun()
