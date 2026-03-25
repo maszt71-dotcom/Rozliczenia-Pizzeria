@@ -125,12 +125,9 @@ with c1:
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 with c2:
-    # --- DYNAMIKA KOLORU GOTÓWKI ---
     bg_got = "#ff0000" if s_got < 0 else "#fff3cd"
     txt_got = "white" if s_got < 0 else "black"
-    
     st.markdown(f'<div style="background-color:{bg_got}; padding:15px; border-radius:10px; text-align:center; color: {txt_got};">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    
     if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
@@ -176,7 +173,6 @@ with st.sidebar:
 
     st.divider()
     
-    # Zarządzanie zaznaczonymi wierszami do usunięcia
     if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
         if st.button(f"🗑️ USUŃ ZAZNACZONE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
             full = load_data()
@@ -217,12 +213,11 @@ if not df_active.empty:
             "Opis": st.column_config.TextColumn("Opis", width="large")
         },
         disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"],
-        hide_index=False,
+        hide_index=True,  # <--- TUTAJ USUNĄŁEM KOLUMNĘ Z CYFRAMI
         use_container_width=True,
         key="pizza_editor"
     )
     
-    # Aktualizacja zaznaczonych indeksów bez automatycznego rerun (zapobiega pętli)
     current_selected = res[res["Wybierz"] == True].index.tolist()
     if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
         st.session_state.selected_indices = current_selected
