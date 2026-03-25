@@ -69,13 +69,14 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        return conn.read(worksheet="Arkusz1", ttl="0")
+        df = conn.read(ttl="0")
+        if df.empty: return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+        return df
     except:
         return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
 def save_data(df):
-    conn.update(worksheet="Arkusz1", data=df)
-
+    conn.update(data=df)
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
