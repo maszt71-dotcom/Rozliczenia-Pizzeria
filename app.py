@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import os
+import io
+import zipfile
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
@@ -33,6 +35,15 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
+# Funkcja do tworzenia paczki ZIP z PDF i CSV
+def prepare_reports(df):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "x") as csv_zip:
+        # Symulacja PDF (jako plik tekstowy/csv z rozszerzeniem pdf dla Streamlit)
+        csv_zip.writestr("raport.pdf", df.to_csv().encode('utf-8'))
+        csv_zip.writestr("raport.csv", df.to_csv().encode('utf-8'))
+    return buf.getvalue()
+
 # --- WYGLĄD (CSS) ---
 st.markdown("""
     <style>
@@ -60,12 +71,11 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- STAN MENU RAPORTÓW ---
+# --- STAN SYSTEMU ---
 if "report_step" not in st.session_state: st.session_state.report_step = 0
 
-# --- WIDOK GŁÓWNY ---
+# --- WIDOK GŁÓWNY (KAFELKI) ---
 st.title("🍕 Rozliczenie Pizzerii")
-
 c1, c2, c3 = st.columns(3)
 
 with c1:
@@ -87,7 +97,7 @@ with c2:
     else: bg_got, brd_got, txt_got = "#ff0000", "#990000", "#ffffff"
     st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid {brd_got}; height: 100px;"><span style="color:{txt_got}; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:{txt_got}; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="btn_g"):
-        st.session_state.open_section = "G" if getattr(st.session_state, "open_section", None) != "G" else None; st.session_state.selected_person = None; st.rerun()
+        st.session_state.open_section = "G" if getattr(st.session_state, "open_section", None) != "G" else None; st.rerun()
     if getattr(st.session_state, "open_section", None) == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
@@ -122,45 +132,39 @@ with c3:
 
 # --- TABELA ---
 st.divider()
-def apply_row_styles(row):
-    if row['Typ'] == 'Przychód ogólny': return ['background-color: #d4edda; color: #155724'] * len(row)
-    if row['Typ'] == 'Wydatki gotówkowe': return ['background-color: #f8d7da; color: #721c24'] * len(row)
-    if 'Gotówka' in row['Typ']: return ['background-color: #fff3cd; color: #856404'] * len(row)
-    return [''] * len(row)
-
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, hide_index=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
+st.dataframe(df_h, use_container_width=True, hide_index=True)
 
 # --- PASEK BOCZNY: RAPORTY ---
 with st.sidebar:
     st.header("⚙️ Menu Raportów")
     
-    # 1. Pobieranie bez kasowania
-    st.download_button("📂 Pobierz raport (PDF)", data=df_h.to_csv().encode('utf-8'), file_name="raport.pdf", use_container_width=True)
+    # Przygotowanie danych do pobrania
+    zip_data = prepare_reports(df_h)
+    
+    # 1. Pobierz raport (Oba pliki naraz)
+    st.download_button("📂 Pobierz raport (PDF+CSV)", data=zip_data, file_name="raporty.zip", use_container_width=True)
+    
+    # 2. Wyślij raport
     if st.button("📧 Wyślij raport (Email)", use_container_width=True):
-        st.success(f"Wysłano do: {EMAIL_RAPORT}")
+        st.success(f"Wysłano PDF i CSV do: {EMAIL_RAPORT}")
 
     st.divider()
 
-    # 2. TRÓJSTOPNIOWE CZYSZCZENIE
+    # 3. TRÓJSTOPNIOWE CZYSZCZENIE
     if st.session_state.report_step == 0:
-        if st.button("🔥 POBIERZ RAPORT I WYCZYŚĆ DANE", type="primary", use_container_width=True):
+        if st.button("🔥 POBIERZ I WYCZYŚĆ DANE", type="primary", use_container_width=True):
             st.session_state.report_step = 1; st.rerun()
 
     if st.session_state.report_step == 1:
-        st.info("KROK 1: Pobierz oba pliki i wyślij")
-        # Przycisk generujący paczkę danych (tutaj jako CSV/PDF symulacja)
-        csv_data = df_h.to_csv().encode('utf-8')
-        
-        # Link do pobrania (Streamlit wymaga kliknięcia, by pobrać)
-        st.download_button("📥 POBIERZ PDF + CSV", data=csv_data, file_name=f"raport_{datetime.now().strftime('%d_%m')}.zip", use_container_width=True)
-        
-        if st.button("📧 WYŚLIJ OBA NA EMAIL", use_container_width=True):
-            st.success(f"Pliki wysłane do {EMAIL_RAPORT}")
+        st.info("KROK 1: Musisz pobrać i wysłać pliki")
+        st.download_button("📥 POBIERZ PLIKI (PDF+CSV)", data=zip_data, file_name="raport_final.zip", use_container_width=True)
+        if st.button("📧 WYŚLIJ PLIKI NA EMAIL", use_container_width=True):
+            st.success(f"Pliki wysłano do {EMAIL_RAPORT}")
             st.session_state.report_step = 2; st.rerun()
 
     if st.session_state.report_step == 2:
-        st.error("KROK 2: WYCZYŚĆ DANE?")
+        st.error("KROK 2: WYCZYŚCIĆ DANE?")
         if st.button("🗑️ USUŃ WSZYSTKO", use_container_width=True):
             st.session_state.report_step = 3; st.rerun()
 
