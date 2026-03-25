@@ -19,11 +19,12 @@ def pdf_safe(txt):
     for k, v in rep.items(): t = t.replace(k, v)
     return t.encode('ascii', 'ignore').decode('ascii')
 
-# --- FUNKCJA WYSYŁKI E-MAIL (TWOJE DANE) ---
+# --- FUNKCJA WYSYŁKI E-MAIL (TWOJE NOWE HASŁO) ---
 def send_email_with_reports(pdf_data, csv_data):
     receiver_email = "mange929598@gmail.com"
     sender_email = "mange929598@gmail.com"
-    password = "shnr fsqs tqeb rpsb" # TWOJE HASŁO APLIKACJI
+    # TWOJE NOWE HASŁO APLIKACJI Z OSTATNIEGO ZDJĘCIA:
+    password = "hlqivtidxgchoqdi" 
 
     msg = MIMEMultipart()
     msg['From'] = sender_email
@@ -32,14 +33,12 @@ def send_email_with_reports(pdf_data, csv_data):
 
     msg.attach(MIMEText("W załączniku przesyłam aktualny raport finansowy.", 'plain'))
 
-    # Załącznik PDF
     part_pdf = MIMEBase('application', 'octet-stream')
     part_pdf.set_payload(pdf_data)
     encoders.encode_base64(part_pdf)
     part_pdf.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.pdf")
     msg.attach(part_pdf)
 
-    # Załącznik CSV
     part_csv = MIMEBase('application', 'octet-stream')
     part_csv.set_payload(csv_data)
     encoders.encode_base64(part_csv)
@@ -94,17 +93,19 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Helvetica", 'B', 12)
-    pdf.set_fill_color(212, 237, 218) # Przychód
+    pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
-    pdf.set_fill_color(255, 243, 205) # Gotówka
+    pdf.set_fill_color(255, 243, 205)
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
-    pdf.set_fill_color(248, 215, 218) # Wydatki
+    pdf.set_fill_color(248, 215, 218)
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
         linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
+    
+    # POPRAWKA Z TWOJEGO SCREENA
     return pdf.output(dest="S").encode("latin-1")
 
 # --- 4. WIDOK GŁÓWNY ---
