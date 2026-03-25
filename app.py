@@ -17,19 +17,19 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- 2. DANE DO WYSYŁKI (OBA ADRESY .COM) ---
+# --- 2. DANE DO WYSYŁKI ---
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
-EMAIL_OD = "mange929598@gmail.com"  # Twój Gmail (Login)
-HASLO_APP = "cxej csqe miek iszd"    # Twoje hasło 16-literowe
-EMAIL_DO = "mange929598@gmail.com"  # Adres odbiorcy
+EMAIL_KONTO = "mange929598@gmail.com"  
+# Usuwamy spacje z hasła automatycznie dla pewności
+HASLO_APP = "cxejcsqemiekiszd".replace(" ", "") 
 
-# --- 3. FUNKCJA WYSYŁANIA ---
+# --- 3. FUNKCJA WYSYŁANIA (POPRAWIONA) ---
 def wyslij_raport_final(dane_zip):
     try:
         msg = MIMEMultipart()
-        msg['From'] = EMAIL_OD
-        msg['To'] = EMAIL_DO
+        msg['From'] = EMAIL_KONTO
+        msg['To'] = EMAIL_KONTO
         msg['Subject'] = f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m %H:%M')}"
         
         part = MIMEBase('application', 'octet-stream')
@@ -38,9 +38,10 @@ def wyslij_raport_final(dane_zip):
         part.add_header('Content-Disposition', "attachment; filename=raporty.zip")
         msg.attach(part)
 
+        # Logika wysyłki przez serwer Gmail
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
-        server.login(EMAIL_OD, HASLO_APP)
+        server.login(EMAIL_KONTO, HASLO_APP)
         server.send_message(msg)
         server.quit()
         return True
@@ -89,7 +90,16 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 6. WIDOK GŁÓWNY ---
+# --- 6. LOGOWANIE ---
+if cookies.get("is_logged") != "true":
+    st.title("🍕 Logowanie")
+    wpisane = st.text_input("Hasło", type="password")
+    if st.button("Zaloguj się"):
+        if wpisane == MOJE_HASLO:
+            cookies["is_logged"] = "true"; cookies.save(); st.rerun()
+    st.stop()
+
+# --- 7. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -109,7 +119,7 @@ with c3:
     if st.button("➕ DODAJ", key="btn_w"):
         st.session_state.open_section = "W" if getattr(st.session_state, "open_section", None) != "W" else None; st.rerun()
 
-# --- 7. PASEK BOCZNY - PROCES CZYSZCZENIA ---
+# --- 8. PASEK BOCZNY ---
 if "cleanup_step" not in st.session_state: st.session_state.cleanup_step = 0
 
 with st.sidebar:
@@ -140,6 +150,9 @@ with st.sidebar:
             st.session_state.cleanup_step = 0; st.rerun()
         if col2.button("NIE"): st.session_state.cleanup_step = 0; st.rerun()
 
-# --- 8. TABELA ---
+    st.divider()
+    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
+
+# --- 9. TABELA ---
 st.divider()
 st.dataframe(df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1], use_container_width=True, hide_index=True)
