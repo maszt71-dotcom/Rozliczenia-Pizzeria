@@ -83,45 +83,48 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF (Z TABELĄ) ---
+# --- 3. GENERATOR PDF (TABELA JAK W HISTORII) ---
 def create_pdf(df, s_og, s_got, s_wyd):
-    pdf = FPDF()
+    pdf = FPDF(orientation='L', unit='mm', format='A4') # Orientacja pozioma dla lepszego dopasowania
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
     
-    # Podsumowanie góra
+    # Podsumowanie
     pdf.set_font("Helvetica", 'B', 11)
     pdf.set_fill_color(212, 237, 218)
-    pdf.cell(63, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
+    pdf.cell(92, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
     
     if s_got < 0:
         pdf.set_fill_color(255, 0, 0); pdf.set_text_color(255, 255, 255)
     else:
         pdf.set_fill_color(255, 243, 205); pdf.set_text_color(0, 0, 0)
-    pdf.cell(63, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
+    pdf.cell(93, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
     
     pdf.set_fill_color(248, 215, 218); pdf.set_text_color(0, 0, 0)
-    pdf.cell(63, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
+    pdf.cell(92, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     
     pdf.ln(10)
     
-    # NAGŁÓWEK TABELI
-    pdf.set_font("Helvetica", 'B', 10)
+    # NAGŁÓWEK TABELI (Identyczny jak w aplikacji)
+    pdf.set_font("Helvetica", 'B', 9)
     pdf.set_fill_color(230, 230, 230)
-    pdf.cell(25, 8, pdf_safe("Dzien"), border=1, fill=True, align='C')
-    pdf.cell(55, 8, pdf_safe("Typ / Osoba"), border=1, fill=True, align='C')
+    pdf.cell(35, 8, pdf_safe("Data wpisu"), border=1, fill=True, align='C')
+    pdf.cell(20, 8, pdf_safe("Dzien"), border=1, fill=True, align='C')
+    pdf.cell(50, 8, pdf_safe("Typ"), border=1, fill=True, align='C')
     pdf.cell(30, 8, pdf_safe("Kwota"), border=1, fill=True, align='C')
-    pdf.cell(80, 8, pdf_safe("Opis / Uwagi"), border=1, ln=1, fill=True, align='C')
+    pdf.cell(142, 8, pdf_safe("Opis"), border=1, ln=1, fill=True, align='C')
     
-    # WIERSZE TABELI
-    pdf.set_font("Helvetica", size=9)
-    for _, row in df.iterrows():
-        pdf.cell(25, 7, pdf_safe(row['Data zdarzenia']), border=1, align='C')
-        pdf.cell(55, 7, pdf_safe(row['Typ']), border=1)
+    # WIERSZE TABELI (Identyczny układ jak w aplikacji)
+    pdf.set_font("Helvetica", size=8)
+    # Sortujemy od najnowszego (tak jak w data_editor iloc[::-1])
+    for _, row in df.iloc[::-1].iterrows():
+        pdf.cell(35, 7, pdf_safe(row['Data']), border=1, align='C')
+        pdf.cell(20, 7, pdf_safe(row['Data zdarzenia']), border=1, align='C')
+        pdf.cell(50, 7, pdf_safe(row['Typ']), border=1)
         pdf.cell(30, 7, pdf_safe(f"{row['Kwota']:.2f} zl"), border=1, align='R')
-        pdf.cell(80, 7, pdf_safe(row['Opis']), border=1, ln=1)
+        pdf.cell(142, 7, pdf_safe(row['Opis']), border=1, ln=1)
         
     return pdf.output(dest="S").encode("latin-1")
 
