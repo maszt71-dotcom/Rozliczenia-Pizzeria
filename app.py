@@ -212,17 +212,25 @@ with st.sidebar:
 
 st.divider()
 
-# --- 6. HISTORIA ---
+# --- 6. HISTORIA (STATUS USUNIĘTY, OPIS SZEROKI) ---
 st.subheader("Historia wpisów")
 if not df_active.empty:
     df_editor = df_active.copy()
-    # Usunięcie rubryki 'id' jeśli istnieje w widoku
-    if 'id' in df_editor.columns: df_editor = df_editor.drop(columns=['id'])
+    # Ukrywamy kolumny systemowe, których nie chcemy w widoku
+    cols_to_show = ["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"]
+    df_editor = df_editor[cols_to_show]
     df_editor.insert(0, "Wybierz", False)
     
     res = st.data_editor(
         df_editor.iloc[::-1],
-        column_config={"Wybierz": st.column_config.CheckboxColumn("Wybierz", default=False)},
+        column_config={
+            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small", default=False),
+            "Data": st.column_config.TextColumn("Data", width="medium"),
+            "Data zdarzenia": st.column_config.TextColumn("Dzień", width="small"),
+            "Typ": st.column_config.TextColumn("Typ", width="medium"),
+            "Kwota": st.column_config.NumberColumn("Kwota", width="small", format="%.2f zł"),
+            "Opis": st.column_config.TextColumn("Opis", width="large") # Najszersza kolumna
+        },
         disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"],
         hide_index=True,
         use_container_width=True,
