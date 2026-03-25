@@ -1,180 +1,137 @@
 import streamlit as st
 import pandas as pd
+import os
 from datetime import datetime
+from streamlit_cookies_manager import CookieManager
 
 # --- KONFIGURACJA STRONY ---
-st.set_page_config(
-    page_title="System Rozliczeń Pizzeria",
-    page_icon="🍕",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
 
-# --- STYLE CSS (Przywrócenie wyglądu i naprawa pól) ---
+cookies = CookieManager()
+if not cookies.ready():
+    st.stop()
+
+# --- USTAWIENIA ---
+MOJE_HASLO = "dup@"
+DB_FILE = 'finanse_data.csv'
+
+# --- LOGIKA DOSTĘPU ---
+if cookies.get("is_logged") != "true":
+    st.title("🍕 Logowanie")
+    wpisane = st.text_input("Hasło", type="password")
+    if st.button("Zaloguj się"):
+        if wpisane == MOJE_HASLO:
+            cookies["is_logged"] = "true"; cookies.save(); st.rerun()
+    st.stop()
+
+# --- OBSŁUGA DANYCH ---
+def load_data():
+    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
+    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+
+def save_data(df):
+    df.to_csv(DB_FILE, index=False)
+
+# --- WYGLĄD (CSS) ---
 st.markdown("""
     <style>
-    /* Główne tło i czcionka */
-    .stApp {
-        background-color: #f8f9fa;
+    /* Styl przycisków otwierających (DODAJ) */
+    .stButton > button {
+        border-radius: 0 0 10px 10px !important;
+        border: none !important;
+        font-weight: bold !important;
+        margin-top: -5px !important;
     }
-
-    /* Pasek boczny */
-    [data-testid="stSidebar"] {
-        background-color: #2c3e50 !important;
-        min-width: 260px;
-    }
-    
-    .sidebar-text {
-        color: white !important;
-        text-align: center;
-    }
-
-    /* Trzy kontenery na górze */
-    .top-container {
-        display: flex;
-        justify-content: space-between;
-        gap: 20px;
-        margin-bottom: 30px;
-    }
-    
-    .card {
-        flex: 1;
-        padding: 25px;
-        border-radius: 12px;
-        color: white;
-        text-align: center;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        transition: transform 0.2s;
-    }
-    
-    .card:hover {
-        transform: translateY(-5px);
-    }
-    
-    .card-income { background: linear-gradient(135deg, #27ae60, #2ecc71); }
-    .card-expenses { background: linear-gradient(135deg, #c0392b, #e74c3c); }
-    .card-total { background: linear-gradient(135deg, #2980b9, #3498db); }
-    
-    .card-val { font-size: 28px; font-weight: bold; margin-top: 10px; }
-    .card-lab { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
-
-    /* Naprawa pól wprowadzania (brak strzałek i zer) */
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button { 
-        -webkit-appearance: none; margin: 0; 
-    }
-    
-    /* Personalizacja przycisków w menu */
-    .stButton>button {
-        border-radius: 8px;
-        height: 3em;
-        transition: 0.3s;
-    }
+    /* Kolory przycisków dopasowane do kafelków */
+    div[data-testid="stColumn"]:nth-of-type(1) .stButton > button { background-color: #d4edda !important; color: #155724 !important; }
+    div[data-testid="stColumn"]:nth-of-type(2) .stButton > button { background-color: #fff3cd !important; color: #856404 !important; }
+    div[data-testid="stColumn"]:nth-of-type(3) .stButton > button { background-color: #f8d7da !important; color: #721c24 !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- INICJALIZACJA STANU (Baza danych w sesji) ---
-if 'data_log' not in st.session_state:
-    st.session_state.data_log = pd.DataFrame(columns=['Godzina', 'Typ', 'Kwota', 'Opis'])
-if 'total_in' not in st.session_state: st.session_state.total_in = 0.0
-if 'total_out' not in st.session_state: st.session_state.total_out = 0.0
+data = load_data()
+df_active = data[data['Status'] == 'Aktywny'].copy()
+df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-# --- PASEK BOCZNY (MENU) ---
-with st.sidebar:
-    st.markdown('<h2 class="sidebar-text">🍕 MENU SYSTEMU</h2>', unsafe_allow_html=True)
-    st.markdown("---")
-    
-    st.markdown('<p class="sidebar-text">OPERACJE NA DANYCH</p>', unsafe_allow_html=True)
-    
-    # PRZYWRÓCONE KAFELKI
-    if st.button("📥 Pobierz i Zapisz", use_container_width=True):
-        st.toast("Dane zostały zarchiwizowane pomyślnie!", icon="✅")
-        
-    if st.button("💾 Pobierz (Excel)", use_container_width=True):
-        st.toast("Przygotowywanie pliku do pobrania...")
-        
-    st.markdown("---")
-    
-    if st.button("⚙️ Ustawienia", use_container_width=True):
-        st.sidebar.warning("Ustawienia są zablokowane dla Twojej roli.")
-        
-    if st.button("🔄 Resetuj Dzisiejszy Dzień", use_container_width=True):
-        st.session_state.total_in = 0.0
-        st.session_state.total_out = 0.0
-        st.session_state.data_log = pd.DataFrame(columns=['Godzina', 'Typ', 'Kwota', 'Opis'])
+s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
+s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
+
+# --- INICJALIZACJA STANU (Która szufladka otwarta) ---
+if "menu_open" not in st.session_state:
+    st.session_state.menu_open = None
+
+# --- WIDOK GŁÓWNY ---
+st.title("🍕 Rozliczenie Pizzerii")
+
+c1, c2, c3 = st.columns(3)
+
+# KOLUMNA 1: PRZYCHÓD
+with c1:
+    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px 10px 0 0; text-align:center; border-bottom: 5px solid #28a745; height: 80px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:18px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ DODAJ", key="btn_p", use_container_width=True):
+        st.session_state.menu_open = "P" if st.session_state.menu_open != "P" else None
         st.rerun()
-
-# --- GŁÓWNA TREŚĆ ---
-st.title("Panel Rozliczeń Dziennych")
-
-# TRZY KONTENERY NA GÓRZE
-bilans = st.session_state.total_in - st.session_state.total_out
-
-st.markdown(f"""
-    <div class="top-container">
-        <div class="card card-income">
-            <div class="card-lab">Łączny Obrót</div>
-            <div class="card-val">{st.session_state.total_in:.2f} zł</div>
-        </div>
-        <div class="card card-expenses">
-            <div class="card-lab">Wydatki Gotówkowe</div>
-            <div class="card-val">{st.session_state.total_out:.2f} zł</div>
-        </div>
-        <div class="card card-total">
-            <div class="card-lab">Do Rozliczenia (Netto)</div>
-            <div class="card-val">{bilans:.2f} zł</div>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-# SEKACJA DODAWANIA WPISU
-st.markdown("### ➕ Dodaj nową transakcję")
-with st.container():
-    c1, c2, c3 = st.columns([2, 2, 3])
     
-    with c1:
-        # NAPRAWA ZER: value=None sprawia, że pole jest puste
-        kwota_input = st.number_input("Kwota (zł)", min_value=0.0, value=None, step=0.01, placeholder="Wpisz kwotę...")
+    if st.session_state.menu_open == "P":
+        with st.container(border=True):
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key="p_kw")
+            da = st.date_input("Z dnia", datetime.now(), key="p_da")
+            if st.button("ZAPISZ", type="primary", use_container_width=True):
+                if kw:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.menu_open = None; st.rerun()
+
+# KOLUMNA 2: GOTÓWKA
+with c2:
+    bg_got = "#fff3cd" if s_got >= 0 else "#f8d7da"; brd_got = "#ffc107" if s_got >= 0 else "#dc3545"
+    st.markdown(f'<div style="background-color:{bg_got}; padding:10px; border-radius:10px 10px 0 0; text-align:center; border-bottom: 5px solid {brd_got}; height: 80px;"><span style="color:#856404; font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="color:#856404; font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ DODAJ", key="btn_g", use_container_width=True):
+        st.session_state.menu_open = "G" if st.session_state.menu_open != "G" else None
+        st.rerun()
     
-    with c2:
-        typ_transakcji = st.selectbox("Typ", ["Przychód (Obrót)", "Wydatek (Zakupy/Paliwo)"])
+    if st.session_state.menu_open == "G":
+        with st.container(border=True):
+            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+            wybrana = st.selectbox("Wybierz osobę", osoby)
+            kw = st.number_input(f"Kwota", min_value=0.0, format="%.2f", value=None, key="g_kw")
+            da = st.date_input("Z dnia", datetime.now(), key="g_da")
+            if st.button("ZAPISZ", type="primary", use_container_width=True):
+                if kw:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {wybrana}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.menu_open = None; st.rerun()
+
+# KOLUMNA 3: WYDATKI
+with c3:
+    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px 10px 0 0; text-align:center; border-bottom: 5px solid #dc3545; height: 80px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:18px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ DODAJ", key="btn_w", use_container_width=True):
+        st.session_state.menu_open = "W" if st.session_state.menu_open != "W" else None
+        st.rerun()
     
-    with c3:
-        notatka = st.text_input("Krótki opis (opcjonalnie)", placeholder="np. Dostawa serów, zamówienie #12")
+    if st.session_state.menu_open == "W":
+        with st.container(border=True):
+            kw = st.number_input("Kwota", min_value=0.0, format="%.2f", value=None, key="w_kw")
+            da = st.date_input("Z dnia", datetime.now(), key="w_da")
+            op = st.text_input("Opis wydatku")
+            if st.button("ZAPISZ", type="primary", use_container_width=True):
+                if kw:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': da.strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.menu_open = None; st.rerun()
 
-    if st.button("Zatwierdź wpis", type="primary", use_container_width=True):
-        if kwota_input is not None and kwota_input > 0:
-            now = datetime.now().strftime("%H:%M:%S")
-            
-            if "Przychód" in typ_transakcji:
-                st.session_state.total_in += kwota_input
-            else:
-                st.session_state.total_out += kwota_input
-            
-            # Dodanie do tabeli historii
-            new_row = pd.DataFrame([[now, typ_transakcji, kwota_input, notatka]], 
-                                   columns=['Godzina', 'Typ', 'Kwota', 'Opis'])
-            st.session_state.data_log = pd.concat([new_row, st.session_state.data_log], ignore_index=True)
-            
-            st.success(f"Dodano: {kwota_input:.2f} zł")
-            st.rerun()
-        else:
-            st.error("Proszę podać prawidłową kwotę!")
+# --- TABELA ---
+st.divider()
+def apply_row_styles(row):
+    color = ''
+    if row['Typ'] == 'Przychód ogólny': color = 'background-color: #d4edda; color: #155724'
+    elif row['Typ'] == 'Wydatki gotówkowe': color = 'background-color: #f8d7da; color: #721c24'
+    elif 'Gotówka' in row['Typ']: color = 'background-color: #fff3cd; color: #856404'
+    return [color] * len(row)
 
-# SEKCJA HISTORII (Podobna do tej ze zrzutu ekranu)
-st.markdown("---")
-st.markdown("### 📂 Historia dzisiejszych operacji")
+df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
+st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, hide_index=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
 
-if not st.session_state.data_log.empty:
-    st.dataframe(st.session_state.data_log, use_container_width=True, hide_index=True)
-else:
-    st.info("Brak wpisów w historii dla bieżącej sesji.")
-
-# STOPKA SYSTEMOWA
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("---")
-col_f1, col_f2 = st.columns(2)
-with col_f1:
-    st.caption(f"Status połączenia: ✅ Stabilne")
-with col_f2:
-    st.caption(f"Ostatnia synchronizacja: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+with st.sidebar:
+    if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
