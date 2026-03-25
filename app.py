@@ -176,7 +176,7 @@ with c3:
 
 st.divider()
 
-# --- 5. HISTORIA I MENU ---
+# --- 5. HISTORIA I MENU BOCZNE ---
 st.subheader("Historia wpisów")
 if not df_active.empty:
     df_editor = df_active.copy()
@@ -184,7 +184,6 @@ if not df_active.empty:
     df_editor = df_editor[cols_to_show]
     df_editor.insert(0, "Wybierz", False)
     
-    # TUTAJ POPRAWKA: on_change wymusza odświeżenie po kliknięciu ptaszka
     res = st.data_editor(
         df_editor.iloc[::-1],
         column_config={
@@ -211,7 +210,7 @@ if not df_active.empty:
 
         st.divider()
         
-        # Logika sprawdzająca zaznaczone wiersze bezpośrednio z rezultatu edytora
+        # Usuwanie zaznaczonych
         selected_rows = res[res["Wybierz"] == True].index.tolist()
         if len(selected_rows) > 0:
             if st.button(f"🗑️ USUŃ ZAZNACZONE ({len(selected_rows)})", use_container_width=True, type="primary"):
@@ -225,11 +224,37 @@ if not df_active.empty:
         st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
         
         st.divider()
-        if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True):
-            full = load_data()
-            full.loc[df_active.index, 'Status'] = 'Archiwum'
-            save_data(full)
-            st.rerun()
+        # --- TRZYPOZIOMOWE USUWANIE CAŁEJ HISTORII ---
+        if 'delete_confirm' not in st.session_state: st.session_state.delete_confirm = 0
+        
+        if st.session_state.delete_confirm == 0:
+            if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True):
+                st.session_state.delete_confirm = 1
+                st.rerun()
+        
+        if st.session_state.delete_confirm == 1:
+            st.warning("Czy na pewno chcesz usunąć wszystko?")
+            col_y, col_n = st.columns(2)
+            if col_y.button("TAK (1/2)", use_container_width=True):
+                st.session_state.delete_confirm = 2
+                st.rerun()
+            if col_n.button("ANULUJ", use_container_width=True):
+                st.session_state.delete_confirm = 0
+                st.rerun()
+
+        if st.session_state.delete_confirm == 2:
+            st.error("DANE ZOSTANĄ ARCHIWALNE! OSTATECZNE POTWIERDZENIE?")
+            if st.button("🔥 POTWIERDZAM USUNIĘCIE (2/2)", use_container_width=True, type="primary"):
+                full = load_data()
+                full.loc[df_active.index, 'Status'] = 'Archiwum'
+                save_data(full)
+                st.session_state.delete_confirm = 0
+                st.success("Wyczyszczono historię!")
+                st.rerun()
+            if st.button("⬅️ COFNIJ", use_container_width=True):
+                st.session_state.delete_confirm = 0
+                st.rerun()
+
 else:
     st.info("Brak aktywnych wpisów.")
     with st.sidebar:
