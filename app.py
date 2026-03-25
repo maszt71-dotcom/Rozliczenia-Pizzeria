@@ -6,19 +6,19 @@ import zipfile
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- KONFIGURACJA STRONY ---
+# --- 1. USTAWIENIA STRONY ---
 st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
 
 cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- USTAWIENIA ---
+# --- 2. USTAWIENIA I BAZA ---
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 EMAIL_RAPORT = "mange929598@gmail.com"
 
-# --- LOGIKA DOSTĘPU ---
+# --- 3. LOGOWANIE ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     wpisane = st.text_input("Hasło", type="password")
@@ -27,7 +27,7 @@ if cookies.get("is_logged") != "true":
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
 
-# --- OBSŁUGA DANYCH ---
+# --- 4. FUNKCJE DANYCH ---
 def load_data():
     if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
@@ -42,7 +42,7 @@ def prepare_zip_report(df):
         csv_zip.writestr("raport.csv", df.to_csv().encode('utf-8'))
     return buf.getvalue()
 
-# --- CSS: SZEROKOŚĆ PRZYCISKÓW I WYGLĄD ---
+# --- 5. WYGLĄD (CSS) ---
 st.markdown("""
     <style>
     div[data-testid="stColumn"] .stButton { width: 100% !important; }
@@ -61,6 +61,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- 6. OBLICZENIA ---
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
@@ -69,10 +70,10 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- STAN SYSTEMU ---
+# --- 7. STAN SYSTEMU ---
 if "cleanup_step" not in st.session_state: st.session_state.cleanup_step = 0
 
-# --- WIDOK GŁÓWNY (KAFELKI) ---
+# --- 8. KAFELKI GŁÓWNE ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -128,7 +129,7 @@ with c3:
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                     st.session_state.open_section = None; st.rerun()
 
-# --- TABELA ---
+# --- 9. TABELA ---
 st.divider()
 def apply_row_styles(row):
     if row['Typ'] == 'Przychód ogólny': return ['background-color: #d4edda; color: #155724'] * len(row)
@@ -139,36 +140,33 @@ def apply_row_styles(row):
 df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
 st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, hide_index=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
 
-# --- PASEK BOCZNY: RAPORTY I CZYSZCZENIE ---
+# --- 10. PASEK BOCZNY (RAPORTY I CZYSZCZENIE) ---
 with st.sidebar:
     st.header("⚙️ Menu Raportów")
     
     zip_data = prepare_zip_report(df_h)
     
-    # Podstawowe opcje (bez kasowania)
+    # OPCJE BEZ KASOWANIA
     st.download_button("📂 Pobierz raport (PDF+CSV)", data=zip_data, file_name="raport.zip", use_container_width=True)
-    if st.button("📧 Wyślij raport", key="send_only", use_container_width=True):
+    if st.button("📧 Wyślij raport", key="send_main", use_container_width=True):
         st.success(f"Wysłano raporty na {EMAIL_RAPORT}")
 
     st.divider()
 
-    # PROCES CZYSZCZENIA
+    # PROCES CZYSZCZENIA (KROK PO KROKU)
     if st.session_state.cleanup_step == 0:
         if st.download_button("🔥 POBIERZ RAPORT I USUŃ DANE", data=zip_data, file_name="final_raport.zip", type="primary", use_container_width=True):
-            st.session_state.cleanup_step = 1
-            st.rerun()
+            st.session_state.cleanup_step = 1; st.rerun()
 
     if st.session_state.cleanup_step == 1:
         st.success("✅ Pobrano pliki")
-        if st.button("📧 Wyślij raport", key="send_step_1", use_container_width=True):
-            st.info(f"Wysłano pliki na {EMAIL_RAPORT}")
-            st.session_state.cleanup_step = 2
-            st.rerun()
+        if st.button("📧 Wyślij raport", key="send_cleanup", use_container_width=True):
+            st.info(f"Wysłano raporty na {EMAIL_RAPORT}")
+            st.session_state.cleanup_step = 2; st.rerun()
 
     if st.session_state.cleanup_step == 2:
         if st.button("🗑️ USUŃ DANE", type="primary", use_container_width=True):
-            st.session_state.cleanup_step = 3
-            st.rerun()
+            st.session_state.cleanup_step = 3; st.rerun()
 
     if st.session_state.cleanup_step == 3:
         st.error("⚠️ CZY JESTEŚ PEWIEN?")
@@ -177,11 +175,9 @@ with st.sidebar:
             full_db = load_data()
             full_db.loc[df_active.index, 'Status'] = 'Archiwum'
             save_data(full_db)
-            st.session_state.cleanup_step = 0
-            st.rerun()
+            st.session_state.cleanup_step = 0; st.rerun()
         if col_n.button("NIE", use_container_width=True):
-            st.session_state.cleanup_step = 0
-            st.rerun()
+            st.session_state.cleanup_step = 0; st.rerun()
 
     st.divider()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
