@@ -75,7 +75,7 @@ with c1:
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="val_p")
-            if st.button("ZAPISZ", key="save_p", use_container_width=True):
+            if st.button("ZAPISZ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -95,24 +95,25 @@ with c2:
                     st.session_state.os = o if st.session_state.os != o else None
                     st.rerun()
                 
-                # Rozwijanie formularza pod klikniętą osobą
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Wpisujesz dla: **{o}**")
                         d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"val_g_{o}")
                         c_s, c_c = st.columns(2)
-                        if c_s.button("ZAPISZ", key=f"save_g_{o}", use_container_width=True):
+                        # PRZYCISK ZAPISZ NA ZIELONO
+                        if c_s.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g:
                                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                                 st.session_state.s = ""; st.session_state.os = None; st.rerun()
+                        # PRZYCISK COFNIJ NA CZERWONO
                         if c_c.button("COFNIJ", key=f"back_{o}", use_container_width=True):
                             st.session_state.os = None; st.rerun()
             
-            # Przycisk POWRÓT pod ostatnim kierowcą
             st.divider()
-            if st.button("⬅️ POWRÓT", use_container_width=True):
+            # PRZYCISK POWRÓT NA CZERWONO (DLA CAŁEGO OKNA)
+            if st.button("⬅️ POWRÓT", use_container_width=True, type="secondary"):
                 st.session_state.s = ""
                 st.session_state.os = None
                 st.rerun()
@@ -127,7 +128,7 @@ with c3:
             d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="val_w")
             op_w = st.text_input("Opis", key="desc_w")
-            if st.button("ZAPISZ W", key="save_w", use_container_width=True):
+            if st.button("ZAPISZ W", key="save_w", use_container_width=True, type="primary"):
                 if kw_w:
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
