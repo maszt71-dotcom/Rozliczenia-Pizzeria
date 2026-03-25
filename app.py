@@ -42,7 +42,7 @@ def prepare_zip_report(df):
         csv_zip.writestr("raport.csv", df.to_csv().encode('utf-8'))
     return buf.getvalue()
 
-# --- CSS: SZEROKOŚĆ PRZYCISKÓW ---
+# --- CSS: SZEROKOŚĆ PRZYCISKÓW I WYGLĄD ---
 st.markdown("""
     <style>
     div[data-testid="stColumn"] .stButton { width: 100% !important; }
@@ -72,7 +72,7 @@ s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].
 # --- STAN SYSTEMU ---
 if "cleanup_step" not in st.session_state: st.session_state.cleanup_step = 0
 
-# --- WIDOK GŁÓWNY (NAGŁÓWKI) ---
+# --- WIDOK GŁÓWNY (KAFELKI) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -130,33 +130,38 @@ with c3:
 
 # --- TABELA ---
 st.divider()
-df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
-st.dataframe(df_h, use_container_width=True, hide_index=True)
+def apply_row_styles(row):
+    if row['Typ'] == 'Przychód ogólny': return ['background-color: #d4edda; color: #155724'] * len(row)
+    if row['Typ'] == 'Wydatki gotówkowe': return ['background-color: #f8d7da; color: #721c24'] * len(row)
+    if 'Gotówka' in row['Typ']: return ['background-color: #fff3cd; color: #856404'] * len(row)
+    return [''] * len(row)
 
-# --- PASEK BOCZNY: LOGIKA CZYSZCZENIA ---
+df_h = df_active[['Data', 'Typ', 'Kwota', 'Data zdarzenia', 'Opis']].iloc[::-1]
+st.dataframe(df_h.style.apply(apply_row_styles, axis=1), use_container_width=True, hide_index=True, column_config={"Kwota": st.column_config.NumberColumn(format="%.2f zł")})
+
+# --- PASEK BOCZNY: RAPORTY I CZYSZCZENIE ---
 with st.sidebar:
     st.header("⚙️ Menu Raportów")
     
-    # 1. Zwykły eksport bez kasowania
     zip_data = prepare_zip_report(df_h)
+    
+    # Podstawowe opcje (bez kasowania)
     st.download_button("📂 Pobierz raport (PDF+CSV)", data=zip_data, file_name="raport.zip", use_container_width=True)
-    if st.button("📧 Wyślij raport (Email)", use_container_width=True):
-        st.success(f"Wysłano PDF i CSV do: {EMAIL_RAPORT}")
+    if st.button("📧 Wyślij raport", key="send_only", use_container_width=True):
+        st.success(f"Wysłano raporty na {EMAIL_RAPORT}")
 
     st.divider()
 
-    # 2. PROCES: POBIERZ I USUŃ
+    # PROCES CZYSZCZENIA
     if st.session_state.cleanup_step == 0:
         if st.download_button("🔥 POBIERZ RAPORT I USUŃ DANE", data=zip_data, file_name="final_raport.zip", type="primary", use_container_width=True):
-            # Po kliknięciu "Pobierz" w download_button nie można automatycznie zrobić st.rerun(),
-            # ale użytkownik klikając to wykonuje pobranie. Dodajemy mały przycisk potwierdzający wysyłkę:
             st.session_state.cleanup_step = 1
             st.rerun()
 
     if st.session_state.cleanup_step == 1:
-        st.success("✅ Pobrano pliki (PDF+CSV)")
-        if st.button("📧 WYŚLIJ I ODBLOKUJ USUWANIE", use_container_width=True):
-            st.info(f"Wysłano raporty na {EMAIL_RAPORT}")
+        st.success("✅ Pobrano pliki")
+        if st.button("📧 Wyślij raport", key="send_step_1", use_container_width=True):
+            st.info(f"Wysłano pliki na {EMAIL_RAPORT}")
             st.session_state.cleanup_step = 2
             st.rerun()
 
@@ -167,7 +172,6 @@ with st.sidebar:
 
     if st.session_state.cleanup_step == 3:
         st.error("⚠️ CZY JESTEŚ PEWIEN?")
-        st.write("Tej czynności nie można cofnąć!")
         col_t, col_n = st.columns(2)
         if col_t.button("TAK, CZYŚĆ", use_container_width=True):
             full_db = load_data()
@@ -179,4 +183,5 @@ with st.sidebar:
             st.session_state.cleanup_step = 0
             st.rerun()
 
+    st.divider()
     if st.button("🔄 ODŚWIEŻ", use_container_width=True): st.rerun()
