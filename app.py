@@ -17,11 +17,11 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- 2. DANE DO WYSYŁKI (WPISANE TWOJE HASŁO) ---
+# --- 2. DANE DO WYSYŁKI ---
 MOJE_HASLO = "dup@"
 DB_FILE = 'finanse_data.csv'
 EMAIL_KONTO = "mange929598@gmail.com"  
-HASLO_APP = "hlqivtidxgchoqdi" # <--- TWOJE NOWE HASŁO BEZ SPACJI
+HASLO_APP = "hlqivtidxgchoqdi" 
 
 # --- 3. FUNKCJA WYSYŁANIA ---
 def wyslij_raport_final(dane_zip):
@@ -57,6 +57,8 @@ st.markdown("""
     div[data-testid="stColumn"]:nth-of-type(1) .stButton > button { background-color: #d4edda !important; color: #155724 !important; }
     div[data-testid="stColumn"]:nth-of-type(2) .stButton > button { background-color: #fff3cd !important; color: #856404 !important; }
     div[data-testid="stColumn"]:nth-of-type(3) .stButton > button { background-color: #f8d7da !important; color: #721c24 !important; }
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -96,18 +98,56 @@ if cookies.get("is_logged") != "true":
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
+# KOLUMNA 1
 with c1:
-    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:18px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="btn_p"): st.session_state.open_section = "P"; st.rerun()
+    st.markdown(f'<div style="background-color:#d4edda; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #28a745; height: 100px;"><span style="color:#155724; font-size:11px; font-weight:bold;">PRZYCHÓD OGÓLNY</span><br><b style="color:#155724; font-size:18px;">{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ DODAJ", key="btn_p"):
+        st.session_state.open_section = "P" if getattr(st.session_state, "open_section", None) != "P" else None; st.rerun()
+    if getattr(st.session_state, "open_section", None) == "P":
+        with st.container(border=True):
+            kw = st.number_input("Kwota", value=None, key="p_kw")
+            if st.button("ZAPISZ", type="primary", use_container_width=True):
+                if kw:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.open_section = None; st.rerun()
 
+# KOLUMNA 2
 with c2:
     bg = "#fff3cd" if s_got >= 0 else "#ff0000"; txt = "#856404" if s_got >= 0 else "#ffffff"
     st.markdown(f'<div style="background-color:{bg}; color:{txt}; padding:10px; border-radius:10px; text-align:center; height: 100px;"><span style="font-size:11px; font-weight:bold;">GOTÓWKA (SUMA)</span><br><b style="font-size:18px;">{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="btn_g"): st.session_state.open_section = "G"; st.session_state.selected_person = None; st.rerun()
+    if st.button("➕ DODAJ", key="btn_g"):
+        st.session_state.open_section = "G" if getattr(st.session_state, "open_section", None) != "G" else None; st.session_state.selected_person = None; st.rerun()
+    if getattr(st.session_state, "open_section", None) == "G":
+        with st.container(border=True):
+            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+            if getattr(st.session_state, "selected_person", None) is None:
+                for o in osoby:
+                    if st.button(o, use_container_width=True, key=f"sel_{o}"): st.session_state.selected_person = o; st.rerun()
+            else:
+                st.markdown(f"**Osoba:** `{st.session_state.selected_person}`")
+                kw = st.number_input("Kwota", value=None, key="g_kw")
+                if st.button("ZAPISZ", type="primary", use_container_width=True):
+                    if kw:
+                        n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.selected_person}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
+                        save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                        st.session_state.open_section = None; st.session_state.selected_person = None; st.rerun()
+                if st.button("COFNIJ", use_container_width=True): st.session_state.selected_person = None; st.rerun()
 
+# KOLUMNA 3
 with c3:
-    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:18px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="btn_w"): st.session_state.open_section = "W"; st.rerun()
+    st.markdown(f'<div style="background-color:#f8d7da; padding:10px; border-radius:10px; text-align:center; border-bottom: 5px solid #dc3545; height: 100px;"><span style="color:#721c24; font-size:11px; font-weight:bold;">WYDATKI GOTÓWKOWE</span><br><b style="color:#721c24; font-size:18px;">{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ DODAJ", key="btn_w"):
+        st.session_state.open_section = "W" if getattr(st.session_state, "open_section", None) != "W" else None; st.rerun()
+    if getattr(st.session_state, "open_section", None) == "W":
+        with st.container(border=True):
+            kw = st.number_input("Kwota", value=None, key="w_kw")
+            op = st.text_input("Opis")
+            if st.button("ZAPISZ", type="primary", use_container_width=True):
+                if kw:
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.open_section = None; st.rerun()
 
 # --- 8. PASEK BOCZNY ---
 if "cleanup_step" not in st.session_state: st.session_state.cleanup_step = 0
