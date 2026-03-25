@@ -26,7 +26,7 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- 2. LOGOWANIE (PRZYWRÓCONE I SPRAWDZONE) ---
+# --- 2. LOGOWANIE (DOKŁADNIE TAK JAK MIAŁEŚ) ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
@@ -73,7 +73,6 @@ def create_pdf(df, s_og, s_got, s_wyd):
 
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        # Każda linia jest czyszczona z polskich znaków, żeby PDF się nie zawiesił
         linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     
@@ -122,10 +121,7 @@ with c3:
 # --- 6. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
-    # CSV pobiera się z polskimi znakami (to działało zawsze)
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
-    
-    # PDF pobiera się z funkcją bezpiecznego tekstu (naprawiony błąd)
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
 
     st.divider()
