@@ -92,11 +92,10 @@ with c2:
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
                 if st.button(o, key=f"os_{o}", use_container_width=True):
-                    # Jeśli klikniesz tę samą osobę drugi raz, zamknij formularz (toggle)
                     st.session_state.os = o if st.session_state.os != o else None
                     st.rerun()
                 
-                # Formularz pojawia się bezpośrednio pod klikniętą osobą
+                # Rozwijanie formularza pod klikniętą osobą
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Wpisujesz dla: **{o}**")
@@ -110,6 +109,13 @@ with c2:
                                 st.session_state.s = ""; st.session_state.os = None; st.rerun()
                         if c_c.button("COFNIJ", key=f"back_{o}", use_container_width=True):
                             st.session_state.os = None; st.rerun()
+            
+            # Przycisk POWRÓT pod ostatnim kierowcą
+            st.divider()
+            if st.button("⬅️ POWRÓT", use_container_width=True):
+                st.session_state.s = ""
+                st.session_state.os = None
+                st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -136,5 +142,4 @@ with st.sidebar:
         full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'; save_data(full); st.rerun()
 
 st.divider()
-# Tabela z automatyczną datą i godziną (Data) oraz wybranym dniem (Data zdarzenia)
 st.dataframe(df_active[['Data', 'Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1], use_container_width=True, hide_index=True)
