@@ -1,29 +1,26 @@
 import streamlit as st
 import pandas as pd
 import os
-import smtplib
 from fpdf import FPDF
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- FUNKCJA CZYSZCZĄCA TEKST (USUWA POLSKIE ZNAKI DLA PDF) ---
+# --- FUNKCJA NAPRAWCZA DLA PDF (USUWA PROBLEMATYCZNE ZNAKI) ---
 def pdf_safe(txt):
     if not txt: return ""
     rep = {"ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z",
            "Ą":"A","Ć":"C","Ę":"E","Ł":"L","Ń":"N","Ó":"O","Ś":"S","Ź":"Z","Ż":"Z"}
     t = str(txt)
     for k, v in rep.items(): t = t.replace(k, v)
-    # Pozbywamy się wszystkiego, czego PDF nie rozumie
     return t.encode('ascii', 'ignore').decode('ascii')
 
-# --- 1. KONFIGURACJA ---
+# --- 1. KONFIGURACJA I LOGOWANIE ---
 st.set_page_config(page_title="Pizzeria", layout="wide")
 
 cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- 2. LOGOWANIE (TWOJA STARA WERSJA) ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
@@ -34,7 +31,7 @@ if cookies.get("is_logged") != "true":
             st.rerun()
     st.stop()
 
-# --- 3. DANE ---
+# --- 2. DANE ---
 DB_FILE = 'finanse_data.csv'
 
 def load_data():
@@ -52,27 +49,22 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 4. GENERATOR PDF (TYLKO TEKST, BEZ LOGO) ---
+# --- 3. GENERATOR PDF ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
-    
     pdf.set_font("Helvetica", 'B', 12)
     pdf.cell(0, 10, pdf_safe(f"Przychod: {s_og:.2f} zl | Gotowka: {s_got:.2f} zl | Wydatki: {s_wyd:.2f} zl"), ln=True)
     pdf.ln(5)
-
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        # Każda linia jest czyszczona, żeby PDF się nie zawiesił
-        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"
-        pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
-    
+        pdf.cell(0, 10, pdf_safe(f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"), ln=True, border=1)
     return bytes(pdf.output())
 
-# --- 5. WIDOK GŁÓWNY (KAFELKI) ---
+# --- 4. WIDOK GŁÓWNY (KAFELKI HTML) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -80,7 +72,7 @@ with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"): st.session_state.s = "P"; st.rerun()
     if getattr(st.session_state, "s", "") == "P":
-        kw = st.number_input("Kwota", value=None, key="p_val")
+        kw = st.number_input("Kwota", value=None, key="p_v")
         if st.button("ZAPISZ"):
             n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
             save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -95,7 +87,7 @@ with c2:
             for o in osoby:
                 if st.button(o, key=o): st.session_state.os = o; st.rerun()
         else:
-            kw = st.number_input(f"Kwota ({st.session_state.os})", value=None, key="g_val")
+            kw = st.number_input(f"Kwota ({st.session_state.os})", value=None, key="g_v")
             if st.button("ZAPISZ G"):
                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -105,14 +97,14 @@ with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"): st.session_state.s = "W"; st.rerun()
     if getattr(st.session_state, "s", "") == "W":
-        kw = st.number_input("Kwota", value=None, key="w_val")
-        op = st.text_input("Opis", key="w_desc")
+        kw = st.number_input("Kwota", value=None, key="w_v")
+        op = st.text_input("Opis", key="w_d")
         if st.button("ZAPISZ W"):
             n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
             save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
             st.session_state.s = ""; st.rerun()
 
-# --- 6. PASEK BOCZNY ---
+# --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
