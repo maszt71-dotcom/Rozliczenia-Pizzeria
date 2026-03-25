@@ -1,6 +1,11 @@
 import streamlit as st
 import pandas as pd
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 from fpdf import FPDF
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
@@ -13,6 +18,46 @@ def pdf_safe(txt):
     t = str(txt)
     for k, v in rep.items(): t = t.replace(k, v)
     return t.encode('ascii', 'ignore').decode('ascii')
+
+# --- FUNKCJA FAKTYCZNEJ WYSYŁKI E-MAIL ---
+def send_email_with_reports(pdf_data, csv_data):
+    receiver_email = "mange929598@gmail.com"
+    sender_email = "mange929598@gmail.com"
+    # Tu wpisz swoje hasło aplikacji Gmail (16 znaków)
+    password = "TWOJE_HASLO_APLIKACJI" 
+
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = receiver_email
+    msg['Subject'] = f"Raport Pizzeria - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+
+    body = "W załączniku przesyłam aktualny raport finansowy (PDF oraz CSV)."
+    msg.attach(MIMEText(body, 'plain'))
+
+    # Załącznik PDF
+    part_pdf = MIMEBase('application', 'octet-stream')
+    part_pdf.set_payload(pdf_data)
+    encoders.encode_base64(part_pdf)
+    part_pdf.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.pdf")
+    msg.attach(part_pdf)
+
+    # Załącznik CSV
+    part_csv = MIMEBase('application', 'octet-stream')
+    part_csv.set_payload(csv_data)
+    encoders.encode_base64(part_csv)
+    part_csv.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.csv")
+    msg.attach(part_csv)
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        st.sidebar.error(f"Błąd wysyłki: {e}")
+        return False
 
 # --- 1. KONFIGURACJA I LOGOWANIE ---
 st.set_page_config(page_title="Pizzeria", layout="wide")
@@ -43,7 +88,7 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF (KOLORY JAK W APCE) ---
+# --- 3. GENERATOR PDF ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -51,11 +96,11 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Helvetica", 'B', 12)
-    pdf.set_fill_color(212, 237, 218) # Zielony
+    pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
-    pdf.set_fill_color(255, 243, 205) # Zolty
+    pdf.set_fill_color(255, 243, 205)
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
-    pdf.set_fill_color(248, 215, 218) # Czerwony
+    pdf.set_fill_color(248, 215, 218)
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
@@ -64,7 +109,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return pdf.output(dest="S").encode("latin-1")
 
-# --- 4. WIDOK GŁÓWNY ---
+# --- 4. WIDOK GŁÓWNY (UKŁAD NIENARUSZONY) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -74,8 +119,7 @@ if 'os' not in st.session_state: st.session_state.os = None
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"):
-        st.session_state.s = "P" if st.session_state.s != "P" else ""
-        st.rerun()
+        st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
@@ -91,16 +135,13 @@ with c1:
 with c2:
     st.markdown(f'<div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="g"):
-        st.session_state.s = "G" if st.session_state.s != "G" else ""
-        st.session_state.os = None
-        st.rerun()
+        st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
                 if st.button(o, key=f"os_{o}", use_container_width=True):
-                    st.session_state.os = o if st.session_state.os != o else None
-                    st.rerun()
+                    st.session_state.os = o if st.session_state.os != o else None; st.rerun()
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
@@ -121,8 +162,7 @@ with c2:
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"):
-        st.session_state.s = "W" if st.session_state.s != "W" else ""
-        st.rerun()
+        st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
             d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
@@ -136,12 +176,23 @@ with c3:
             if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True):
                 st.session_state.s = ""; st.rerun()
 
-# --- 5. PASEK BOCZNY I HISTORIA ---
+# --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
+    
+    if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
+        pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
+        csv_file = df_active.to_csv(index=False).encode('utf-8')
+        
+        with st.spinner("Wysyłanie raportu na e-mail..."):
+            if send_email_with_reports(pdf_file, csv_file):
+                st.success("✅ Raport został wysłany!")
+
+    st.divider()
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
-    if st.button("🗑️ USUŃ HISTORIĘ", type="primary", use_container_width=True):
+    
+    if st.button("🗑️ USUŃ HISTORIĘ", type="secondary", use_container_width=True):
         full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'; save_data(full); st.rerun()
 
 st.divider()
