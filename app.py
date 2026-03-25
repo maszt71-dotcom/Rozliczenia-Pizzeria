@@ -11,6 +11,11 @@ from email import encoders
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
+# --- FUNKCJA NAPRAWCZA DLA POLSKICH ZNAKÓW ---
+def usun_polskie_znaki(tekst):
+    mapa = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
+    return str(tekst).translate(mapa)
+
 # --- 1. KONFIGURACJA ---
 st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
 
@@ -24,7 +29,7 @@ DB_FILE = 'finanse_data.csv'
 EMAIL_KONTO = "mange929598@gmail.com"  
 HASLO_APP = "hlqivtidxgchoqdi" 
 
-# --- 3. GENERATOR PDF (STABILNY) ---
+# --- 3. GENERATOR PDF (PANCERNY) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -53,10 +58,11 @@ def create_pdf(df, s_og, s_got, s_wyd):
 
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        pdf.cell(30, 10, str(row['Data zdarzenia']), border=1)
-        pdf.cell(60, 10, str(row['Typ'])[:25], border=1)
+        # Usuwamy polskie znaki tylko do PDF, żeby uniknąć błędu UnicodeEncodeError
+        pdf.cell(30, 10, usun_polskie_znaki(row['Data zdarzenia']), border=1)
+        pdf.cell(60, 10, usun_polskie_znaki(row['Typ'])[:25], border=1)
         pdf.cell(40, 10, f"{row['Kwota']:.2f} zl", border=1)
-        pdf.cell(60, 10, str(row['Opis'])[:25], border=1)
+        pdf.cell(60, 10, usun_polskie_znaki(row['Opis'])[:25], border=1)
         pdf.ln()
     
     return bytes(pdf.output())
