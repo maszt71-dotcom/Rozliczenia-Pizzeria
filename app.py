@@ -171,7 +171,6 @@ with st.sidebar:
 
     st.divider()
     
-    # OBSŁUGA USUWANIA LINII (NAPRAWIONA LOGIKA)
     if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
         if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
@@ -181,7 +180,6 @@ with st.sidebar:
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
                 full = load_data()
-                # Usuwamy wybrane po oryginalnych indeksach
                 full.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum'
                 save_data(full)
                 st.session_state.ask_del_line = False
@@ -214,13 +212,14 @@ with st.sidebar:
 
 st.divider()
 
-# --- 6. HISTORIA Z OKIENKIEM NA PTASZKA ---
+# --- 6. HISTORIA ---
 st.subheader("Historia wpisów")
 if not df_active.empty:
     df_editor = df_active.copy()
+    # Usunięcie rubryki 'id' jeśli istnieje w widoku
+    if 'id' in df_editor.columns: df_editor = df_editor.drop(columns=['id'])
     df_editor.insert(0, "Wybierz", False)
     
-    # Wyświetlenie edytora
     res = st.data_editor(
         df_editor.iloc[::-1],
         column_config={"Wybierz": st.column_config.CheckboxColumn("Wybierz", default=False)},
@@ -230,11 +229,7 @@ if not df_active.empty:
         key="pizza_editor"
     )
     
-    # Natychmiastowe przypisanie zaznaczonych linii do sesji
-    # Używamy indeksów z oryginalnego df_active
     current_selected = res[res["Wybierz"] == True].index.tolist()
-    
-    # Sprawdzamy czy lista zaznaczonych się zmieniła, aby wywołać odświeżenie przycisku w sidebarze
     if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
         st.session_state.selected_indices = current_selected
         st.rerun()
