@@ -83,37 +83,46 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF ---
+# --- 3. GENERATOR PDF (Z TABELĄ) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
-    pdf.set_font("Helvetica", 'B', 12)
     
+    # Podsumowanie góra
+    pdf.set_font("Helvetica", 'B', 11)
     pdf.set_fill_color(212, 237, 218)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
+    pdf.cell(63, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
     
     if s_got < 0:
-        pdf.set_fill_color(255, 0, 0)
-        pdf.set_text_color(255, 255, 255)
+        pdf.set_fill_color(255, 0, 0); pdf.set_text_color(255, 255, 255)
     else:
-        pdf.set_fill_color(255, 243, 205)
-        pdf.set_text_color(0, 0, 0)
-    pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
+        pdf.set_fill_color(255, 243, 205); pdf.set_text_color(0, 0, 0)
+    pdf.cell(63, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
     
-    pdf.set_fill_color(248, 215, 218)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
+    pdf.set_fill_color(248, 215, 218); pdf.set_text_color(0, 0, 0)
+    pdf.cell(63, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     
-    pdf.ln(5)
-    pdf.set_font("Helvetica", size=10)
-    pdf.set_text_color(0, 0, 0)
+    pdf.ln(10)
+    
+    # NAGŁÓWEK TABELI
+    pdf.set_font("Helvetica", 'B', 10)
+    pdf.set_fill_color(230, 230, 230)
+    pdf.cell(25, 8, pdf_safe("Dzien"), border=1, fill=True, align='C')
+    pdf.cell(55, 8, pdf_safe("Typ / Osoba"), border=1, fill=True, align='C')
+    pdf.cell(30, 8, pdf_safe("Kwota"), border=1, fill=True, align='C')
+    pdf.cell(80, 8, pdf_safe("Opis / Uwagi"), border=1, ln=1, fill=True, align='C')
+    
+    # WIERSZE TABELI
+    pdf.set_font("Helvetica", size=9)
     for _, row in df.iterrows():
-        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}"
-        pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
+        pdf.cell(25, 7, pdf_safe(row['Data zdarzenia']), border=1, align='C')
+        pdf.cell(55, 7, pdf_safe(row['Typ']), border=1)
+        pdf.cell(30, 7, pdf_safe(f"{row['Kwota']:.2f} zl"), border=1, align='R')
+        pdf.cell(80, 7, pdf_safe(row['Opis']), border=1, ln=1)
+        
     return pdf.output(dest="S").encode("latin-1")
 
 # --- 4. WIDOK GŁÓWNY ---
@@ -223,35 +232,27 @@ if not df_active.empty:
         st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
         
         st.divider()
-        # --- ZABEZPIECZENIE USUWANIA CAŁEJ HISTORII ---
         if 'delete_confirm' not in st.session_state: st.session_state.delete_confirm = 0
         
         if st.session_state.delete_confirm == 0:
             if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True):
-                st.session_state.delete_confirm = 1
-                st.rerun()
+                st.session_state.delete_confirm = 1; st.rerun()
         
         if st.session_state.delete_confirm == 1:
             st.warning("Czy na pewno chcesz usunąć wszystko?")
             col_y, col_n = st.columns(2)
             if col_y.button("TAK", use_container_width=True):
-                st.session_state.delete_confirm = 2
-                st.rerun()
+                st.session_state.delete_confirm = 2; st.rerun()
             if col_n.button("ANULUJ", use_container_width=True):
-                st.session_state.delete_confirm = 0
-                st.rerun()
+                st.session_state.delete_confirm = 0; st.rerun()
 
         if st.session_state.delete_confirm == 2:
             st.error("DANE ZOSTANĄ USUNIETE! OSTATECZNE POTWIERDZENIE?")
             if st.button("🔥 POTWIERDZAM USUNIĘCIE", use_container_width=True, type="primary"):
-                full = load_data()
-                full.loc[df_active.index, 'Status'] = 'Archiwum'
-                save_data(full)
-                st.session_state.delete_confirm = 0
-                st.rerun()
+                full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'; save_data(full)
+                st.session_state.delete_confirm = 0; st.rerun()
             if st.button("⬅️ COFNIJ", use_container_width=True):
-                st.session_state.delete_confirm = 0
-                st.rerun()
+                st.session_state.delete_confirm = 0; st.rerun()
 else:
     st.info("Brak aktywnych wpisów.")
     with st.sidebar:
