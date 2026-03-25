@@ -19,18 +19,16 @@ def pdf_safe(txt):
     for k, v in rep.items(): t = t.replace(k, v)
     return t.encode('ascii', 'ignore').decode('ascii')
 
-# --- FUNKCJA WYSYŁKI E-MAIL (TWOJE NOWE HASŁO) ---
+# --- FUNKCJA WYSYŁKI E-MAIL ---
 def send_email_with_reports(pdf_data, csv_data):
     receiver_email = "mange929598@gmail.com"
     sender_email = "mange929598@gmail.com"
-    # TWOJE NOWE HASŁO APLIKACJI Z OSTATNIEGO ZDJĘCIA:
     password = "hlqivtidxgchoqdi" 
 
     msg = MIMEMultipart()
     msg['From'] = sender_email
     msg['To'] = receiver_email
     msg['Subject'] = f"Raport Pizzeria - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-
     msg.attach(MIMEText("W załączniku przesyłam aktualny raport finansowy.", 'plain'))
 
     part_pdf = MIMEBase('application', 'octet-stream')
@@ -85,7 +83,7 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF (POPRAWIONY) ---
+# --- 3. GENERATOR PDF ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -104,8 +102,6 @@ def create_pdf(df, s_og, s_got, s_wyd):
     for _, row in df.iterrows():
         linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
-    
-    # POPRAWKA Z TWOJEGO SCREENA
     return pdf.output(dest="S").encode("latin-1")
 
 # --- 4. WIDOK GŁÓWNY ---
@@ -176,8 +172,28 @@ with st.sidebar:
     st.divider()
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
-    if st.button("🗑️ USUŃ HISTORIĘ", type="secondary", use_container_width=True):
-        full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'; save_data(full); st.rerun()
+    
+    st.divider()
+    # POTRÓJNE ZABEZPIECZENIE USUWANIA
+    if 'confirm_del' not in st.session_state: st.session_state.confirm_del = False
+    
+    if st.button("🗑️ USUŃ HISTORIĘ", use_container_width=True, type="secondary"):
+        st.session_state.confirm_del = True
+    
+    if st.session_state.confirm_del:
+        with st.container(border=True):
+            st.warning("⚠️ Czy na pewno chcesz usunąć historię?")
+            check = st.checkbox("Potwierdzam chęć usunięcia")
+            if check:
+                if st.button("🔥 WYCZYŚĆ DANE", use_container_width=True, type="primary"):
+                    full = load_data()
+                    full.loc[df_active.index, 'Status'] = 'Archiwum'
+                    save_data(full)
+                    st.session_state.confirm_del = False
+                    st.rerun()
+            if st.button("Anuluj"):
+                st.session_state.confirm_del = False
+                st.rerun()
 
 st.divider()
 st.dataframe(df_active[['Data', 'Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1], use_container_width=True, hide_index=True)
