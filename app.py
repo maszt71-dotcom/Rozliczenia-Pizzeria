@@ -32,7 +32,7 @@ def load_data():
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
 
-# --- KLUCZOWY CSS: TYLKO SZEROKOŚĆ PRZYCISKU BEZ ZMIANY WYGLĄDU KAFELKÓW ---
+# --- CSS: TYLKO SZEROKOŚĆ PRZYCISKU ---
 st.markdown("""
     <style>
     /* Wymuszenie szerokości przycisku na 100% kolumny */
