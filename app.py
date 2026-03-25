@@ -43,39 +43,25 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF (Z KOLORAMI JAK W APCE) ---
+# --- 3. GENERATOR PDF (KOLORY JAK W APCE) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
-    
-    # Nagłówek
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
-    
-    # Główne dane z kolorami kontenerów
     pdf.set_font("Helvetica", 'B', 12)
-    
-    # Przychód (Zielony)
-    pdf.set_fill_color(212, 237, 218)
-    pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, ln=0, fill=True, align='C')
-    
-    # Gotówka (Żółty)
-    pdf.set_fill_color(255, 243, 205)
-    pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, ln=0, fill=True, align='C')
-    
-    # Wydatki (Czerwony)
-    pdf.set_fill_color(248, 215, 218)
+    pdf.set_fill_color(212, 237, 218) # Zielony
+    pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
+    pdf.set_fill_color(255, 243, 205) # Zolty
+    pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
+    pdf.set_fill_color(248, 215, 218) # Czerwony
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
-    
     pdf.ln(5)
-    
-    # Tabela szczegółowa
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
         linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
-        
     return pdf.output(dest="S").encode("latin-1")
 
 # --- 4. WIDOK GŁÓWNY ---
@@ -93,12 +79,14 @@ with c1:
     if st.session_state.s == "P":
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
-            kw_p = st.number_input("Kwota", value=None, step=1.0, key="val_p")
-            if st.button("ZAPISZ", key="save_p", use_container_width=True, type="primary"):
+            kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v")
+            if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                     st.session_state.s = ""; st.rerun()
+            if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True):
+                st.session_state.s = ""; st.rerun()
 
 with c2:
     st.markdown(f'<div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -113,22 +101,21 @@ with c2:
                 if st.button(o, key=f"os_{o}", use_container_width=True):
                     st.session_state.os = o if st.session_state.os != o else None
                     st.rerun()
-                
                 if st.session_state.os == o:
                     with st.container(border=True):
-                        st.markdown(f"Wpisujesz dla: **{o}**")
+                        st.markdown(f"Dla: **{o}**")
                         d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
-                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"val_g_{o}")
-                        c_s, c_c = st.columns(2)
-                        if c_s.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
+                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}")
+                        cs, cb = st.columns(2)
+                        if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g:
                                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                                 st.session_state.s = ""; st.session_state.os = None; st.rerun()
-                        if c_c.button("COFNIJ", key=f"back_{o}", use_container_width=True):
+                        if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True):
                             st.session_state.os = None; st.rerun()
             st.divider()
-            if st.button("⬅️ POWRÓT", use_container_width=True, type="secondary"):
+            if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True):
                 st.session_state.s = ""; st.session_state.os = None; st.rerun()
 
 with c3:
@@ -139,13 +126,15 @@ with c3:
     if st.session_state.s == "W":
         with st.container(border=True):
             d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
-            kw_w = st.number_input("Kwota", value=None, step=1.0, key="val_w")
+            kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v")
             op_w = st.text_input("Opis", key="desc_w")
-            if st.button("ZAPISZ W", key="save_w", use_container_width=True, type="primary"):
+            if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w:
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                     st.session_state.s = ""; st.rerun()
+            if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True):
+                st.session_state.s = ""; st.rerun()
 
 # --- 5. PASEK BOCZNY I HISTORIA ---
 with st.sidebar:
