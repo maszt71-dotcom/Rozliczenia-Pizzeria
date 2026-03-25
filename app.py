@@ -42,7 +42,6 @@ if cookies.get("is_logged") != "true":
 # --- 2. DANE ---
 DB_FILE = "finanse_data.csv"
 
-
 def load_data():
     if os.path.exists(DB_FILE):
         df = pd.read_csv(DB_FILE)
@@ -57,10 +56,8 @@ def load_data():
     df["Status"] = df["Status"].fillna("Aktywny")
     return df
 
-
 def save_data(df):
     df.to_csv(DB_FILE, index=False)
-
 
 data = load_data()
 df_active = data[data["Status"] == "Aktywny"].copy()
@@ -78,21 +75,11 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.set_auto_page_break(auto=True, margin=15)
 
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(
-        0,
-        10,
-        pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"),
-        ln=True,
-        align="C"
-    )
+    pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align="C")
     pdf.ln(8)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.multi_cell(
-        0,
-        8,
-        pdf_safe(f"Przychod: {s_og:.2f} zl | Gotowka: {s_got:.2f} zl | Wydatki: {s_wyd:.2f} zl")
-    )
+    pdf.multi_cell(0, 8, pdf_safe(f"Przychod: {s_og:.2f} zl | Gotowka: {s_got:.2f} zl | Wydatki: {s_wyd:.2f} zl"))
     pdf.ln(4)
 
     pdf.set_font("Helvetica", size=10)
@@ -104,8 +91,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
             data_zdarzenia = row.get("Data zdarzenia", "")
             typ = row.get("Typ", "")
             kwota = pd.to_numeric(row.get("Kwota", 0), errors="coerce")
-            if pd.isna(kwota):
-                kwota = 0.0
+            kwota = 0.0 if pd.isna(kwota) else kwota
             opis = row.get("Opis", "")
 
             linia = f"{data_zdarzenia} | {typ} | {kwota:.2f} zl | {opis}"
@@ -119,68 +105,18 @@ st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.markdown(
-        f"""
-        <div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">
-            Przychód: <b>{s_og:,.2f} zł</b>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
+    st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"):
-        st.session_state.s = "P"
+        st.session_state.s = "P" if st.session_state.get("s", "") != "P" else ""
         st.rerun()
 
     if st.session_state.get("s", "") == "P":
-        kw = st.number_input("Kwota", min_value=0.0, step=1.0, key="p_v")
-        if st.button("ZAPISZ", key="save_p"):
-            n = {
-                "Data": datetime.now().strftime("%d.%m %H:%M"),
-                "Typ": "Przychód ogólny",
-                "Kwota": float(kw),
-                "Opis": "",
-                "Status": "Aktywny",
-                "Data zdarzenia": datetime.now().strftime("%d.%m")
-            }
-            save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-            st.session_state.s = ""
-            st.rerun()
-
-with c2:
-    st.markdown(
-        f"""
-        <div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center;">
-            Gotówka: <b>{s_got:,.2f} zł</b>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    if st.button("➕ DODAJ", key="g"):
-        st.session_state.s = "G"
-        st.session_state.os = None
-        st.rerun()
-
-    if st.session_state.get("s", "") == "G":
-        osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-
-        if not st.session_state.get("os", None):
-            for o in osoby:
-                if st.button(o, key=f"os_{o}"):
-                    st.session_state.os = o
-                    st.rerun()
-        else:
-            kw = st.number_input(
-                f"Kwota ({st.session_state.os})",
-                min_value=0.0,
-                step=1.0,
-                key="g_v"
-            )
-            if st.button("ZAPISZ G", key="save_g"):
+        with st.container(border=True):
+            kw = st.number_input("Kwota", min_value=0.0, step=1.0, key="p_v")
+            if st.button("ZAPISZ", key="save_p"):
                 n = {
                     "Data": datetime.now().strftime("%d.%m %H:%M"),
-                    "Typ": f"Gotówka - {st.session_state.os}",
+                    "Typ": "Przychód ogólny",
                     "Kwota": float(kw),
                     "Opis": "",
                     "Status": "Aktywny",
@@ -188,75 +124,83 @@ with c2:
                 }
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                 st.session_state.s = ""
-                st.session_state.os = None
                 st.rerun()
 
-with c3:
-    st.markdown(
-        f"""
-        <div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">
-            Wydatki: <b>{s_wyd:,.2f} zł</b>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+with c2:
+    st.markdown(f'<div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ DODAJ", key="g"):
+        st.session_state.s = "G" if st.session_state.get("s", "") != "G" else ""
+        st.session_state.os = None
+        st.rerun()
 
+    if st.session_state.get("s", "") == "G":
+        with st.container(border=True):
+            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+            if not st.session_state.get("os", None):
+                for o in osoby:
+                    if st.button(o, key=f"os_{o}"):
+                        st.session_state.os = o
+                        st.rerun()
+            else:
+                kw = st.number_input(f"Kwota ({st.session_state.os})", min_value=0.0, step=1.0, key="g_v")
+                if st.button("ZAPISZ G", key="save_g"):
+                    n = {
+                        "Data": datetime.now().strftime("%d.%m %H:%M"),
+                        "Typ": f"Gotówka - {st.session_state.os}",
+                        "Kwota": float(kw),
+                        "Opis": "",
+                        "Status": "Aktywny",
+                        "Data zdarzenia": datetime.now().strftime("%d.%m")
+                    }
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.s = ""
+                    st.session_state.os = None
+                    st.rerun()
+                if st.button("COFNIJ"):
+                    st.session_state.os = None
+                    st.rerun()
+
+with c3:
+    st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"):
-        st.session_state.s = "W"
+        st.session_state.s = "W" if st.session_state.get("s", "") != "W" else ""
         st.rerun()
 
     if st.session_state.get("s", "") == "W":
-        kw = st.number_input("Kwota", min_value=0.0, step=1.0, key="w_v")
-        op = st.text_input("Opis", key="w_d")
-        if st.button("ZAPISZ W", key="save_w"):
-            n = {
-                "Data": datetime.now().strftime("%d.%m %H:%M"),
-                "Typ": "Wydatki gotówkowe",
-                "Kwota": float(kw),
-                "Opis": op,
-                "Status": "Aktywny",
-                "Data zdarzenia": datetime.now().strftime("%d.%m")
-            }
-            save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-            st.session_state.s = ""
-            st.rerun()
+        with st.container(border=True):
+            kw = st.number_input("Kwota", min_value=0.0, step=1.0, key="w_v")
+            op = st.text_input("Opis", key="w_d")
+            if st.button("ZAPISZ W", key="save_w"):
+                n = {
+                    "Data": datetime.now().strftime("%d.%m %H:%M"),
+                    "Typ": "Wydatki gotówkowe",
+                    "Kwota": float(kw),
+                    "Opis": op,
+                    "Status": "Aktywny",
+                    "Data zdarzenia": datetime.now().strftime("%d.%m")
+                }
+                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                st.session_state.s = ""
+                st.rerun()
 
 
 # --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
-
-    st.download_button(
-        "📥 Pobierz CSV",
-        data=df_active.to_csv(index=False).encode("utf-8"),
-        file_name="raport.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
-    st.download_button(
-        "📥 Pobierz PDF",
-        data=create_pdf(df_active, s_og, s_got, s_wyd),
-        file_name="raport.pdf",
-        mime="application/pdf",
-        use_container_width=True
-    )
+    st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode("utf-8"), file_name="raport.csv", mime="text/csv", use_container_width=True)
+    st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", mime="application/pdf", use_container_width=True)
 
     if st.button("🗑️ USUŃ HISTORIĘ", type="primary", use_container_width=True):
         full = load_data()
-        full["Status"] = full["Status"].fillna("Aktywny")
-        active_mask = full["Status"] == "Aktywny"
-        full.loc[active_mask, "Status"] = "Archiwum"
+        full.loc[full["Status"] == "Aktywny", "Status"] = "Archiwum"
         save_data(full)
         st.rerun()
 
 
 # --- 6. TABELA ---
 st.divider()
-
 if not df_active.empty:
     show_df = df_active[["Data zdarzenia", "Typ", "Kwota", "Opis"]].iloc[::-1].copy()
-    show_df["Kwota"] = pd.to_numeric(show_df["Kwota"], errors="coerce").fillna(0)
     show_df["Kwota"] = show_df["Kwota"].map(lambda x: f"{x:,.2f} zł")
     st.dataframe(show_df, use_container_width=True, hide_index=True)
 else:
