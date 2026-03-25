@@ -174,7 +174,6 @@ with st.sidebar:
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
     
     st.divider()
-    # POTRÓJNE ZABEZPIECZENIE
     if 'del_step' not in st.session_state: st.session_state.del_step = 0
     
     if st.button("🗑️ USUŃ HISTORIĘ", use_container_width=True):
@@ -182,23 +181,28 @@ with st.sidebar:
     
     if st.session_state.del_step >= 1:
         with st.container(border=True):
-            st.warning("⚠️ Krok 1: Potwierdź usunięcie")
-            check = st.checkbox("Zgadzam się na usunięcie danych")
+            st.warning("Potwierdź usunięcie")
+            check = st.checkbox("Zgadzam się")
             
             if check:
-                if st.button("🔥 Krok 2: WYCZYŚĆ DANE", use_container_width=True, type="primary"):
+                if st.button("🔥 WYCZYŚĆ DANE", use_container_width=True, type="primary"):
                     st.session_state.del_step = 2
             
             if st.session_state.del_step == 2:
-                st.error("❗ OSTATNI KROK:")
-                if st.button("🧨 CZY JESTEŚ PEWIEN?", use_container_width=True):
+                st.error("CZY JESTEŚ PEWIEN?")
+                # Dwa małe przyciski obok siebie
+                col_t, col_n = st.columns(2)
+                if col_t.button("TAK", use_container_width=True):
                     full = load_data()
                     full.loc[df_active.index, 'Status'] = 'Archiwum'
                     save_data(full)
                     st.session_state.del_step = 0
                     st.rerun()
+                if col_n.button("NIE", use_container_width=True):
+                    st.session_state.del_step = 0
+                    st.rerun()
             
-            if st.button("Anuluj", key="cancel_del"):
+            if st.button("Anuluj", key="cancel_all"):
                 st.session_state.del_step = 0
                 st.rerun()
 
