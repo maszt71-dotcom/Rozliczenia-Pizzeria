@@ -26,7 +26,7 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-# --- 2. LOGOWANIE (TAK JAK BYŁO WCZEŚNIEJ) ---
+# --- 2. LOGOWANIE (PRZYWRÓCONE I SPRAWDZONE) ---
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
@@ -59,7 +59,7 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 4. GENERATOR PDF (UŻYWA HELVETICA - STANDARD) ---
+# --- 4. GENERATOR PDF (UŻYWA STANDARDOWEJ CZCIONKI) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -73,8 +73,9 @@ def create_pdf(df, s_og, s_got, s_wyd):
 
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        # Każda komórka musi być przepuszczona przez pdf_safe
-        pdf.cell(0, 10, pdf_safe(f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"), ln=True, border=1)
+        # Każda linia jest czyszczona z polskich znaków, żeby PDF się nie zawiesił
+        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"
+        pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     
     return bytes(pdf.output())
 
@@ -86,7 +87,7 @@ with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"): st.session_state.s = "P"; st.rerun()
     if getattr(st.session_state, "s", "") == "P":
-        kw = st.number_input("Kwota", value=None)
+        kw = st.number_input("Kwota", value=None, key="p_input")
         if st.button("ZAPISZ"):
             n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
             save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -99,9 +100,9 @@ with c2:
         osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
         if not getattr(st.session_state, "os", None):
             for o in osoby:
-                if st.button(o): st.session_state.os = o; st.rerun()
+                if st.button(o, key=f"btn_{o}"): st.session_state.os = o; st.rerun()
         else:
-            kw = st.number_input(f"Kwota ({st.session_state.os})", value=None)
+            kw = st.number_input(f"Kwota ({st.session_state.os})", value=None, key="g_input")
             if st.button("ZAPISZ G"):
                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os}", 'Kwota': float(kw), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -111,7 +112,8 @@ with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"): st.session_state.s = "W"; st.rerun()
     if getattr(st.session_state, "s", "") == "W":
-        kw = st.number_input("Kwota", value=None); op = st.text_input("Opis")
+        kw = st.number_input("Kwota", value=None, key="w_input")
+        op = st.text_input("Opis", key="w_desc")
         if st.button("ZAPISZ W"):
             n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw), 'Opis': op, 'Status': 'Aktywny', 'Data zdarzenia': datetime.now().strftime("%d.%m")}
             save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
@@ -120,11 +122,13 @@ with c3:
 # --- 6. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
+    # CSV pobiera się z polskimi znakami (to działało zawsze)
     st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     
-    # Naprawione pobieranie PDF
+    # PDF pobiera się z funkcją bezpiecznego tekstu (naprawiony błąd)
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
 
+    st.divider()
     if st.button("🗑️ USUŃ HISTORIĘ", type="primary", use_container_width=True):
         full = load_data(); full.loc[df_active.index, 'Status'] = 'Archiwum'
         save_data(full); st.rerun()
