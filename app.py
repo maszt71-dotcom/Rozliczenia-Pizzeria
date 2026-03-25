@@ -97,13 +97,13 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.set_text_color(0, 0, 0)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
     
-    # Gotówka (zmiana koloru jeśli na minusie)
+    # Gotówka (czerwona na minusie)
     if s_got < 0:
-        pdf.set_fill_color(255, 0, 0) # Mocny czerwony
-        pdf.set_text_color(255, 255, 255) # Biały tekst
+        pdf.set_fill_color(255, 0, 0)
+        pdf.set_text_color(255, 255, 255)
     else:
-        pdf.set_fill_color(255, 243, 205) # Standardowy żółty
-        pdf.set_text_color(0, 0, 0) # Czarny tekst
+        pdf.set_fill_color(255, 243, 205)
+        pdf.set_text_color(0, 0, 0)
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
     
     # Wydatki
@@ -131,7 +131,7 @@ with c1:
     if st.button("➕ DODAJ", key="p"): st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
-            d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
+            d_p = st.date_input("z dnia", datetime.now(), key="date_p")
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
@@ -152,7 +152,7 @@ with c2:
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
-                        d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
+                        d_g = st.date_input("z dnia", datetime.now(), key=f"date_g_{o}")
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}")
                         cs, cb = st.columns(2)
                         if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
@@ -168,7 +168,7 @@ with c3:
     if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
-            d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
+            d_w = st.date_input("z dnia", datetime.now(), key="date_w")
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v")
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
