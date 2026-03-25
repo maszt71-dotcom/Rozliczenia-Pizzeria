@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import io
 import smtplib
+import unicodedata
 from fpdf import FPDF
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -11,10 +12,15 @@ from email import encoders
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- FUNKCJA NAPRAWCZA DLA POLSKICH ZNAKÓW ---
-def usun_polskie_znaki(tekst):
-    mapa = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
-    return str(tekst).translate(mapa)
+# --- FUNKCJA ABSOLUTNEGO CZYSZCZENIA TEKSTU ---
+def czysc_tekst(tekst):
+    if not tekst:
+        return ""
+    # Zamienia ł na l, ó na o itd.
+    tekst = str(tekst)
+    nfkd_form = unicodedata.normalize('NFKD', tekst)
+    # Pozostawia tylko znaki ASCII (podstawowe litery i cyfry)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)]).replace('ł', 'l').replace('Ł', 'L')
 
 # --- 1. KONFIGURACJA ---
 st.set_page_config(page_title="Rozliczenie Pizzerii", layout="wide", page_icon="🍕")
@@ -29,7 +35,7 @@ DB_FILE = 'finanse_data.csv'
 EMAIL_KONTO = "mange929598@gmail.com"  
 HASLO_APP = "hlqivtidxgchoqdi" 
 
-# --- 3. GENERATOR PDF (PANCERNY) ---
+# --- 3. GENERATOR PDF (NAPRAWDĘ ODPORNY) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -58,13 +64,14 @@ def create_pdf(df, s_og, s_got, s_wyd):
 
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        # Usuwamy polskie znaki tylko do PDF, żeby uniknąć błędu UnicodeEncodeError
-        pdf.cell(30, 10, usun_polskie_znaki(row['Data zdarzenia']), border=1)
-        pdf.cell(60, 10, usun_polskie_znaki(row['Typ'])[:25], border=1)
+        # Tu dzieje się magia czyszczenia znaków przed zapisem do PDF
+        pdf.cell(30, 10, czysc_tekst(row['Data zdarzenia']), border=1)
+        pdf.cell(60, 10, czysc_tekst(row['Typ'])[:25], border=1)
         pdf.cell(40, 10, f"{row['Kwota']:.2f} zl", border=1)
-        pdf.cell(60, 10, usun_polskie_znaki(row['Opis'])[:25], border=1)
+        pdf.cell(60, 10, czysc_tekst(row['Opis'])[:25], border=1)
         pdf.ln()
     
+    # Konwersja do bajtów kompatybilna z nowym fpdf2
     return bytes(pdf.output())
 
 # --- 4. FUNKCJA WYSYŁANIA ---
@@ -192,8 +199,10 @@ with c3:
 # --- 9. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu Raportów")
-    csv_rep = df_active.to_csv(index=False).encode('utf-8')
+    
+    # Przygotowanie raportu i PDF (teraz bezpiecznie czyszczone ze znaków)
     pdf_rep = create_pdf(df_active, s_og, s_got, s_wyd)
+    csv_rep = df_active.to_csv(index=False).encode('utf-8')
 
     st.download_button("📥 Pobierz CSV", data=csv_rep, file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=pdf_rep, file_name="raport.pdf", use_container_width=True)
