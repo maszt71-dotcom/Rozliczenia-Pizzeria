@@ -85,13 +85,12 @@ s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False
 
 # --- 3. GENERATOR PDF (TABELA JAK W HISTORII) ---
 def create_pdf(df, s_og, s_got, s_wyd):
-    pdf = FPDF(orientation='L', unit='mm', format='A4') # Orientacja pozioma dla lepszego dopasowania
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
     
-    # Podsumowanie
     pdf.set_font("Helvetica", 'B', 11)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(92, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
@@ -106,8 +105,6 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(92, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     
     pdf.ln(10)
-    
-    # NAGŁÓWEK TABELI (Identyczny jak w aplikacji)
     pdf.set_font("Helvetica", 'B', 9)
     pdf.set_fill_color(230, 230, 230)
     pdf.cell(35, 8, pdf_safe("Data wpisu"), border=1, fill=True, align='C')
@@ -116,9 +113,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(30, 8, pdf_safe("Kwota"), border=1, fill=True, align='C')
     pdf.cell(142, 8, pdf_safe("Opis"), border=1, ln=1, fill=True, align='C')
     
-    # WIERSZE TABELI (Identyczny układ jak w aplikacji)
     pdf.set_font("Helvetica", size=8)
-    # Sortujemy od najnowszego (tak jak w data_editor iloc[::-1])
     for _, row in df.iloc[::-1].iterrows():
         pdf.cell(35, 7, pdf_safe(row['Data']), border=1, align='C')
         pdf.cell(20, 7, pdf_safe(row['Data zdarzenia']), border=1, align='C')
@@ -222,19 +217,34 @@ if not df_active.empty:
 
         st.divider()
         
+        # --- USUWANIE ZAZNACZONYCH (JEDNOSTOPNIOWE) ---
         selected_rows = res[res["Wybierz"] == True].index.tolist()
         if len(selected_rows) > 0:
-            if st.button(f"🗑️ USUŃ ZAZNACZONE ({len(selected_rows)})", use_container_width=True, type="primary"):
-                full = load_data()
-                full.loc[selected_rows, 'Status'] = 'Archiwum'
-                save_data(full)
-                st.rerun()
+            if 'confirm_del_rows' not in st.session_state: st.session_state.confirm_del_rows = False
+            
+            if not st.session_state.confirm_del_rows:
+                if st.button(f"🗑️ USUŃ ZAZNACZONE ({len(selected_rows)})", use_container_width=True, type="primary"):
+                    st.session_state.confirm_del_rows = True
+                    st.rerun()
+            else:
+                st.warning("Usunąć zaznaczone wiersze?")
+                c_y, c_n = st.columns(2)
+                if c_y.button("TAK", use_container_width=True, key="rows_y"):
+                    full = load_data()
+                    full.loc[selected_rows, 'Status'] = 'Archiwum'
+                    save_data(full)
+                    st.session_state.confirm_del_rows = False
+                    st.rerun()
+                if c_n.button("NIE", use_container_width=True, key="rows_n"):
+                    st.session_state.confirm_del_rows = False
+                    st.rerun()
 
         st.divider()
         st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
         st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
         
         st.divider()
+        # --- USUWANIE CAŁEJ HISTORII (POTRÓJNE) ---
         if 'delete_confirm' not in st.session_state: st.session_state.delete_confirm = 0
         
         if st.session_state.delete_confirm == 0:
@@ -244,9 +254,9 @@ if not df_active.empty:
         if st.session_state.delete_confirm == 1:
             st.warning("Czy na pewno chcesz usunąć wszystko?")
             col_y, col_n = st.columns(2)
-            if col_y.button("TAK", use_container_width=True):
+            if col_y.button("TAK", use_container_width=True, key="full_y1"):
                 st.session_state.delete_confirm = 2; st.rerun()
-            if col_n.button("ANULUJ", use_container_width=True):
+            if col_n.button("ANULUJ", use_container_width=True, key="full_n1"):
                 st.session_state.delete_confirm = 0; st.rerun()
 
         if st.session_state.delete_confirm == 2:
@@ -258,6 +268,3 @@ if not df_active.empty:
                 st.session_state.delete_confirm = 0; st.rerun()
 else:
     st.info("Brak aktywnych wpisów.")
-    with st.sidebar:
-        st.header("⚙️ Menu")
-        st.write("Dodaj wpisy, aby zobaczyć menu.")
