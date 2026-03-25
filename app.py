@@ -91,14 +91,29 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Helvetica", 'B', 12)
+    
+    # Przychód
     pdf.set_fill_color(212, 237, 218)
+    pdf.set_text_color(0, 0, 0)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
-    pdf.set_fill_color(255, 243, 205)
+    
+    # Gotówka (zmiana koloru jeśli na minusie)
+    if s_got < 0:
+        pdf.set_fill_color(255, 0, 0) # Mocny czerwony
+        pdf.set_text_color(255, 255, 255) # Biały tekst
+    else:
+        pdf.set_fill_color(255, 243, 205) # Standardowy żółty
+        pdf.set_text_color(0, 0, 0) # Czarny tekst
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
+    
+    # Wydatki
     pdf.set_fill_color(248, 215, 218)
+    pdf.set_text_color(0, 0, 0)
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
+    
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
+    pdf.set_text_color(0, 0, 0)
     for _, row in df.iterrows():
         linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
@@ -213,7 +228,7 @@ if not df_active.empty:
             "Opis": st.column_config.TextColumn("Opis", width="large")
         },
         disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"],
-        hide_index=True,  # <--- TUTAJ USUNĄŁEM KOLUMNĘ Z CYFRAMI
+        hide_index=True,
         use_container_width=True,
         key="pizza_editor"
     )
