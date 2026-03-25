@@ -76,8 +76,6 @@ def load_data():
 def save_data(df): df.to_csv(DB_FILE, index=False)
 
 data = load_data()
-# Resetujemy index, żeby edytor poprawnie przypisywał zaznaczenia
-data = data.reset_index(drop=True)
 df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
@@ -173,7 +171,7 @@ with st.sidebar:
 
     st.divider()
     
-    # OBSŁUGA USUWANIA ZAZNACZONYCH LINII
+    # OBSŁUGA USUWANIA LINII (NAPRAWIONA LOGIKA)
     if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
         if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
@@ -183,6 +181,7 @@ with st.sidebar:
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
                 full = load_data()
+                # Usuwamy wybrane po oryginalnych indeksach
                 full.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum'
                 save_data(full)
                 st.session_state.ask_del_line = False
@@ -218,24 +217,26 @@ st.divider()
 # --- 6. HISTORIA Z OKIENKIEM NA PTASZKA ---
 st.subheader("Historia wpisów")
 if not df_active.empty:
-    # Tworzymy kopię danych do edytora z dodatkową kolumną na ptaszka
     df_editor = df_active.copy()
     df_editor.insert(0, "Wybierz", False)
     
-    # Wyświetlamy edytor danych (wygląda jak Twoja stara tabela)
-    edited_data = st.data_editor(
-        df_editor.iloc[::-1], # Od najnowszego
-        column_config={
-            "Wybierz": st.column_config.CheckboxColumn("Wybierz", default=False),
-            "Status": None # Ukrywamy kolumnę status
-        },
+    # Wyświetlenie edytora
+    res = st.data_editor(
+        df_editor.iloc[::-1],
+        column_config={"Wybierz": st.column_config.CheckboxColumn("Wybierz", default=False)},
         disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"],
         hide_index=True,
         use_container_width=True,
         key="pizza_editor"
     )
     
-    # Pobieramy indeksy zaznaczonych wierszy
-    st.session_state.selected_indices = edited_data[edited_data["Wybierz"] == True].index.tolist()
+    # Natychmiastowe przypisanie zaznaczonych linii do sesji
+    # Używamy indeksów z oryginalnego df_active
+    current_selected = res[res["Wybierz"] == True].index.tolist()
+    
+    # Sprawdzamy czy lista zaznaczonych się zmieniła, aby wywołać odświeżenie przycisku w sidebarze
+    if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
+        st.session_state.selected_indices = current_selected
+        st.rerun()
 else:
     st.info("Brak aktywnych wpisów.")
