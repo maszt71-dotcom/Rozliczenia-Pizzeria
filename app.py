@@ -5,7 +5,7 @@ from fpdf import FPDF
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- FUNKCJA NAPRAWCZA DLA PDF (USUWA PROBLEMATYCZNE ZNAKI) ---
+# --- TA FUNKCJA TYLKO PODMIENIA LITERY DLA PDF, ŻEBY NIE BYŁO BŁĘDU ---
 def pdf_safe(txt):
     if not txt: return ""
     rep = {"ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z",
@@ -61,10 +61,12 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        pdf.cell(0, 10, pdf_safe(f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"), ln=True, border=1)
+        # Każda linia jest czyszczona z ogonków tylko na potrzeby PDF
+        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']} zl | {row['Opis']}"
+        pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return bytes(pdf.output())
 
-# --- 4. WIDOK GŁÓWNY (KAFELKI HTML) ---
+# --- 4. WIDOK GŁÓWNY (TWOJE KAFELKI) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
