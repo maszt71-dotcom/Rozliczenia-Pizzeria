@@ -72,13 +72,16 @@ def create_pdf(df, s_og, s_got, s_wyd):
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
+if 's' not in st.session_state: st.session_state.s = ""
+if 'os' not in st.session_state: st.session_state.os = None
+
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"):
-        st.session_state.s = "P" if getattr(st.session_state, "s", "") != "P" else ""
+        st.session_state.s = "P" if st.session_state.s != "P" else ""
         st.rerun()
     
-    if getattr(st.session_state, "s", "") == "P":
+    if st.session_state.s == "P":
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
             kw_p = st.number_input("Kwota", min_value=0.0, step=1.0, key="val_p")
@@ -90,14 +93,14 @@ with c1:
 with c2:
     st.markdown(f'<div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="g"):
-        st.session_state.s = "G" if getattr(st.session_state, "s", "") != "G" else ""
+        st.session_state.s = "G" if st.session_state.s != "G" else ""
         st.session_state.os = None
         st.rerun()
     
-    if getattr(st.session_state, "s", "") == "G":
+    if st.session_state.s == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            if not getattr(st.session_state, "os", None):
+            if not st.session_state.os:
                 for o in osoby:
                     if st.button(o, key=f"os_{o}"): 
                         st.session_state.os = o
@@ -106,13 +109,13 @@ with c2:
                 st.write(f"Wybrano: **{st.session_state.os}**")
                 d_g = st.date_input("Data zdarzenia", datetime.now(), key="date_g")
                 kw_g = st.number_input(f"Kwota", min_value=0.0, step=1.0, key="val_g")
-                c_save, c_back = st.columns(2)
-                with c_save:
+                col_save, col_back = st.columns(2)
+                with col_save:
                     if st.button("ZAPISZ G", use_container_width=True):
                         n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {st.session_state.os}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
                         save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
                         st.session_state.s = ""; st.session_state.os = None; st.rerun()
-                with c_back:
+                with col_back:
                     if st.button("COFNIJ", use_container_width=True): 
                         st.session_state.os = None
                         st.rerun()
@@ -120,10 +123,10 @@ with c2:
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"):
-        st.session_state.s = "W" if getattr(st.session_state, "s", "") != "W" else ""
+        st.session_state.s = "W" if st.session_state.s != "W" else ""
         st.rerun()
     
-    if getattr(st.session_state, "s", "") == "W":
+    if st.session_state.s == "W":
         with st.container(border=True):
             d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
             kw_w = st.number_input("Kwota", min_value=0.0, step=1.0, key="val_w")
