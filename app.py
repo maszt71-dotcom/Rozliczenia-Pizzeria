@@ -28,19 +28,19 @@ def send_email_with_reports(pdf_data, csv_data):
     msg = MIMEMultipart()
     msg['From'] = sender_email
     msg['To'] = receiver_email
-    msg['Subject'] = f"Raport Pizzeria - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-    msg.attach(MIMEText("W załączniku przesyłam aktualny raport finansowy.", 'plain'))
+    msg['Subject'] = f"AUTO-BACKUP Pizzeria - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+    msg.attach(MIMEText("Automatyczny backup przed usunieciem historii.", 'plain'))
 
     part_pdf = MIMEBase('application', 'octet-stream')
     part_pdf.set_payload(pdf_data)
     encoders.encode_base64(part_pdf)
-    part_pdf.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.pdf")
+    part_pdf.add_header('Content-Disposition', f"attachment; filename=backup_{datetime.now().strftime('%d_%m')}.pdf")
     msg.attach(part_pdf)
 
     part_csv = MIMEBase('application', 'octet-stream')
     part_csv.set_payload(csv_data)
     encoders.encode_base64(part_csv)
-    part_csv.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.csv")
+    part_csv.add_header('Content-Disposition', f"attachment; filename=backup_{datetime.now().strftime('%d_%m')}.csv")
     msg.attach(part_csv)
 
     try:
@@ -51,7 +51,7 @@ def send_email_with_reports(pdf_data, csv_data):
         server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Błąd wysyłki: {e}")
+        st.sidebar.error(f"Blad wysylki backupu: {e}")
         return False
 
 # --- 1. KONFIGURACJA I LOGOWANIE ---
@@ -83,7 +83,7 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF (TABELA JAK W HISTORII) ---
+# --- 3. GENERATOR PDF ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_page()
@@ -217,7 +217,6 @@ if not df_active.empty:
 
         st.divider()
         
-        # --- USUWANIE ZAZNACZONYCH (JEDNOSTOPNIOWE) ---
         selected_rows = res[res["Wybierz"] == True].index.tolist()
         if len(selected_rows) > 0:
             if 'confirm_del_rows' not in st.session_state: st.session_state.confirm_del_rows = False
@@ -244,7 +243,7 @@ if not df_active.empty:
         st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
         
         st.divider()
-        # --- USUWANIE CAŁEJ HISTORII (POTRÓJNE) ---
+        # --- USUWANIE CAŁEJ HISTORII Z AUTO-BACKUPEM ---
         if 'delete_confirm' not in st.session_state: st.session_state.delete_confirm = 0
         
         if st.session_state.delete_confirm == 0:
@@ -255,7 +254,16 @@ if not df_active.empty:
             st.warning("Czy na pewno chcesz usunąć wszystko?")
             col_y, col_n = st.columns(2)
             if col_y.button("TAK", use_container_width=True, key="full_y1"):
-                st.session_state.delete_confirm = 2; st.rerun()
+                # AUTOMATYCZNA WYSYŁKA PRZY PIERWSZYM POTWIERDZENIU
+                with st.spinner("Wysyłanie raportu bezpieczeństwa..."):
+                    pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
+                    csv_file = df_active.to_csv(index=False).encode('utf-8')
+                    if send_email_with_reports(pdf_file, csv_file):
+                        st.sidebar.success("✅ Raport wysłany na mail!")
+                        st.session_state.delete_confirm = 2
+                        st.rerun()
+                    else:
+                        st.error("Błąd wysyłki raportu. Nie można przejść dalej.")
             if col_n.button("ANULUJ", use_container_width=True, key="full_n1"):
                 st.session_state.delete_confirm = 0; st.rerun()
 
