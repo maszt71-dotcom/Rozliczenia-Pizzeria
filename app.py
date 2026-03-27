@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import os
 import smtplib
+import gspread
+from google.oauth2.service_account import Credentials
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -51,7 +53,7 @@ def send_email_with_reports(pdf_data, csv_data):
         server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Błąd wysyłki: {e}")
+        st.sidebar.error(f"Błąd wysyłki e-mail: {e}")
         return False
 
 # --- 1. KONFIGURACJA I LOGOWANIE ---
@@ -67,13 +69,36 @@ if cookies.get("is_logged") != "true":
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
 
-# --- 2. DANE ---
+# --- 2. DANE I GOOGLE SHEETS ---
 DB_FILE = 'finanse_data.csv'
+
 def load_data():
     if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
-def save_data(df): df.to_csv(DB_FILE, index=False)
+def save_data(df):
+    # Zapis lokalny (do pliku w aplikacji)
+    df.to_csv(DB_FILE, index=False)
+    
+    # Zapis do Google Sheets
+    try:
+        # Pobieranie kluczy z Secrets
+        info = st.secrets["gcp_service_account"]["json_key"]
+        import json
+        key_dict = json.loads(info)
+        creds = Credentials.from_service_account_info(key_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+        client = gspread.authorize(creds)
+        
+        # Otwieranie arkusza - UPEWNIJ SIĘ ŻE NAZWA TO pizzeria_db
+        sheet = client.open("pizzeria_db").worksheet("Sheet1")
+        
+        # Czyścimy i wysyłamy wszystko od nowa
+        sheet.clear()
+        # Przygotowanie danych do wysłania (nagłówki + wiersze)
+        data_to_save = [df.columns.values.tolist()] + df.values.tolist()
+        sheet.update(data_to_save)
+    except Exception as e:
+        st.error(f"Błąd połączenia z Google Sheets: {e}")
 
 data = load_data()
 df_active = data[data['Status'] == 'Aktywny'].copy()
@@ -180,7 +205,9 @@ with st.sidebar:
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
                 full = load_data()
-                full.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum'
+                # Poprawka: używamy prawdziwych indeksów z df_active
+                indices_to_del = df_active.iloc[::-1].iloc[st.session_state.selected_indices].index
+                full.loc[indices_to_del, 'Status'] = 'Archiwum'
                 save_data(full)
                 st.session_state.ask_del_line = False
                 st.session_state.selected_indices = []
