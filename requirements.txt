@@ -1,6 +1,6 @@
 streamlit
 pandas
-fpdf
-streamlit-cookies-manager
 gspread
 google-auth
+fpdf
+streamlit-cookies-manager
