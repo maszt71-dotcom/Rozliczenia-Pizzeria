@@ -1,6 +1,1 @@
-streamlit
-pandas
-gspread
-google-auth
-fpdf
-streamlit-cookies-manager
+st-gsheets-connection
