@@ -10,7 +10,7 @@ from fpdf import FPDF
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- FUNKCJE POMOCNICZE (BEZ ZMIAN) ---
+# --- FUNKCJA BEZPIECZEŃSTWA DLA PDF ---
 def pdf_safe(txt):
     if not txt: return ""
     rep = {"ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z",
@@ -19,6 +19,7 @@ def pdf_safe(txt):
     for k, v in rep.items(): t = t.replace(k, v)
     return t.encode('ascii', 'ignore').decode('ascii')
 
+# --- FUNKCJA WYSYŁKI E-MAIL ---
 def send_email_with_reports(pdf_data, csv_data):
     receiver_email = "mange929598@gmail.com"
     sender_email = "mange929598@gmail.com"
@@ -28,7 +29,8 @@ def send_email_with_reports(pdf_data, csv_data):
     msg['To'] = receiver_email
     msg['Subject'] = f"Raport Pizzeria - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
     msg.attach(MIMEText("W załączniku przesyłam aktualny raport finansowy.", 'plain'))
-    for data, name in [(pdf_data, f"raport_{datetime.now().strftime('%d_%m')}.pdf"), (csv_data, f"raport_{datetime.now().strftime('%d_%m')}.csv")]:
+    for data, name in [(pdf_data, f"raport_{datetime.now().strftime('%d_%m')}.pdf"), 
+                       (csv_data, f"raport_{datetime.now().strftime('%d_%m')}.csv")]:
         part = MIMEBase('application', 'octet-stream')
         part.set_payload(data)
         encoders.encode_base64(part)
@@ -41,7 +43,7 @@ def send_email_with_reports(pdf_data, csv_data):
     except Exception as e:
         st.sidebar.error(f"Błąd wysyłki: {e}"); return False
 
-# --- LOGOWANIE ---
+# --- 1. KONFIGURACJA I LOGOWANIE ---
 st.set_page_config(page_title="Pizzeria", layout="wide")
 cookies = CookieManager()
 if not cookies.ready(): st.stop()
@@ -53,7 +55,7 @@ if cookies.get("is_logged") != "true":
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
 
-# --- POŁĄCZENIE Z ARKUSZAMI GOOGLE ---
+# --- 2. DANE W CHMURZE (GOOGLE SHEETS) ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
@@ -63,7 +65,6 @@ def save_data(df):
     conn.update(data=df)
     st.cache_data.clear()
 
-# Pobranie danych i obliczenia (tylko Aktywne)
 data = load_data()
 df_active_calc = data[data['Status'] == 'Aktywny'].copy()
 df_active_calc['Kwota'] = pd.to_numeric(df_active_calc['Kwota'], errors='coerce').fillna(0)
@@ -72,7 +73,7 @@ s_og = df_active_calc[df_active_calc['Typ'] == 'Przychód ogólny']['Kwota'].sum
 s_wyd = df_active_calc[df_active_calc['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active_calc[df_active_calc['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- PDF GENERATOR ---
+# --- 3. GENERATOR PDF ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page(); pdf.set_font("Helvetica", 'B', 16)
@@ -93,7 +94,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return pdf.output(dest="S").encode("latin-1")
 
-# --- WIDOK GŁÓWNY (3 KOLUMNY) ---
+# --- 4. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -102,7 +103,7 @@ if 'os' not in st.session_state: st.session_state.os = None
 
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="p"): st.session_state.s = "P"; st.rerun()
+    if st.button("➕ DODAJ", key="p"): st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
@@ -111,29 +112,28 @@ with c1:
                 if kw_p:
                     n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}])
                     save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
-            if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 with c2:
     got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
     got_txt = "white" if s_got < 0 else "black"
     st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="g"): st.session_state.s = "G"; st.session_state.os = None; st.rerun()
+    if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o; st.rerun()
+                if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun()
                 if st.session_state.os == o:
                     with st.container(border=True):
-                        d_g = st.date_input("Data", datetime.now(), key=f"d_g_{o}")
+                        d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
                         kw_g = st.number_input("Kwota", value=None, key=f"k_g_{o}")
                         if st.button("ZAPISZ", key=f"s_g_{o}", type="primary"):
                             n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}])
-                            save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
+                            save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.session_state.os = None; st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="w"): st.session_state.s = "W"; st.rerun()
+    if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
             d_w = st.date_input("Data", datetime.now())
@@ -143,7 +143,7 @@ with c3:
                 n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}])
                 save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
 
-# --- PASEK BOCZNY (PEŁNA STRUKTURA) ---
+# --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     if st.button("📧 WYŚLIJ RAPORT", type="primary", use_container_width=True):
@@ -158,11 +158,6 @@ with st.sidebar:
             save_data(data); st.session_state.sel = []; st.rerun()
 
     st.divider()
-    # Pobieranie plików
-    st.download_button("📥 Pobierz CSV", df_active_calc.to_csv(index=False).encode('utf-8'), "raport.csv", use_container_width=True)
-    
-    st.divider()
-    # Usuwanie całej historii (przywrócone)
     if 'del_step' not in st.session_state: st.session_state.del_step = 0
     if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True): st.session_state.del_step = 1
     if st.session_state.del_step >= 1:
@@ -176,28 +171,20 @@ with st.sidebar:
     if st.button("🔓 Wyloguj", use_container_width=True):
         cookies["is_logged"] = "false"; cookies.save(); st.rerun()
 
-# --- HISTORIA ---
+# --- 6. HISTORIA ---
 st.divider()
 st.subheader("Historia wpisów")
-
 if not data.empty:
-    df_display = data.copy()
-    # Dodajemy checkbox tylko do aktywnych
+    df_display = data.copy().iloc[::-1]
     df_display.insert(0, "Wybierz", False)
-    
-    # Wyświetlamy edytor
     res = st.data_editor(
-        df_display.iloc[::-1],
+        df_display[["Wybierz", "Data zdarzenia", "Typ", "Kwota", "Opis", "Status"]],
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
             "Status": st.column_config.TextColumn("Status", disabled=True),
         },
-        use_container_width=True,
-        hide_index=True,
-        key="main_table"
+        use_container_width=True, hide_index=True, key="main_table"
     )
-    
-    # Wyłapujemy zaznaczone (ale tylko te, które są Aktywne)
     st.session_state.sel = res[(res["Wybierz"] == True) & (res["Status"] == "Aktywny")].index.tolist()
 else:
     st.info("Brak danych w Arkuszu Google.")
