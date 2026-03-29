@@ -7,6 +7,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 from fpdf import FPDF
 from datetime import datetime
+import pytz  # Dodajemy obsługę stref czasowych
 from streamlit_cookies_manager import CookieManager
 from supabase import create_client, Client
 
@@ -14,6 +15,10 @@ from supabase import create_client, Client
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
+
+# Funkcja pobierająca aktualny czas w Polsce
+def get_now():
+    return datetime.now(pytz.timezone('Europe/Warsaw'))
 
 # --- FUNKCJA BEZPIECZEŃSTWA DLA PDF ---
 def pdf_safe(txt):
@@ -33,19 +38,19 @@ def send_email_with_reports(pdf_data, csv_data):
     msg = MIMEMultipart()
     msg['From'] = sender_email
     msg['To'] = receiver_email
-    msg['Subject'] = f"Raport Pizzeria - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+    msg['Subject'] = f"Raport Pizzeria - {get_now().strftime('%d.%m.%Y %H:%M')}"
     msg.attach(MIMEText("W załączniku przesyłam aktualny raport finansowy.", 'plain'))
 
     part_pdf = MIMEBase('application', 'octet-stream')
     part_pdf.set_payload(pdf_data)
     encoders.encode_base64(part_pdf)
-    part_pdf.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.pdf")
+    part_pdf.add_header('Content-Disposition', f"attachment; filename=raport_{get_now().strftime('%d_%m')}.pdf")
     msg.attach(part_pdf)
 
     part_csv = MIMEBase('application', 'octet-stream')
     part_csv.set_payload(csv_data)
     encoders.encode_base64(part_csv)
-    part_csv.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.csv")
+    part_csv.add_header('Content-Disposition', f"attachment; filename=raport_{get_now().strftime('%d_%m')}.csv")
     msg.attach(part_csv)
 
     try:
@@ -100,7 +105,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
-    pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
+    pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {get_now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Helvetica", 'B', 12)
     pdf.set_fill_color(212, 237, 218)
@@ -131,11 +136,11 @@ with c1:
     if st.button("➕ DODAJ", key="p"): st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
-            d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
+            d_p = st.date_input("Data zdarzenia", get_now(), key="date_p")
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
-                    add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': 'Przychód ogólny', 'kwota': float(kw_p), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_p.strftime("%d.%m")})
+                    add_to_supabase({'data': get_now().strftime("%d.%m %H:%M"), 'typ': 'Przychód ogólny', 'kwota': float(kw_p), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_p.strftime("%d.%m")})
                     st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
@@ -151,13 +156,12 @@ with c2:
                 if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun()
                 if st.session_state.os == o:
                     with st.container(border=True):
-                        st.markdown(f"Dla: **{o}**")
-                        d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
+                        d_g = st.date_input("Data", get_now(), key=f"date_g_{o}")
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}")
                         cs, cb = st.columns(2)
                         if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g:
-                                add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': f"Gotówka - {o}", 'kwota': float(kw_g), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_g.strftime("%d.%m")})
+                                add_to_supabase({'data': get_now().strftime("%d.%m %H:%M"), 'typ': f"Gotówka - {o}", 'kwota': float(kw_g), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_g.strftime("%d.%m")})
                                 st.session_state.s = ""; st.session_state.os = None; st.rerun()
                         if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): st.session_state.s = ""; st.session_state.os = None; st.rerun()
@@ -167,12 +171,12 @@ with c3:
     if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
-            d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
+            d_w = st.date_input("Data zdarzenia", get_now(), key="date_w")
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v")
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w:
-                    add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': 'Wydatki gotówkowe', 'kwota': float(kw_w), 'opis': op_w, 'status': 'Aktywny', 'data_zdarzenia': d_w.strftime("%d.%m")})
+                    add_to_supabase({'data': get_now().strftime("%d.%m %H:%M"), 'typ': 'Wydatki gotówkowe', 'kwota': float(kw_w), 'opis': op_w, 'status': 'Aktywny', 'data_zdarzenia': d_w.strftime("%d.%m")})
                     st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
 
@@ -185,7 +189,6 @@ with st.sidebar:
         if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
 
     st.divider()
-    # TRWAŁE USUWANIE LINII
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
@@ -195,7 +198,6 @@ with st.sidebar:
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
                 for rid in st.session_state.selected_ids:
-                    # TUTAJ ZMIANA: .delete() zamiast .update()
                     supabase.table("finanse").delete().eq("id", int(rid)).execute()
                 st.session_state.ask_del_line = False
                 st.session_state.selected_ids = []
@@ -220,7 +222,6 @@ with st.sidebar:
                 st.error("CZY JESTEŚ PEWIEN?")
                 ct, cn = st.columns(2)
                 if ct.button("TAK", key="full_y", use_container_width=True):
-                    # TUTAJ ZMIANA: .delete() zamiast .update()
                     for _, row in data.iterrows():
                         supabase.table("finanse").delete().eq("id", int(row['id'])).execute()
                     st.session_state.del_step = 0; st.rerun()
@@ -235,7 +236,8 @@ st.divider()
 st.subheader("Historia wpisów")
 if not data.empty:
     df_display = data.iloc[::-1].copy()
-    df_editor_input = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
+    # Usunięto kolumnę 'status' z widoku (linia 228)
+    df_editor_input = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]].copy()
     df_editor_input.insert(0, "Wybierz", False)
     
     res = st.data_editor(
@@ -244,8 +246,10 @@ if not data.empty:
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
             "id": None,
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
+            "data": st.column_config.TextColumn("Godzina dodania"),
+            "data_zdarzenia": st.column_config.TextColumn("Dzień")
         },
-        disabled=["data", "data_zdarzenia", "typ", "kwota", "opis", "status"],
+        disabled=["data", "data_zdarzenia", "typ", "kwota", "opis"],
         hide_index=True, use_container_width=True, key="pizza_editor"
     )
     
