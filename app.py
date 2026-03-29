@@ -21,9 +21,9 @@ def pdf_safe(txt):
 
 # --- FUNKCJA WYSYŁKI E-MAIL ---
 def send_email_with_reports(pdf_data, csv_data):
-    receiver_email = "mange929598@gmail.com" [cite: 1]
-    sender_email = "mange929598@gmail.com" [cite: 2]
-    password = "hlqivtidxgchoqdi" [cite: 2]
+    receiver_email = "mange929598@gmail.com"
+    sender_email = "mange929598@gmail.com"
+    password = "hlqivtidxgchoqdi" 
 
     msg = MIMEMultipart()
     msg['From'] = sender_email
@@ -34,7 +34,7 @@ def send_email_with_reports(pdf_data, csv_data):
     part_pdf = MIMEBase('application', 'octet-stream')
     part_pdf.set_payload(pdf_data)
     encoders.encode_base64(part_pdf)
-    part_pdf.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.pdf") [cite: 3]
+    part_pdf.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.pdf")
     msg.attach(part_pdf)
 
     part_csv = MIMEBase('application', 'octet-stream')
@@ -51,7 +51,7 @@ def send_email_with_reports(pdf_data, csv_data):
         server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Błąd wysyłki: {e}") [cite: 4]
+        st.sidebar.error(f"Błąd wysyłki: {e}")
         return False
 
 # --- 1. KONFIGURACJA I LOGOWANIE ---
@@ -63,14 +63,14 @@ if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
-        if haslo == "dup@": [cite: 4]
+        if haslo == "dup@":
             cookies["is_logged"] = "true"
-            cookies.save() [cite: 5]
+            cookies.save()
             st.rerun()
     st.stop()
 
 # --- 2. DANE ---
-DB_FILE = 'finanse_data.csv' [cite: 5]
+DB_FILE = 'finanse_data.csv'
 def load_data():
     if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
@@ -78,7 +78,7 @@ def load_data():
 def save_data(df): df.to_csv(DB_FILE, index=False)
 
 data = load_data()
-df_active = data[data['Status'] == 'Aktywny'].copy() [cite: 5]
+df_active = data[data['Status'] == 'Aktywny'].copy()
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
 s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
@@ -92,7 +92,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
-    pdf.set_font("Helvetica", 'B', 12) [cite: 6]
+    pdf.set_font("Helvetica", 'B', 12)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
     pdf.set_fill_color(255, 243, 205)
@@ -102,7 +102,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
-        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}" [cite: 7]
+        linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return pdf.output(dest="S").encode("latin-1")
 
@@ -118,41 +118,41 @@ with c1:
     if st.button("➕ DODAJ", key="p"): st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
-            d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p") [cite: 8]
+            d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
                     n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True)) [cite: 9]
-                    st.session_state.s = ""; st.rerun() [cite: 10]
-            if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun() [cite: 11]
+                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
+                    st.session_state.s = ""; st.rerun()
+            if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 with c2:
     st.markdown(f'<div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun() [cite: 12]
+    if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun() [cite: 13]
+                if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun()
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
                         d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
-                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}") [cite: 14]
+                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}")
                         cs, cb = st.columns(2)
                         if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
-                            if kw_g: [cite: 15]
+                            if kw_g:
                                 n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
                                 save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.s = ""; st.session_state.os = None; st.rerun() [cite: 16]
-                        if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun() [cite: 17]
+                                st.session_state.s = ""; st.session_state.os = None; st.rerun()
+                        if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun()
             st.divider()
-            if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): st.session_state.s = ""; st.session_state.os = None; st.rerun() [cite: 18]
+            if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): st.session_state.s = ""; st.session_state.os = None; st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun() [cite: 19]
+    if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
             d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
@@ -160,10 +160,10 @@ with c3:
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w:
-                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")} [cite: 20]
+                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
                     save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                    st.session_state.s = ""; st.rerun() [cite: 21]
-            if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun() [cite: 22]
+                    st.session_state.s = ""; st.rerun()
+            if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 # --- 5. PASEK BOCZNY ---
 with st.sidebar:
@@ -177,7 +177,7 @@ with st.sidebar:
     st.divider()
     
     if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
-        if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"): [cite: 23]
+        if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
         
         if st.session_state.get('ask_del_line'):
@@ -185,13 +185,13 @@ with st.sidebar:
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
                 full = load_data()
-                full.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum' [cite: 24]
+                full.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum'
                 save_data(full)
                 st.session_state.ask_del_line = False
                 st.session_state.selected_indices = []
                 st.rerun()
             if cn.button("NIE", key="line_n"):
-                st.session_state.ask_del_line = False [cite: 25]
+                st.session_state.ask_del_line = False
                 st.rerun()
 
     st.divider()
@@ -203,22 +203,23 @@ with st.sidebar:
     if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True): st.session_state.del_step = 1
     if st.session_state.del_step >= 1:
         with st.container(border=True):
-            st.warning("Potwierdź usunięcie CAŁOŚCI") [cite: 26]
+            st.warning("Potwierdź usunięcie CAŁOŚCI")
             check = st.checkbox("Zgadzam się")
             if check:
                 if st.button("🔥 WYCZYŚĆ WSZYSTKO", use_container_width=True, type="primary"): st.session_state.del_step = 2
             if st.session_state.del_step == 2:
                 st.error("CZY JESTEŚ PEWIEN?")
-                ct, cn = st.columns(2) [cite: 27]
+                ct, cn = st.columns(2)
                 if ct.button("TAK", key="full_y", use_container_width=True):
                     full = load_data()
-                    full.loc[df_active.index, 'Status'] = 'Archiwum' [cite: 28]
+                    full.loc[df_active.index, 'Status'] = 'Archiwum'
                     save_data(full)
                     st.session_state.del_step = 0
-                    st.rerun() [cite: 29]
-                if cn.button("NIE", key="full_n", use_container_width=True): st.session_state.del_step = 0; st.rerun() [cite: 30]
+                    st.rerun()
+                if cn.button("NIE", key="full_n", use_container_width=True): st.session_state.del_step = 0; st.rerun()
 
 # --- 6. HISTORIA ---
+st.divider()
 st.subheader("Historia wpisów")
 if not df_active.empty:
     df_editor = df_active.copy()
@@ -231,7 +232,7 @@ if not df_active.empty:
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small", default=False),
             "Data": st.column_config.TextColumn("Data", width="medium"),
-            "Data zdarzenia": st.column_config.TextColumn("Dzień", width="small"), [cite: 31]
+            "Data zdarzenia": st.column_config.TextColumn("Dzień", width="small"),
             "Typ": st.column_config.TextColumn("Typ", width="medium"),
             "Kwota": st.column_config.NumberColumn("Kwota", width="small", format="%.2f zł"),
             "Opis": st.column_config.TextColumn("Opis", width="large")
@@ -242,7 +243,7 @@ if not df_active.empty:
         key="pizza_editor"
     )
  
-    current_selected = res[res["Wybierz"] == True].index.tolist() [cite: 32]
+    current_selected = res[res["Wybierz"] == True].index.tolist()
     if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
         st.session_state.selected_indices = current_selected
         st.rerun()
