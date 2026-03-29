@@ -89,7 +89,7 @@ s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF ---
+# --- 3. GENERATOR PDF (Z KOLOREM CZERWONYM) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
     pdf.add_page()
@@ -97,12 +97,28 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Helvetica", 'B', 12)
+    
+    # Przychód (Zielony)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
-    pdf.set_fill_color(255, 243, 205)
+    
+    # Gotówka (Żółty lub Jaskrawoczerwony jeśli minus)
+    if s_got < 0:
+        pdf.set_fill_color(255, 0, 0) # Jaskrawoczerwony
+        pdf.set_text_color(255, 255, 255) # Biały tekst dla czytelności
+    else:
+        pdf.set_fill_color(255, 243, 205) # Żółty
+        pdf.set_text_color(0, 0, 0) # Czarny tekst
+        
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
+    
+    # Reset koloru tekstu dla wydatków
+    pdf.set_text_color(0, 0, 0)
+    
+    # Wydatki (Jasnoczerwony)
     pdf.set_fill_color(248, 215, 218)
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
+    
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
@@ -132,10 +148,10 @@ with c1:
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 with c2:
-    # --- JASKRAWOCZERWONY GDY MINUS ---
-    got_color = "#FF0000" if s_got < 0 else "#fff3cd"
-    text_color = "white" if s_got < 0 else "black"
-    st.markdown(f'<div style="background-color:{got_color}; color:{text_color}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    # JASKRAWOCZERWONY GDY MINUS W APLIKACJI
+    got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
+    got_txt = "white" if s_got < 0 else "black"
+    st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
