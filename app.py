@@ -186,20 +186,19 @@ with st.sidebar:
         if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
 
     st.divider()
-    if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
-        if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
+    # USUWANIE LINII
+    if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
+        if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
         
         if st.session_state.get('ask_del_line'):
             st.warning("Zarchiwizować zaznaczone?")
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
-                df_view = data.iloc[::-1]
-                for idx in st.session_state.selected_indices:
-                    row_id = df_view.iloc[idx]['id']
-                    supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(row_id)).execute()
+                for rid in st.session_state.selected_ids:
+                    supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(rid)).execute()
                 st.session_state.ask_del_line = False
-                st.session_state.selected_indices = []
+                st.session_state.selected_ids = []
                 st.rerun()
             if cn.button("NIE", key="line_n"):
                 st.session_state.ask_del_line = False; st.rerun()
@@ -231,45 +230,44 @@ with st.sidebar:
     if st.button("🔓 Wyloguj", use_container_width=True):
         cookies["is_logged"] = "false"; cookies.save(); st.rerun()
 
-# --- 6. HISTORIA Z WYSZARZANIEM ---
+# --- 6. HISTORIA Z WYSZARZANIEM (POPRAWIONE ZAZNACZANIE) ---
 st.divider()
 st.subheader("Historia wpisów")
 if not data.empty:
     df_display = data.iloc[::-1].copy()
     
-    # Symulacja wyszarzenia przez zmianę tekstu w KAŻDEJ kolumnie
+    # Funkcja wizualnego wyszarzania
     def gray_out(row):
         if row['status'] == 'Usunieto':
-            # Dodajemy znak blokady/wyblaknięcia do każdego tekstu
-            for col in ['data', 'data_zdarzenia', 'typ', 'opis']:
-                row[col] = f"░ {row[col]}"
-            row['kwota'] = 0.0 # Zerujemy wizualnie
+            row['data_zdarzenia'] = f"░ {row['data_zdarzenia']}"
+            row['typ'] = f"░ {row['typ']}"
+            row['opis'] = f"░ {row['opis']}"
+            row['kwota'] = 0.0
         return row
 
     df_display = df_display.apply(gray_out, axis=1)
     
-    df_editor_input = df_display[["data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
+    # Przygotowanie danych do edytora - WAŻNE: zachowujemy kolumnę 'id' ukrytą
+    df_editor_input = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
     df_editor_input.insert(0, "Wybierz", False)
     
     res = st.data_editor(
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "data": st.column_config.TextColumn("Data systemowa"),
-            "data_zdarzenia": st.column_config.TextColumn("Dzień"),
-            "typ": st.column_config.TextColumn("Typ"),
+            "id": None,  # Ukrywamy kolumnę ID, żeby nie psuła wyglądu
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
-            "opis": st.column_config.TextColumn("Opis"),
             "status": st.column_config.TextColumn("Status")
         },
         disabled=["data", "data_zdarzenia", "typ", "kwota", "opis", "status"],
         hide_index=True, use_container_width=True, key="pizza_editor"
     )
     
-    # Poprawione wykrywanie zaznaczonych linii
-    current_selected = res[res["Wybierz"] == True].index.tolist()
-    if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
-        st.session_state.selected_indices = current_selected
+    # Zbieramy ID zaznaczonych linii zamiast ich indeksów
+    selected_ids = res[res["Wybierz"] == True]["id"].tolist()
+    
+    if 'selected_ids' not in st.session_state or st.session_state.selected_ids != selected_ids:
+        st.session_state.selected_ids = selected_ids
         st.rerun()
 else:
     st.info("Brak wpisów.")
