@@ -81,7 +81,6 @@ def load_data():
     return pd.DataFrame(columns=['id','data', 'typ', 'kwota', 'opis', 'status', 'data_zdarzenia'])
 
 data = load_data()
-# Filtrujemy tylko to, co ma być widoczne w apce (liczniki)
 df_active_calc = data[data['status'] == 'Aktywny'].copy()
 
 if not df_active_calc.empty:
@@ -92,33 +91,48 @@ if not df_active_calc.empty:
 else:
     s_og, s_wyd, s_got = 0.0, 0.0, 0.0
 
-# --- 3. GENERATOR PDF ---
+# --- 3. GENERATOR PDF (POPRAWIONA TABELA) ---
 def create_pdf(df, p, g, w):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT ZAMKNIECIA - {get_now().strftime('%d.%m.%Y')}"), ln=True, align='C')
-    pdf.ln(10)
+    pdf.ln(5)
     
+    # Podsumowanie główne
     pdf.set_font("Helvetica", 'B', 12)
     pdf.set_fill_color(212, 237, 218)
-    pdf.cell(60, 10, pdf_safe(f"Przychod: {p:.2f} zl"), border=1, fill=True, align='C')
+    pdf.cell(63, 10, pdf_safe(f"Przychod: {p:.2f} zl"), border=1, fill=True, align='C')
     
     if g < 0:
         pdf.set_fill_color(255, 0, 0); pdf.set_text_color(255, 255, 255)
     else:
         pdf.set_fill_color(255, 243, 205); pdf.set_text_color(0, 0, 0)
         
-    pdf.cell(60, 10, pdf_safe(f"Gotowka: {g:.2f} zl"), border=1, fill=True, align='C')
+    pdf.cell(64, 10, pdf_safe(f"Gotowka: {g:.2f} zl"), border=1, fill=True, align='C')
     pdf.set_text_color(0, 0, 0); pdf.set_fill_color(248, 215, 218)
-    pdf.cell(60, 10, pdf_safe(f"Wydatki: {w:.2f} zl"), border=1, ln=1, fill=True, align='C')
-    
-    pdf.ln(5)
+    pdf.cell(63, 10, pdf_safe(f"Wydatki: {w:.2f} zl"), border=1, ln=1, fill=True, align='C')
+    pdf.ln(10)
+
+    # Nagłówek tabeli historii
+    pdf.set_font("Helvetica", 'B', 10)
+    pdf.set_fill_color(200, 200, 200)
+    pdf.cell(20, 8, "Data", border=1, fill=True, align='C')
+    pdf.cell(50, 8, "Typ", border=1, fill=True, align='C')
+    pdf.cell(30, 8, "Kwota", border=1, fill=True, align='C')
+    pdf.cell(90, 8, "Opis", border=1, ln=1, fill=True, align='C')
+
+    # Wiersze historii
     pdf.set_font("Helvetica", size=9)
-    
+    fill = False
     for _, row in df[df['status']=='Aktywny'].iterrows():
-        l = f"{row['data_zdarzenia']} | {row['typ']} | {row['kwota']:.2f} zl | {row['opis']}"
-        pdf.cell(0, 8, pdf_safe(l), ln=True, border=1)
+        pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
+        pdf.cell(20, 8, pdf_safe(row['data_zdarzenia']), border=1, fill=True, align='C')
+        pdf.cell(50, 8, pdf_safe(row['typ']), border=1, fill=True)
+        pdf.cell(30, 8, pdf_safe(f"{row['kwota']:.2f} zl"), border=1, fill=True, align='R')
+        pdf.cell(90, 8, pdf_safe(row['opis']), border=1, ln=1, fill=True)
+        fill = not fill
+
     return pdf.output(dest="S").encode("latin-1")
 
 # --- 4. WIDOK GŁÓWNY ---
@@ -144,7 +158,6 @@ with c1:
                     st.rerun()
 
 with c2:
-    # LOGIKA KOLORU GOTÓWKI
     got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
     got_txt = "white" if s_got < 0 else "black"
     st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
