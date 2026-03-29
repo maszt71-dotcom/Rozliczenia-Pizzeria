@@ -77,9 +77,7 @@ def load_data():
     return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
 def save_data(df): 
-    # Zapis główny
     df.to_csv(DB_FILE, index=False)
-    # Autozapis/Kopia zapasowa (Ochrona przed awarią)
     backup_name = f"backup_{datetime.now().strftime('%Y_%m_%d')}.csv"
     df.to_csv(backup_name, index=False)
 
@@ -134,7 +132,10 @@ with c1:
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 with c2:
-    st.markdown(f'<div style="background-color:#fff3cd; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    # --- LOGIKA ZMIANY KOLORU GOTÓWKI ---
+    got_color = "#f8d7da" if s_got < 0 else "#fff3cd"
+    st.markdown(f'<div style="background-color:{got_color}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    
     if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
@@ -171,7 +172,7 @@ with c3:
                     st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
 
-# --- 5. PASEK BOCZNY (PRZYWRÓCONE MENU) ---
+# --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
