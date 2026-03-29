@@ -91,7 +91,7 @@ if not df_active_calc.empty:
 else:
     s_og, s_wyd, s_got = 0.0, 0.0, 0.0
 
-# --- 3. GENERATOR PDF ---
+# --- 3. GENERATOR PDF (ŁADNA TABELA) ---
 def create_pdf(df, p, g, w):
     pdf = FPDF()
     pdf.add_page()
@@ -158,7 +158,6 @@ with c2:
     got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
     got_txt = "white" if s_got < 0 else "black"
     st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    
     if st.button("➕ DODAJ", key="g"): 
         st.session_state.s = "G" if st.session_state.s != "G" else ""
         st.session_state.os = None
@@ -201,7 +200,6 @@ with c3:
 # --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
-    
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
         pdf_f = create_pdf(df_active_calc, s_og, s_got, s_wyd)
         csv_f = df_active_calc.to_csv(index=False).encode('utf-8')
@@ -209,7 +207,6 @@ with st.sidebar:
             st.success("✅ Wysłano raport!")
 
     st.divider()
-
     if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
         st.session_state.lock_step = 1
 
@@ -226,37 +223,22 @@ with st.sidebar:
                             supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
                         st.session_state.lock_step = 0
                         st.rerun()
-            if st.button("Anuluj rozliczanie", use_container_width=True):
+            if st.button("Anuluj", use_container_width=True):
                 st.session_state.lock_step = 0
                 st.rerun()
 
     st.divider()
-
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ NA STAŁE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
-            st.session_state.confirm_del = True
-        
-        if st.session_state.get('confirm_del'):
-            st.error("NA PEWNO USUNĄĆ?")
-            cy, cn = st.columns(2)
-            if cy.button("TAK", use_container_width=True):
-                for rid in st.session_state.selected_ids:
-                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
-                st.session_state.selected_ids = []
-                st.session_state.confirm_del = False
-                st.rerun()
-            if cn.button("NIE", use_container_width=True):
-                st.session_state.confirm_del = False
-                st.rerun()
+            for rid in st.session_state.selected_ids:
+                supabase.table("finanse").delete().eq("id", int(rid)).execute()
+            st.session_state.selected_ids = []
+            st.rerun()
 
     st.divider()
-    
-    # NAPRAWA BŁĘDU None W SIDEBARZE
     st.download_button("📥 Pobierz CSV", data=df_active_calc.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active_calc, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
-
     st.divider()
-
     if st.button("🔓 Wyloguj", use_container_width=True):
         cookies["is_logged"] = "false"
         cookies.save()
@@ -273,7 +255,7 @@ if not df_active_calc.empty:
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": None, # CAŁKOWITE UKRYCIE KOLUMNY ID
+            "id": st.column_config.Column(label="ID", width="small", disabled=True),
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
             "status": st.column_config.TextColumn("Status")
         },
