@@ -115,7 +115,6 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
-    # W PDF tylko aktywne
     for _, row in df[df['status']=='Aktywny'].iterrows():
         linia = f"{row['data_zdarzenia']} | {row['typ']} | {row['kwota']:.2f} zl | {row['opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
@@ -178,7 +177,7 @@ with c3:
                     st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
 
-# --- 5. PASEK BOCZNY (PRZYWRÓCONY I KOMPLETNY) ---
+# --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
@@ -187,7 +186,6 @@ with st.sidebar:
         if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
 
     st.divider()
-    # Usuwanie linii (zmienia status na Usunieto)
     if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
         if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
@@ -196,7 +194,7 @@ with st.sidebar:
             st.warning("Usunąć zaznaczone?")
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
-                df_view = data.iloc[::-1] # Bo tabela w edytorze jest odwrócona
+                df_view = data.iloc[::-1]
                 for idx in st.session_state.selected_indices:
                     row_id = df_view.iloc[idx]['id']
                     supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(row_id)).execute()
@@ -211,7 +209,6 @@ with st.sidebar:
     st.download_button("📥 Pobierz PDF", data=create_pdf(data, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
     
     st.divider()
-    # Wielostopniowe usuwanie całej historii
     if 'del_step' not in st.session_state: st.session_state.del_step = 0
     if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True): st.session_state.del_step = 1
     if st.session_state.del_step >= 1:
@@ -224,25 +221,31 @@ with st.sidebar:
                 st.error("CZY JESTEŚ PEWIEN?")
                 ct, cn = st.columns(2)
                 if ct.button("TAK", key="full_y", use_container_width=True):
-                    # Wszystkie aktywne stają się Usunieto
                     df_active_to_del = data[data['status'] == 'Aktywny']
                     for _, row in df_active_to_del.iterrows():
                         supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(row['id'])).execute()
-                    st.session_state.del_step = 0
-                    st.rerun()
+                    st.session_state.del_step = 0; st.rerun()
                 if cn.button("NIE", key="full_n", use_container_width=True): st.session_state.del_step = 0; st.rerun()
 
     st.divider()
     if st.button("🔓 Wyloguj", use_container_width=True):
         cookies["is_logged"] = "false"; cookies.save(); st.rerun()
 
-# --- 6. HISTORIA Z WYSZARZANIEM ---
+# --- 6. HISTORIA Z WYRAŹNYM OZNACZENIEM ---
 st.divider()
 st.subheader("Historia wpisów")
 if not data.empty:
     df_display = data.iloc[::-1].copy()
     
-    # Funkcja do wyszarzania w edytorze (wizualna)
+    def apply_visual_delete(row):
+        if row['status'] == 'Usunieto':
+            row['typ'] = f"⚪ {row['typ']}"
+            row['opis'] = f"--- USUNIĘTO --- {row['opis']}"
+            row['kwota'] = 0.0
+        return row
+
+    df_display = df_display.apply(apply_visual_delete, axis=1)
+    
     df_editor_input = df_display[["data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
     df_editor_input.insert(0, "Wybierz", False)
     
