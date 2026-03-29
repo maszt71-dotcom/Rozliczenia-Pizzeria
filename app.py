@@ -39,7 +39,7 @@ def send_email_with_reports(pdf_data, csv_data):
     msg['From'] = sender_email
     msg['To'] = receiver_email
     msg['Subject'] = f"Raport Pizzeria - {get_now().strftime('%d.%m.%Y %H:%M')}"
-    msg.attach(MIMEText("Automatyczny raport z zamkniętego okresu. Dane zarchiwizowane w bazie.", 'plain'))
+    msg.attach(MIMEText("Automatyczny raport z systemu.", 'plain'))
 
     for content, ext in [(pdf_data, "pdf"), (csv_data, "csv")]:
         part = MIMEBase('application', 'octet-stream')
@@ -81,7 +81,7 @@ def load_data():
     return pd.DataFrame(columns=['id','data', 'typ', 'kwota', 'opis', 'status', 'data_zdarzenia'])
 
 data = load_data()
-# Filtrujemy tylko to, co ma być widoczne w apce (liczniki i historia)
+# Filtrujemy tylko to, co ma być widoczne w apce (liczniki)
 df_active_calc = data[data['status'] == 'Aktywny'].copy()
 
 if not df_active_calc.empty:
@@ -99,6 +99,7 @@ def create_pdf(df, p, g, w):
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT ZAMKNIECIA - {get_now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(10)
+    
     pdf.set_font("Helvetica", 'B', 12)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {p:.2f} zl"), border=1, fill=True, align='C')
@@ -111,6 +112,7 @@ def create_pdf(df, p, g, w):
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {g:.2f} zl"), border=1, fill=True, align='C')
     pdf.set_text_color(0, 0, 0); pdf.set_fill_color(248, 215, 218)
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {w:.2f} zl"), border=1, ln=1, fill=True, align='C')
+    
     pdf.ln(5)
     pdf.set_font("Helvetica", size=9)
     
@@ -140,15 +142,13 @@ with c1:
                     supabase.table("finanse").insert({'data': get_now().strftime("%d.%m %H:%M"), 'typ': 'Przychód ogólny', 'kwota': float(kw_p), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_p.strftime("%d.%m")}).execute()
                     st.session_state.s = ""
                     st.rerun()
-            if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): 
-                st.session_state.s = ""
-                st.rerun()
 
 with c2:
     # LOGIKA KOLORU GOTÓWKI
     got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
     got_txt = "white" if s_got < 0 else "black"
     st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    
     if st.button("➕ DODAJ", key="g"): 
         st.session_state.s = "G" if st.session_state.s != "G" else ""
         st.session_state.os = None
@@ -171,10 +171,6 @@ with c2:
                                 st.session_state.s = ""
                                 st.session_state.os = None
                                 st.rerun()
-            if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): 
-                st.session_state.s = ""
-                st.session_state.os = None
-                st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -191,47 +187,55 @@ with c3:
                     supabase.table("finanse").insert({'data': get_now().strftime("%d.%m %H:%M"), 'typ': 'Wydatki gotówkowe', 'kwota': float(kw_w), 'opis': op_w, 'status': 'Aktywny', 'data_zdarzenia': d_w.strftime("%d.%m")}).execute()
                     st.session_state.s = ""
                     st.rerun()
-            if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): 
-                st.session_state.s = ""
-                st.rerun()
 
 # --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     
-    # ZAMKNIJ I ROZLICZ
+    if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
+        pdf_f = create_pdf(df_active_calc, s_og, s_got, s_wyd)
+        csv_f = df_active_calc.to_csv(index=False).encode('utf-8')
+        if send_email_with_reports(pdf_f, csv_f):
+            st.success("✅ Wysłano raport!")
+
+    st.divider()
+
     if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
         st.session_state.lock_step = 1
 
     if st.session_state.get('lock_step', 0) >= 1:
         with st.container(border=True):
-            h_szef = st.text_input("Hasło Szefa:", type="password")
-            if h_szef == "szef123":
-                st.warning("Potwierdź rozliczenie:")
+            h = st.text_input("Hasło Szefa:", type="password")
+            if h == "szef123":
                 if st.button("✅ POTWIERDZAM I ROZLICZAM", use_container_width=True):
                     if not df_active_calc.empty:
-                        p_rep = create_pdf(df_active_calc, s_og, s_got, s_wyd)
-                        c_rep = df_active_calc.to_csv(index=False).encode('utf-8')
-                        send_email_with_reports(p_rep, c_rep)
+                        p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
+                        c_r = df_active_calc.to_csv(index=False).encode('utf-8')
+                        send_email_with_reports(p_r, c_r)
                         for rid in df_active_calc['id'].tolist():
                             supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
                         st.session_state.lock_step = 0
-                        st.rerun() # Przeładowanie, aby historia zniknęła
-            if st.button("Anuluj", use_container_width=True):
-                st.session_state.lock_state = 0
+                        st.rerun()
+            if st.button("Anuluj rozliczanie", use_container_width=True):
+                st.session_state.lock_step = 0
                 st.rerun()
 
     st.divider()
-    
-    # USUWANIE NA STAŁE
+
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ NA STAŁE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
             for rid in st.session_state.selected_ids:
                 supabase.table("finanse").delete().eq("id", int(rid)).execute()
             st.session_state.selected_ids = []
-            st.rerun() # Przeładowanie, aby historia zniknęła
+            st.rerun()
 
     st.divider()
+    
+    st.download_button("📥 Pobierz CSV", data=df_active_calc.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
+    st.download_button("📥 Pobierz PDF", data=create_pdf(df_active_calc, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
+
+    st.divider()
+
     if st.button("🔓 Wyloguj", use_container_width=True):
         cookies["is_logged"] = "false"
         cookies.save()
@@ -239,7 +243,7 @@ with st.sidebar:
 
 # --- 6. HISTORIA ---
 st.divider()
-st.subheader("Historia wpisów (Aktywne)")
+st.subheader("Historia wpisów (Bieżący okres)")
 if not df_active_calc.empty:
     df_editor_input = df_active_calc.iloc[::-1][["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
     df_editor_input.insert(0, "Wybierz", False)
@@ -261,4 +265,4 @@ if not df_active_calc.empty:
         st.session_state.selected_ids = selected_ids
         st.rerun()
 else:
-    st.info("Brak wpisów.")
+    st.info("Brak wpisów w obecnym okresie.")
