@@ -41,9 +41,9 @@ def send_email_with_reports(pdf_data, csv_data):
         server.login(sender_email, password); server.send_message(msg); server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Błąd wysyłki: {e}"); return False
+        st.sidebar.error(f"Błąd: {e}"); return False
 
-# --- 1. LOGOWANIE ---
+# --- LOGOWANIE ---
 st.set_page_config(page_title="Pizzeria", layout="wide")
 cookies = CookieManager()
 if not cookies.ready(): st.stop()
@@ -55,13 +55,13 @@ if cookies.get("is_logged") != "true":
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
 
-# --- 2. POŁĄCZENIE GOOGLE SHEETS (BEZ BŁĘDU TTL) ---
+# --- POŁĄCZENIE GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    # Uproszczone pobieranie, które nie wywołuje błędu na Streamlit Cloud
     try:
-        return conn.read()
+        df = conn.read(ttl=0)
+        return df
     except:
         return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
@@ -69,20 +69,19 @@ def save_data(df):
     conn.update(data=df)
     st.cache_data.clear()
 
-# Pobranie danych
 data = load_data()
 if data.empty:
     data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
-df_active_calc = data[data['Status'] == 'Aktywny'].copy()
-df_active_calc['Kwota'] = pd.to_numeric(df_active_calc['Kwota'], errors='coerce').fillna(0)
+df_active = data[data['Status'] == 'Aktywny'].copy()
+df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-# OBLICZENIA (Linie o które pytałeś)
-s_og = df_active_calc[df_active_calc['Typ'] == 'Przychód ogólny']['Kwota'].sum()
-s_wyd = df_active_calc[df_active_calc['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
-s_got = df_active_calc[df_active_calc['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
+# OBLICZENIA
+s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
+s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. INTERFEJS ---
+# --- INTERFEJS GŁÓWNY (PRZYWRÓCONY) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 if 's' not in st.session_state: st.session_state.s = ""
@@ -93,55 +92,49 @@ with c1:
     if st.button("➕ DODAJ", key="p"): st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
-            d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
-            kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v")
-            if st.button("DODAJ WPIS", key="save_p", use_container_width=True, type="primary"):
-                if kw_p:
-                    n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}])
-                    save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
+            d_p = st.date_input("Data", datetime.now(), key="d_p")
+            kw_p = st.number_input("Kwota", value=None, key="k_p")
+            if st.button("ZAPISZ", key="s_p", type="primary"):
+                n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}])
+                save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
 
 with c2:
-    got_bg, got_txt = ("#FF0000", "white") if s_got < 0 else ("#fff3cd", "black")
-    st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
+    bg, txt = ("#FF0000", "white") if s_got < 0 else ("#fff3cd", "black")
+    st.markdown(f'<div style="background-color:{bg}; color:{txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.rerun()
     if st.session_state.s == "G":
-        osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-        for o in osoby:
-            if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun()
+        for o in ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]:
+            if st.button(o, use_container_width=True):
+                st.session_state.os = o; st.rerun()
             if st.session_state.os == o:
                 with st.container(border=True):
-                    d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
-                    kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}")
-                    if st.button("ZAPISZ", key=f"save_g_{o}", use_container_width=True, type="primary"):
-                        if kw_g:
-                            n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}])
-                            save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.session_state.os = None; st.rerun()
+                    d_g = st.date_input("Data", key="d_g")
+                    kw_g = st.number_input("Kwota", key="k_g")
+                    if st.button("ZAPISZ WPIS", type="primary"):
+                        n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}])
+                        save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.session_state.os = None; st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
-            d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
-            kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v")
-            op_w = st.text_input("Opis", key="desc_w")
-            if st.button("DODAJ WYDATEK", key="save_w", use_container_width=True, type="primary"):
-                if kw_w:
-                    n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}])
-                    save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
+            d_w = st.date_input("Data", key="d_w")
+            kw_w = st.number_input("Kwota", key="k_w")
+            op_w = st.text_input("Opis")
+            if st.button("ZAPISZ WYDATEK", type="primary"):
+                n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}])
+                save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
 
-# --- HISTORIA ---
+# --- HISTORIA (STARY WYGLĄD) ---
 st.divider()
-st.subheader("Historia wpisów")
-if not data.empty:
-    df_display = data.copy().iloc[::-1]
-    df_display.insert(0, "Wybierz", False)
-    res = st.data_editor(
-        df_display[["Wybierz", "Data zdarzenia", "Typ", "Kwota", "Opis", "Status"]],
-        column_config={
-            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "Status": st.column_config.TextColumn("Status", disabled=True),
-        },
-        use_container_width=True, hide_index=True, key="main_table"
-    )
-    st.session_state.sel = res[(res["Wybierz"] == True) & (res["Status"] == "Aktywny")].index.tolist()
+st.subheader("Historia")
+# Pokazujemy tylko aktywne w tabeli, żeby nie śmiecić
+st.table(df_active[['Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1])
+
+# MENU BOCZNE
+with st.sidebar:
+    if st.button("📧 WYŚLIJ RAPORT", type="primary", use_container_width=True):
+        pdf = create_pdf(df_active, s_og, s_got, s_wyd)
+        if send_email_with_reports(pdf, df_active.to_csv(index=False).encode('utf-8')):
+            st.success("Wysłano!")
