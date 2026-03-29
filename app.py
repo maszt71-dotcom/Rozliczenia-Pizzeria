@@ -132,9 +132,10 @@ with c1:
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 with c2:
-    # --- LOGIKA ZMIANY KOLORU GOTÓWKI ---
-    got_color = "#f8d7da" if s_got < 0 else "#fff3cd"
-    st.markdown(f'<div style="background-color:{got_color}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    # --- JASKRAWOCZERWONY GDY MINUS ---
+    got_color = "#FF0000" if s_got < 0 else "#fff3cd"
+    text_color = "white" if s_got < 0 else "black"
+    st.markdown(f'<div style="background-color:{got_color}; color:{text_color}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     
     if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
