@@ -76,25 +76,26 @@ if cookies.get("is_logged") != "true":
 
 # --- 2. DANE Z SUPABASE ---
 def load_data():
-    response = supabase.table("finanse").select("*").execute()
+    # Pobieramy wszystko, ale sortujemy po ID, żeby nowe były na dole (iloc[::-1] je odwróci)
+    response = supabase.table("finanse").select("*").order("id").execute()
     if response.data:
-        df = pd.DataFrame(response.data)
-        return df
+        return pd.DataFrame(response.data)
     return pd.DataFrame(columns=['id', 'data', 'typ', 'kwota', 'opis', 'status', 'data_zdarzenia'])
 
 def add_to_supabase(item):
     supabase.table("finanse").insert(item).execute()
 
 data = load_data()
-if not data.empty:
-    df_active = data[data['status'] == 'Aktywny'].copy()
-    df_active['kwota'] = pd.to_numeric(df_active['kwota'], errors='coerce').fillna(0)
-else:
-    df_active = pd.DataFrame(columns=['id', 'data', 'typ', 'kwota', 'opis', 'status', 'data_zdarzenia'])
 
-s_og = df_active[df_active['typ'] == 'Przychód ogólny']['kwota'].sum()
-s_wyd = df_active[df_active['typ'] == 'Wydatki gotówkowe']['kwota'].sum()
-s_got = df_active[df_active['typ'].astype(str).str.contains('Gotówka', na=False)]['kwota'].sum() - s_wyd
+# --- OBLICZENIA (Tylko dla Aktywnych!) ---
+df_active_only = data[data['status'] == 'Aktywny'].copy()
+if not df_active_only.empty:
+    df_active_only['kwota'] = pd.to_numeric(df_active_only['kwota'], errors='coerce').fillna(0)
+    s_og = df_active_only[df_active_only['typ'] == 'Przychód ogólny']['kwota'].sum()
+    s_wyd = df_active_only[df_active_only['typ'] == 'Wydatki gotówkowe']['kwota'].sum()
+    s_got = df_active_only[df_active_only['typ'].astype(str).str.contains('Gotówka', na=False)]['kwota'].sum() - s_wyd
+else:
+    s_og, s_wyd, s_got = 0.0, 0.0, 0.0
 
 # --- 3. GENERATOR PDF ---
 def create_pdf(df, s_og, s_got, s_wyd):
@@ -107,18 +108,16 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
     if s_got < 0:
-        pdf.set_fill_color(255, 0, 0)
-        pdf.set_text_color(255, 255, 255)
+        pdf.set_fill_color(255, 0, 0); pdf.set_text_color(255, 255, 255)
     else:
-        pdf.set_fill_color(255, 243, 205)
-        pdf.set_text_color(0, 0, 0)
+        pdf.set_fill_color(255, 243, 205); pdf.set_text_color(0, 0, 0)
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_fill_color(248, 215, 218)
+    pdf.set_text_color(0, 0, 0); pdf.set_fill_color(248, 215, 218)
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
-    for _, row in df.iterrows():
+    # W PDF tylko aktywne!
+    for _, row in df[df['status']=='Aktywny'].iterrows():
         linia = f"{row['data_zdarzenia']} | {row['typ']} | {row['kwota']:.2f} zl | {row['opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return pdf.output(dest="S").encode("latin-1")
@@ -130,6 +129,7 @@ c1, c2, c3 = st.columns(3)
 if 's' not in st.session_state: st.session_state.s = ""
 if 'os' not in st.session_state: st.session_state.os = None
 
+# (Sekcje DODAJ pozostają bez zmian w strukturze)
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"): st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
@@ -139,8 +139,7 @@ with c1:
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
-                    n = {'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': 'Przychód ogólny', 'kwota': float(kw_p), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_p.strftime("%d.%m")}
-                    add_to_supabase(n)
+                    add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': 'Przychód ogólny', 'kwota': float(kw_p), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_p.strftime("%d.%m")})
                     st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
@@ -156,17 +155,14 @@ with c2:
                 if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun()
                 if st.session_state.os == o:
                     with st.container(border=True):
-                        st.markdown(f"Dla: **{o}**")
                         d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}")
                         cs, cb = st.columns(2)
                         if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g:
-                                n = {'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': f"Gotówka - {o}", 'kwota': float(kw_g), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_g.strftime("%d.%m")}
-                                add_to_supabase(n)
+                                add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': f"Gotówka - {o}", 'kwota': float(kw_g), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_g.strftime("%d.%m")})
                                 st.session_state.s = ""; st.session_state.os = None; st.rerun()
                         if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun()
-            st.divider()
             if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): st.session_state.s = ""; st.session_state.os = None; st.rerun()
 
 with c3:
@@ -179,8 +175,7 @@ with c3:
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w:
-                    n = {'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': 'Wydatki gotówkowe', 'kwota': float(kw_w), 'opis': op_w, 'status': 'Aktywny', 'data_zdarzenia': d_w.strftime("%d.%m")}
-                    add_to_supabase(n)
+                    add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': 'Wydatki gotówkowe', 'kwota': float(kw_w), 'opis': op_w, 'status': 'Aktywny', 'data_zdarzenia': d_w.strftime("%d.%m")})
                     st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
 
@@ -188,76 +183,71 @@ with c3:
 with st.sidebar:
     st.header("⚙️ Menu")
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
-        pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
-        csv_file = df_active.to_csv(index=False).encode('utf-8')
+        pdf_file = create_pdf(data, s_og, s_got, s_wyd)
+        csv_file = data[data['status']=='Aktywny'].to_csv(index=False).encode('utf-8')
         if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
 
     st.divider()
+    # Usuwanie (zmienia status na Usunieto)
     if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
         if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
         
         if st.session_state.get('ask_del_line'):
-            st.warning("Usunąć zaznaczone?")
+            st.warning("Usunąć (wyszarzyć)?")
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
+                # Praca na odwróconym widoku!
+                df_view = data.iloc[::-1]
                 for idx in st.session_state.selected_indices:
-                    row_id = df_active.iloc[idx]['id']
-                    supabase.table("finanse").update({"status": "Archiwum"}).eq("id", int(row_id)).execute()
+                    row_id = df_view.iloc[idx]['id']
+                    supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(row_id)).execute()
                 st.session_state.ask_del_line = False
                 st.session_state.selected_indices = []
                 st.rerun()
             if cn.button("NIE", key="line_n"):
-                st.session_state.ask_del_line = False
-                st.rerun()
+                st.session_state.ask_del_line = False; st.rerun()
 
     st.divider()
-    st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
-    st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
-    
-    st.divider()
-    if 'del_step' not in st.session_state: st.session_state.del_step = 0
-    if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True): st.session_state.del_step = 1
-    if st.session_state.del_step >= 1:
-        with st.container(border=True):
-            st.warning("Potwierdź usunięcie CAŁOŚCI")
-            check = st.checkbox("Zgadzam się")
-            if check:
-                if st.button("🔥 WYCZYŚĆ WSZYSTKO", use_container_width=True, type="primary"): st.session_state.del_step = 2
-            if st.session_state.del_step == 2:
-                st.error("CZY JESTEŚ PEWIEN?")
-                ct, cn = st.columns(2)
-                if ct.button("TAK", key="full_y", use_container_width=True):
-                    for _, row in df_active.iterrows():
-                        supabase.table("finanse").update({"status": "Archiwum"}).eq("id", int(row['id'])).execute()
-                    st.session_state.del_step = 0
-                    st.rerun()
-                if cn.button("NIE", key="full_n", use_container_width=True): st.session_state.del_step = 0; st.rerun()
+    st.download_button("📥 Pobierz CSV (Aktywne)", data=df_active_only.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
 
-    st.divider()
     if st.button("🔓 Wyloguj", use_container_width=True):
-        cookies["is_logged"] = "false"
-        cookies.save()
-        st.rerun()
+        cookies["is_logged"] = "false"; cookies.save(); st.rerun()
 
-# --- 6. HISTORIA ---
+# --- 6. HISTORIA Z WYSZARZANIEM ---
 st.divider()
 st.subheader("Historia wpisów")
-if not df_active.empty:
-    df_editor = df_active.copy()
-    cols_to_show = ["data", "data_zdarzenia", "typ", "kwota", "opis"]
-    df_editor = df_editor[cols_to_show]
-    df_editor.insert(0, "Wybierz", False)
+if not data.empty:
+    # Przygotowanie danych do wyświetlenia (odwrócona kolejność)
+    df_display = data.iloc[::-1].copy()
     
+    # Funkcja do kolorowania wierszy
+    def color_rows(row):
+        if row['status'] == 'Usunieto':
+            return ['color: #a0a0a0; font-style: italic; text-decoration: line-through'] * len(row)
+        return [''] * len(row)
+
+    # Stylizujemy tabelę
+    styled_df = df_display.style.apply(color_rows, axis=1)
+
+    # Pokazujemy edytor z checkboxami
+    df_editor_input = df_display[["data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
+    df_editor_input.insert(0, "Wybierz", False)
+    
+    # Blokujemy edycję tych, które są już Usunieto
     res = st.data_editor(
-        df_editor.iloc[::-1],
-        column_config={"Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small")},
-        disabled=["data", "data_zdarzenia", "typ", "kwota", "opis"],
+        df_editor_input,
+        column_config={
+            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
+            "status": st.column_config.TextColumn("Status", disabled=True)
+        },
+        disabled=["data", "data_zdarzenia", "typ", "kwota", "opis", "status"],
         hide_index=True, use_container_width=True, key="pizza_editor"
     )
-    current_selected = [df_editor.index[::-1][i] for i, val in enumerate(res["Wybierz"]) if val]
+    
+    current_selected = res[res["Wybierz"] == True].index.tolist()
     if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
         st.session_state.selected_indices = current_selected
         st.rerun()
 else:
-    st.info("Brak aktywnych wpisów.")
+    st.info("Brak wpisów.")
