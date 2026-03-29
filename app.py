@@ -91,7 +91,7 @@ if not df_active_calc.empty:
 else:
     s_og, s_wyd, s_got = 0.0, 0.0, 0.0
 
-# --- 3. GENERATOR PDF (POPRAWIONA TABELA) ---
+# --- 3. GENERATOR PDF ---
 def create_pdf(df, p, g, w):
     pdf = FPDF()
     pdf.add_page()
@@ -99,7 +99,6 @@ def create_pdf(df, p, g, w):
     pdf.cell(0, 10, pdf_safe(f"RAPORT ZAMKNIECIA - {get_now().strftime('%d.%m.%Y')}"), ln=True, align='C')
     pdf.ln(5)
     
-    # Podsumowanie główne
     pdf.set_font("Helvetica", 'B', 12)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(63, 10, pdf_safe(f"Przychod: {p:.2f} zl"), border=1, fill=True, align='C')
@@ -114,7 +113,6 @@ def create_pdf(df, p, g, w):
     pdf.cell(63, 10, pdf_safe(f"Wydatki: {w:.2f} zl"), border=1, ln=1, fill=True, align='C')
     pdf.ln(10)
 
-    # Nagłówek tabeli historii
     pdf.set_font("Helvetica", 'B', 10)
     pdf.set_fill_color(200, 200, 200)
     pdf.cell(20, 8, "Data", border=1, fill=True, align='C')
@@ -122,7 +120,6 @@ def create_pdf(df, p, g, w):
     pdf.cell(30, 8, "Kwota", border=1, fill=True, align='C')
     pdf.cell(90, 8, "Opis", border=1, ln=1, fill=True, align='C')
 
-    # Wiersze historii
     pdf.set_font("Helvetica", size=9)
     fill = False
     for _, row in df[df['status']=='Aktywny'].iterrows():
@@ -237,6 +234,7 @@ with st.sidebar:
 
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ NA STAŁE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
+            # TU ZOSTANIE DODANE PODWÓJNE ZABEZPIECZENIE PO KOLEJNYM TAK
             for rid in st.session_state.selected_ids:
                 supabase.table("finanse").delete().eq("id", int(rid)).execute()
             st.session_state.selected_ids = []
@@ -265,7 +263,7 @@ if not df_active_calc.empty:
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": None,
+            "id": st.column_config.Column(visible=False), # POPRAWKA :none:
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
             "status": st.column_config.TextColumn("Status")
         },
