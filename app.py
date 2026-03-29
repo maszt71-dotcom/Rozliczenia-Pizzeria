@@ -137,10 +137,10 @@ def create_pdf(df, p, g, w):
         else:
             pdf.set_fill_color(255, 255, 255)
 
-        pdf.cell(20, 8, pdf_safe(row["data_zdarzenia"]), border=1, fill=True, align="C")
-        pdf.cell(50, 8, pdf_safe(row["typ"]), border=1, fill=True)
-        pdf.cell(30, 8, pdf_safe(f"{row['kwota']:.2f} zl"), border=1, fill=True, align="R")
-        pdf.cell(90, 8, pdf_safe(row["opis"]), border=1, ln=1, fill=True)
+        pdf.cell(20, 8, pdf_safe(str(row["data_zdarzenia"])), border=1, fill=True, align="C")
+        pdf.cell(50, 8, pdf_safe(str(row["typ"])), border=1, fill=True)
+        pdf.cell(30, 8, pdf_safe(f"{float(row['kwota']):.2f} zl"), border=1, fill=True, align="R")
+        pdf.cell(90, 8, pdf_safe(str(row["opis"])), border=1, ln=1, fill=True)
         fill = not fill
 
     return pdf.output(dest="S").encode("latin-1")
@@ -154,6 +154,8 @@ if "selected_ids" not in st.session_state:
     st.session_state.selected_ids = []
 if "lock_step" not in st.session_state:
     st.session_state.lock_step = 0
+if "show_delete_confirm" not in st.session_state:
+    st.session_state.show_delete_confirm = False
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
@@ -171,9 +173,9 @@ with c1:
     if st.session_state.s == "P":
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", get_now().date(), key="date_p")
-            kw_p = st.number_input("Kwota", min_value=0.0, value=0.0, step=1.0, key="p_v")
+            kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v", placeholder="Wpisz kwotę")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
-                if kw_p > 0:
+                if kw_p is not None and kw_p > 0:
                     supabase.table("finanse").insert({
                         "data": get_now().strftime("%d.%m %H:%M"),
                         "typ": "Przychód ogólny",
@@ -209,9 +211,9 @@ with c2:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
                         d_g = st.date_input("Data", get_now().date(), key=f"date_g_{o}")
-                        kw_g = st.number_input("Kwota", min_value=0.0, value=0.0, step=1.0, key=f"g_v_{o}")
+                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
                         if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
-                            if kw_g > 0:
+                            if kw_g is not None and kw_g > 0:
                                 supabase.table("finanse").insert({
                                     "data": get_now().strftime("%d.%m %H:%M"),
                                     "typ": f"Gotówka - {o}",
@@ -236,10 +238,10 @@ with c3:
     if st.session_state.s == "W":
         with st.container(border=True):
             d_w = st.date_input("Data zdarzenia", get_now().date(), key="date_w")
-            kw_w = st.number_input("Kwota", min_value=0.0, value=0.0, step=1.0, key="w_v")
+            kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v", placeholder="Wpisz kwotę")
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
-                if kw_w > 0:
+                if kw_w is not None and kw_w > 0:
                     supabase.table("finanse").insert({
                         "data": get_now().strftime("%d.%m %H:%M"),
                         "typ": "Wydatki gotówkowe",
@@ -288,15 +290,6 @@ with st.sidebar:
 
     st.divider()
 
-    if len(st.session_state.selected_ids) > 0:
-        if st.button(f"🗑️ USUŃ NA STAŁE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
-            for rid in st.session_state.selected_ids:
-                supabase.table("finanse").delete().eq("id", int(rid)).execute()
-            st.session_state.selected_ids = []
-            st.rerun()
-
-    st.divider()
-
     _ = st.download_button(
         "📥 Pobierz CSV",
         data=df_active_calc.to_csv(index=False).encode("utf-8"),
@@ -341,7 +334,32 @@ if not df_active_calc.empty:
     )
 
     selected_ids = res[res["Wybierz"] == True]["id"].tolist()
-    if st.session_state.selected_ids != selected_ids:
-        st.session_state.selected_ids = selected_ids
+    st.session_state.selected_ids = selected_ids
+
+    if len(selected_ids) > 0:
+        st.markdown("")
+        if st.button(f"🗑️ USUŃ LINIĘ ({len(selected_ids)})", type="primary", use_container_width=True):
+            st.session_state.show_delete_confirm = True
+
+        if st.session_state.get("show_delete_confirm", False):
+            st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("✅ POTWIERDŹ USUNIĘCIE", use_container_width=True):
+                    for rid in selected_ids:
+                        supabase.table("finanse").delete().eq("id", int(rid)).execute()
+                    st.session_state.selected_ids = []
+                    st.session_state.show_delete_confirm = False
+                    st.rerun()
+
+            with col2:
+                if st.button("Anuluj", use_container_width=True):
+                    st.session_state.show_delete_confirm = False
+                    st.rerun()
+    else:
+        st.session_state.show_delete_confirm = False
+
 else:
     st.info("Brak wpisów w obecnym okresie.")
