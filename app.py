@@ -26,7 +26,7 @@ def pdf_safe(txt):
         return ""
     rep = {
         "ą": "a", "ć": "c", "ę": "e", "ł": "l", "ń": "n", "ó": "o", "ś": "s", "ź": "z", "ż": "z",
-        "Ą": "A", "Ć": "C", "Ę": "E", "Ł": "L", "Ń": "N", "Ó": "O", "Ś": "S", "Ź": "Z", "Ż": "Z"
+        "Ą": "A", "Ć": "C", "Ę":"E", "Ł": "L", "Ń": "N", "Ó": "O", "Ś": "S", "Ź": "Z", "Ż": "Z"
     }
     t = str(txt)
     for k, v in rep.items():
@@ -72,11 +72,13 @@ if not cookies.ready():
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
-    if st.button("Zaloguj"):
+    if st.button("Zaloguj", use_container_width=True):
         if haslo == "dup@":
             cookies["is_logged"] = "true"
             cookies.save()
             st.rerun()
+        else:
+            st.error("Błędne hasło")
     st.stop()
 
 # --- 2. DANE Z SUPABASE ---
@@ -104,107 +106,68 @@ def create_pdf(df, p, g, w):
     pdf.set_font("Helvetica", "B", 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT ZAMKNIECIA - {get_now().strftime('%d.%m.%Y')}"), ln=True, align="C")
     pdf.ln(5)
-
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(63, 10, pdf_safe(f"Przychod: {p:.2f} zl"), border=1, fill=True, align="C")
-
     if g < 0:
-        pdf.set_fill_color(255, 0, 0)
-        pdf.set_text_color(255, 255, 255)
+        pdf.set_fill_color(255, 0, 0); pdf.set_text_color(255, 255, 255)
     else:
-        pdf.set_fill_color(255, 243, 205)
-        pdf.set_text_color(0, 0, 0)
-
+        pdf.set_fill_color(255, 243, 205); pdf.set_text_color(0, 0, 0)
     pdf.cell(64, 10, pdf_safe(f"Gotowka: {g:.2f} zl"), border=1, fill=True, align="C")
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_fill_color(248, 215, 218)
+    pdf.set_text_color(0, 0, 0); pdf.set_fill_color(248, 215, 218)
     pdf.cell(63, 10, pdf_safe(f"Wydatki: {w:.2f} zl"), border=1, ln=1, fill=True, align="C")
     pdf.ln(10)
-
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.set_fill_color(200, 200, 200)
+    pdf.set_font("Helvetica", "B", 10); pdf.set_fill_color(200, 200, 200)
     pdf.cell(20, 8, "Data", border=1, fill=True, align="C")
     pdf.cell(50, 8, "Typ", border=1, fill=True, align="C")
     pdf.cell(30, 8, "Kwota", border=1, fill=True, align="C")
     pdf.cell(90, 8, "Opis", border=1, ln=1, fill=True, align="C")
-
     pdf.set_font("Helvetica", size=9)
     fill = False
     for _, row in df[df["status"] == "Aktywny"].iterrows():
-        if fill:
-            pdf.set_fill_color(245, 245, 245)
-        else:
-            pdf.set_fill_color(255, 255, 255)
-
+        pdf.set_fill_color(245, 245, 245) if fill else pdf.set_fill_color(255, 255, 255)
         pdf.cell(20, 8, pdf_safe(row["data_zdarzenia"]), border=1, fill=True, align="C")
         pdf.cell(50, 8, pdf_safe(row["typ"]), border=1, fill=True)
         pdf.cell(30, 8, pdf_safe(f"{row['kwota']:.2f} zl"), border=1, fill=True, align="R")
         pdf.cell(90, 8, pdf_safe(row["opis"]), border=1, ln=1, fill=True)
         fill = not fill
-
     return pdf.output(dest="S").encode("latin-1")
 
 # --- 4. STANY SESJI ---
-if "s" not in st.session_state:
-    st.session_state.s = ""
-if "os" not in st.session_state:
-    st.session_state.os = None
-if "selected_ids" not in st.session_state:
-    st.session_state.selected_ids = []
-if "lock_step" not in st.session_state:
-    st.session_state.lock_step = 0
+if "s" not in st.session_state: st.session_state.s = ""
+if "os" not in st.session_state: st.session_state.os = None
+if "selected_ids" not in st.session_state: st.session_state.selected_ids = []
+if "lock_step" not in st.session_state: st.session_state.lock_step = 0
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.markdown(
-        f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="p"):
         st.session_state.s = "P" if st.session_state.s != "P" else ""
         st.rerun()
-
     if st.session_state.s == "P":
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", get_now().date(), key="date_p")
             kw_p = st.number_input("Kwota", min_value=0.0, value=0.0, step=1.0, key="p_v")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p > 0:
-                    supabase.table("finanse").insert({
-                        "data": get_now().strftime("%d.%m %H:%M"),
-                        "typ": "Przychód ogólny",
-                        "kwota": float(kw_p),
-                        "opis": "",
-                        "status": "Aktywny",
-                        "data_zdarzenia": d_p.strftime("%d.%m")
-                    }).execute()
-                    st.session_state.s = ""
-                    st.rerun()
+                    supabase.table("finanse").insert({"data": get_now().strftime("%d.%m %H:%M"), "typ": "Przychód ogólny", "kwota": float(kw_p), "opis": "", "status": "Aktywny", "data_zdarzenia": d_p.strftime("%d.%m")}).execute()
+                    st.session_state.s = ""; st.rerun()
 
 with c2:
-    got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
-    got_txt = "white" if s_got < 0 else "black"
-    st.markdown(
-        f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>',
-        unsafe_allow_html=True
-    )
+    got_bg = "#FF0000" if s_got < 0 else "#fff3cd"; got_txt = "white" if s_got < 0 else "black"
+    st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="g"):
-        st.session_state.s = "G" if st.session_state.s != "G" else ""
-        st.session_state.os = None
-        st.rerun()
-
+        st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
                 if st.button(o, key=f"os_{o}", use_container_width=True):
-                    st.session_state.os = o if st.session_state.os != o else None
-                    st.rerun()
-
+                    st.session_state.os = o if st.session_state.os != o else None; st.rerun()
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
@@ -212,27 +175,13 @@ with c2:
                         kw_g = st.number_input("Kwota", min_value=0.0, value=0.0, step=1.0, key=f"g_v_{o}")
                         if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g > 0:
-                                supabase.table("finanse").insert({
-                                    "data": get_now().strftime("%d.%m %H:%M"),
-                                    "typ": f"Gotówka - {o}",
-                                    "kwota": float(kw_g),
-                                    "opis": "",
-                                    "status": "Aktywny",
-                                    "data_zdarzenia": d_g.strftime("%d.%m")
-                                }).execute()
-                                st.session_state.s = ""
-                                st.session_state.os = None
-                                st.rerun()
+                                supabase.table("finanse").insert({"data": get_now().strftime("%d.%m %H:%M"), "typ": f"Gotówka - {o}", "kwota": float(kw_g), "opis": "", "status": "Aktywny", "data_zdarzenia": d_g.strftime("%d.%m")}).execute()
+                                st.session_state.s = ""; st.session_state.os = None; st.rerun()
 
 with c3:
-    st.markdown(
-        f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>',
-        unsafe_allow_html=True
-    )
+    st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"):
-        st.session_state.s = "W" if st.session_state.s != "W" else ""
-        st.rerun()
-
+        st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
             d_w = st.date_input("Data zdarzenia", get_now().date(), key="date_w")
@@ -240,130 +189,60 @@ with c3:
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w > 0:
-                    supabase.table("finanse").insert({
-                        "data": get_now().strftime("%d.%m %H:%M"),
-                        "typ": "Wydatki gotówkowe",
-                        "kwota": float(kw_w),
-                        "opis": op_w,
-                        "status": "Aktywny",
-                        "data_zdarzenia": d_w.strftime("%d.%m")
-                    }).execute()
-                    st.session_state.s = ""
-                    st.rerun()
+                    supabase.table("finanse").insert({"data": get_now().strftime("%d.%m %H:%M"), "typ": "Wydatki gotówkowe", "kwota": float(kw_w), "opis": op_w, "status": "Aktywny", "data_zdarzenia": d_w.strftime("%d.%m")}).execute()
+                    st.session_state.s = ""; st.rerun()
 
 # --- 6. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
-
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
         pdf_f = create_pdf(df_active_calc, s_og, s_got, s_wyd)
         csv_f = df_active_calc.to_csv(index=False).encode("utf-8")
-        if send_email_with_reports(pdf_f, csv_f):
-            st.success("✅ Wysłano raport!")
+        if send_email_with_reports(pdf_f, csv_f): st.success("✅ Wysłano raport!")
 
     st.divider()
-
     if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
         st.session_state.lock_step = 1
 
     if st.session_state.get("lock_step", 0) >= 1:
         with st.container(border=True):
             h = st.text_input("Hasło Szefa:", type="password")
-            if h == "szef123":
-                if st.button("✅ POTWIERDZAM I ROZLICZAM", use_container_width=True):
-                    if not df_active_calc.empty:
-                        p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
-                        c_r = df_active_calc.to_csv(index=False).encode("utf-8")
-                        send_email_with_reports(p_r, c_r)
-
-                        for rid in df_active_calc["id"].tolist():
-                            supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
-
-                        st.session_state.lock_step = 0
-                        st.rerun()
-
+            if h == "szef123" and st.button("✅ POTWIERDZAM I ROZLICZAM", use_container_width=True):
+                if not df_active_calc.empty:
+                    p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd); c_r = df_active_calc.to_csv(index=False).encode("utf-8")
+                    send_email_with_reports(p_r, c_r)
+                    for rid in df_active_calc["id"].tolist():
+                        supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
+                    st.session_state.lock_step = 0; st.rerun()
             if st.button("Anuluj", use_container_width=True):
-                st.session_state.lock_step = 0
-                st.rerun()
+                st.session_state.lock_step = 0; st.rerun()
 
     st.divider()
-
     if len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ NA STAŁE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
             for rid in st.session_state.selected_ids:
                 supabase.table("finanse").delete().eq("id", int(rid)).execute()
-            st.session_state.selected_ids = []
-            st.rerun()
+            st.session_state.selected_ids = []; st.rerun()
 
     st.divider()
-
-    _ = st.download_button(
-        "📥 Pobierz CSV",
-        data=df_active_calc.to_csv(index=False).encode("utf-8"),
-        file_name="raport.csv",
-        use_container_width=True
-    )
-
-    _ = st.download_button(
-        "📥 Pobierz PDF",
-        data=create_pdf(df_active_calc, s_og, s_got, s_wyd),
-        file_name="raport.pdf",
-        use_container_width=True
-    )
-
+    st.download_button("📥 Pobierz CSV", data=df_active_calc.to_csv(index=False).encode("utf-8"), file_name="raport.csv", use_container_width=True)
+    st.download_button("📥 Pobierz PDF", data=create_pdf(df_active_calc, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
+    
     st.divider()
-
     if st.button("🔓 Wyloguj", use_container_width=True):
-        cookies["is_logged"] = "false"
-        cookies.save()
-        st.rerun()
+        cookies["is_logged"] = "false"; cookies.save(); st.rerun()
 
 # --- 7. HISTORIA ---
-st.divider()
-st.subheader("Historia wpisów (Bieżący okres)")
-
-# Funkcja pomocnicza do natychmiastowej aktualizacji zaznaczenia
-def handle_editor_change():
-    if "pizza_editor" in st.session_state:
-        # Pobieramy edytowane dane (zaznaczone checkboxy)
-        edited_rows = st.session_state["pizza_editor"]["edited_rows"]
-        # Musimy odnieść się do aktualnego DataFrame, żeby wyciągnąć ID na podstawie indeksu wiersza
-        temp_df = df_active_calc.iloc[::-1].copy()
-        
-        selected = []
-        for idx, changes in edited_rows.items():
-            if changes.get("Wybierz") is True:
-                # Wyciągamy ID z wiersza o danym indeksie
-                row_id = temp_df.iloc[int(idx)]["id"]
-                selected.append(row_id)
-        
-        st.session_state.selected_ids = selected
-
+st.divider(); st.subheader("Historia wpisów (Bieżący okres)")
 if not df_active_calc.empty:
-    df_editor_input = df_active_calc.iloc[::-1].copy()
-    # Przygotowujemy kolumny do wyświetlenia
-    df_display = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]].copy()
-    df_display.insert(0, "Wybierz", False)
-
-    # Używamy on_change, aby przycisk usuwania pojawiał się natychmiast
-    res = st.data_editor(
-        df_display,
-        column_config={
-            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": None, # Ukrywa kolumnę ID
-            "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
-        },
-        disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"],
-        hide_index=True,
-        use_container_width=True,
-        key="pizza_editor",
-        on_change=handle_editor_change
-    )
+    df_ed = df_active_calc.iloc[::-1][["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]].copy()
+    df_ed.insert(0, "Wybierz", False)
+    res = st.data_editor(df_ed, column_config={"Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"), "id": None, "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł")}, disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"], hide_index=True, use_container_width=True, key="pizza_editor")
     
-    # Dodatkowa synchronizacja dla bezpieczeństwa
-    selected_ids = res[res["Wybierz"] == True]["id"].tolist()
-    if st.session_state.selected_ids != selected_ids:
-        st.session_state.selected_ids = selected_ids
+    # Synchronizacja zaznaczenia w locie
+    new_sel = res[res["Wybierz"] == True]["id"].tolist()
+    if st.session_state.selected_ids != new_sel:
+        st.session_state.selected_ids = new_sel
         st.rerun()
 else:
     st.info("Brak wpisów w obecnym okresie.")
