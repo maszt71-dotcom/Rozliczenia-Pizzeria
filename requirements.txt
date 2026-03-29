@@ -1,3 +1,4 @@
 supabase
 fpdf
 streamlit-cookies-manager
+pytz
