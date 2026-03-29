@@ -63,6 +63,7 @@ def send_email_with_reports(pdf_data, csv_data):
 st.set_page_config(page_title="Pizzeria", layout="wide")
 cookies = CookieManager()
 if not cookies.ready(): st.stop()
+
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
@@ -77,24 +78,23 @@ if cookies.get("is_logged") != "true":
 def load_data():
     response = supabase.table("finanse").select("*").order("id").execute()
     if response.data:
-        df = pd.DataFrame(response.data)
-        # Upewniamy się, że kolumna status istnieje
-        if 'status' not in df.columns:
-            df['status'] = 'Aktywny'
-        return df
+        return pd.DataFrame(response.data)
     return pd.DataFrame(columns=['id', 'data', 'typ', 'kwota', 'opis', 'status', 'data_zdarzenia'])
+
+def get_last_reset():
+    res = supabase.table("ustawienia").select("ostatnie_id").eq("id", 1).execute()
+    return res.data[0]['ostatnie_id'] if res.data else 0
 
 def add_to_supabase(item):
     supabase.table("finanse").insert(item).execute()
 
 data = load_data()
+last_id = get_last_reset()
 
-# --- OBLICZENIA LICZNIKÓW (TYLKO AKTYWNE) ---
+# --- OBLICZENIA (TYLKO AKTYWNE OD OSTATNIEGO ROZLICZENIA) ---
 if not data.empty:
-    # Liczymy tylko to, co NIE jest jeszcze rozliczone
-    aktywne = data[data['status'] == 'Aktywny'].copy()
+    aktywne = data[data['id'] > last_id].copy()
     aktywne['kwota'] = pd.to_numeric(aktywne['kwota'], errors='coerce').fillna(0)
-    
     s_og = aktywne[aktywne['typ'] == 'Przychód ogólny']['kwota'].sum()
     s_wyd = aktywne[aktywne['typ'] == 'Wydatki gotówkowe']['kwota'].sum()
     s_got = aktywne[aktywne['typ'].astype(str).str.contains('Gotówka', na=False)]['kwota'].sum() - s_wyd
@@ -120,9 +120,9 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
-    # W PDF pokazujemy tylko aktualny (aktywny) okres
-    df_active = df[df['status'] == 'Aktywny']
-    for _, row in df_active.iterrows():
+    # W PDF pokazujemy tylko to co aktywne
+    df_pdf = df[df['id'] > last_id]
+    for _, row in df_pdf.iterrows():
         linia = f"{row['data_zdarzenia']} | {row['typ']} | {row['kwota']:.2f} zl | {row['opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return pdf.output(dest="S").encode("latin-1")
@@ -130,6 +130,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
 # --- 4. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
+
 if 's' not in st.session_state: st.session_state.s = ""
 if 'os' not in st.session_state: st.session_state.os = None
 
@@ -145,6 +146,7 @@ with c1:
                     add_to_supabase({'data': get_now().strftime("%d.%m %H:%M"), 'typ': 'Przychód ogólny', 'kwota': float(kw_p), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_p.strftime("%d.%m")})
                     st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
+
 with c2:
     got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
     got_txt = "white" if s_got < 0 else "black"
@@ -166,6 +168,7 @@ with c2:
                                 st.session_state.s = ""; st.session_state.os = None; st.rerun()
                         if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): st.session_state.s = ""; st.session_state.os = None; st.rerun()
+
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
@@ -185,38 +188,50 @@ with st.sidebar:
     st.header("⚙️ Menu")
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
         pdf_file = create_pdf(data, s_og, s_got, s_wyd)
-        csv_file = data.to_csv(index=False).encode('utf-8')
+        csv_file = data[data['id'] > last_id].to_csv(index=False).encode('utf-8')
         if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
-    
+
+    # --- ZAMKNIJ I ROZLICZ (TRZYSTOPNIOWE) ---
     st.divider()
-    # TRZYSTOPNIOWE ROZLICZENIE
-    if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", use_container_width=True, type="primary"):
+    if st.button("🔒 ZAMKNIJ I ROZLICZ", use_container_width=True, type="primary"):
         st.session_state.lock_step = 1
-    
+
     if st.session_state.get('lock_step', 0) >= 1:
         with st.container(border=True):
             st.error("KROK 1: Autoryzacja")
             kod = st.text_input("Hasło Szefa:", type="password")
-            if kod == "szef123": # TUTAJ TWOJE HASŁO
+            if kod == "szef123":
                 st.warning("KROK 2: Potwierdź")
-                if st.button("✅ TAK, ROZLICZ TERAZ", use_container_width=True):
-                    # KROK 3: Operacja na bazie
-                    supabase.table("finanse").update({"status": "Rozliczone"}).eq("status", "Aktywny").execute()
+                if st.button("✅ TAK, ZERUJ LICZNIKI", use_container_width=True):
+                    # KROK 3: Zapisanie punktu zero w bazie
+                    nowe_id = int(data['id'].max()) if not data.empty else 0
+                    supabase.table("ustawienia").update({"ostatnie_id": nowe_id}).eq("id", 1).execute()
                     st.session_state.lock_step = 0
-                    st.success("Okres zamknięty!")
+                    st.success("Rozliczono!")
                     st.rerun()
-            elif kod != "":
-                st.error("Błędne hasło!")
+            elif kod != "": st.error("Złe hasło")
             if st.button("Anuluj", use_container_width=True):
                 st.session_state.lock_step = 0; st.rerun()
 
     st.divider()
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
-        if st.button(f"🗑️ USUŃ ({len(st.session_state.selected_ids)})", use_container_width=True):
-            for rid in st.session_state.selected_ids:
-                supabase.table("finanse").delete().eq("id", int(rid)).execute()
-            st.session_state.selected_ids = []
-            st.rerun()
+        if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
+            st.session_state.ask_del_line = True
+        if st.session_state.get('ask_del_line'):
+            st.error("USUNĄĆ TRWALE?")
+            cy, cn = st.columns(2)
+            if cy.button("TAK", key="line_y"):
+                for rid in st.session_state.selected_ids:
+                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
+                st.session_state.ask_del_line = False
+                st.session_state.selected_ids = []
+                st.rerun()
+            if cn.button("NIE", key="line_n"):
+                st.session_state.ask_del_line = False; st.rerun()
+
+    st.divider()
+    st.download_button("📥 Pobierz CSV", data=data.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
+    st.download_button("📥 Pobierz PDF", data=create_pdf(data, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
     
     st.divider()
     if st.button("🔓 Wyloguj", use_container_width=True):
@@ -226,19 +241,19 @@ with st.sidebar:
 st.divider()
 st.subheader("Historia wpisów")
 if not data.empty:
-    # W historii pokazujemy wszystko (Aktywne i Rozliczone)
     df_display = data.iloc[::-1].copy()
-    df_editor_input = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "status"]].copy()
+    df_editor_input = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]].copy()
     df_editor_input.insert(0, "Wybierz", False)
     res = st.data_editor(
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
             "id": None,
-            "status": st.column_config.TextColumn("Status"),
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
+            "data": st.column_config.TextColumn("Godzina dodania"),
+            "data_zdarzenia": st.column_config.TextColumn("Dzień")
         },
-        disabled=["data", "data_zdarzenia", "typ", "kwota", "status"],
+        disabled=["data", "data_zdarzenia", "typ", "kwota", "opis"],
         hide_index=True, use_container_width=True, key="pizza_editor"
     )
     selected_ids = res[res["Wybierz"] == True]["id"].tolist()
