@@ -262,7 +262,7 @@ if not df_active_calc.empty:
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": st.column_config.TextColumn("ID", disabled=True), # NAPRAWA BŁĘDU I UKRYCIE :none:
+            "id": st.column_config.TextColumn("ID", disabled=True),
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
             "status": st.column_config.TextColumn("Status")
         },
