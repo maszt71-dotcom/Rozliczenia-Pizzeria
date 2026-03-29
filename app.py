@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import os
+from streamlit_gsheets import GSheetsConnection
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -31,28 +31,20 @@ def send_email_with_reports(pdf_data, csv_data):
     msg['Subject'] = f"Raport Pizzeria - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
     msg.attach(MIMEText("W załączniku przesyłam aktualny raport finansowy.", 'plain'))
 
-    part_pdf = MIMEBase('application', 'octet-stream')
-    part_pdf.set_payload(pdf_data)
-    encoders.encode_base64(part_pdf)
-    part_pdf.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.pdf")
-    msg.attach(part_pdf)
-
-    part_csv = MIMEBase('application', 'octet-stream')
-    part_csv.set_payload(csv_data)
-    encoders.encode_base64(part_csv)
-    part_csv.add_header('Content-Disposition', f"attachment; filename=raport_{datetime.now().strftime('%d_%m')}.csv")
-    msg.attach(part_csv)
+    for data, name in [(pdf_data, f"raport_{datetime.now().strftime('%d_%m')}.pdf"), 
+                       (csv_data, f"raport_{datetime.now().strftime('%d_%m')}.csv")]:
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(data)
+        encoders.encode_base64(part)
+        part.add_header('Content-Disposition', f"attachment; filename={name}")
+        msg.attach(part)
 
     try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(sender_email, password)
-        server.send_message(msg)
-        server.quit()
+        server = smtplib.SMTP('smtp.gmail.com', 587); server.starttls()
+        server.login(sender_email, password); server.send_message(msg); server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Błąd wysyłki: {e}")
-        return False
+        st.sidebar.error(f"Błąd wysyłki: {e}"); return False
 
 # --- 1. KONFIGURACJA I LOGOWANIE ---
 st.set_page_config(page_title="Pizzeria", layout="wide")
@@ -64,63 +56,48 @@ if cookies.get("is_logged") != "true":
     haslo = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
         if haslo == "dup@":
-            cookies["is_logged"] = "true"
-            cookies.save()
-            st.rerun()
+            cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
 
-# --- 2. DANE I AUTOZAPIS ---
-DB_FILE = 'finanse_data.csv'
+# --- 2. DANE W CHMURZE (GOOGLE SHEETS) ---
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    if os.path.exists(DB_FILE): return pd.read_csv(DB_FILE)
-    return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
+    return conn.read(ttl=0) # ttl=0 wymusza odświeżenie danych za każdym razem
 
 def save_data(df): 
-    df.to_csv(DB_FILE, index=False)
-    backup_name = f"backup_{datetime.now().strftime('%Y_%m_%d')}.csv"
-    df.to_csv(backup_name, index=False)
+    conn.update(data=df)
+    st.cache_data.clear()
 
 data = load_data()
-df_active = data[data['Status'] == 'Aktywny'].copy()
-df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
+# Filtrujemy tylko aktywne do obliczeń
+df_active_calc = data[data['Status'] == 'Aktywny'].copy()
+df_active_calc['Kwota'] = pd.to_numeric(df_active_calc['Kwota'], errors='coerce').fillna(0)
 
-s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
-s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
-s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
+s_og = df_active_calc[df_active_calc['Typ'] == 'Przychód ogólny']['Kwota'].sum()
+s_wyd = df_active_calc[df_active_calc['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
+s_got = df_active_calc[df_active_calc['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- 3. GENERATOR PDF (Z KOLOREM CZERWONYM) ---
+# --- 3. GENERATOR PDF (JASKRAWOCZERWONY MINUS) ---
 def create_pdf(df, s_og, s_got, s_wyd):
     pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", 'B', 16)
+    pdf.add_page(); pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(0, 10, pdf_safe(f"RAPORT PIZZERIA - {datetime.now().strftime('%d.%m.%Y')}"), ln=True, align='C')
-    pdf.ln(10)
-    pdf.set_font("Helvetica", 'B', 12)
+    pdf.ln(10); pdf.set_font("Helvetica", 'B', 12)
     
-    # Przychód (Zielony)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
     
-    # Gotówka (Żółty lub Jaskrawoczerwony jeśli minus)
     if s_got < 0:
-        pdf.set_fill_color(255, 0, 0) # Jaskrawoczerwony
-        pdf.set_text_color(255, 255, 255) # Biały tekst dla czytelności
+        pdf.set_fill_color(255, 0, 0); pdf.set_text_color(255, 255, 255)
     else:
-        pdf.set_fill_color(255, 243, 205) # Żółty
-        pdf.set_text_color(0, 0, 0) # Czarny tekst
-        
+        pdf.set_fill_color(255, 243, 205); pdf.set_text_color(0, 0, 0)
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
     
-    # Reset koloru tekstu dla wydatków
-    pdf.set_text_color(0, 0, 0)
-    
-    # Wydatki (Jasnoczerwony)
-    pdf.set_fill_color(248, 215, 218)
+    pdf.set_text_color(0, 0, 0); pdf.set_fill_color(248, 215, 218)
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     
-    pdf.ln(5)
-    pdf.set_font("Helvetica", size=10)
+    pdf.ln(5); pdf.set_font("Helvetica", size=10)
     for _, row in df.iterrows():
         linia = f"{row['Data zdarzenia']} | {row['Typ']} | {row['Kwota']:.2f} zl | {row['Opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
@@ -142,37 +119,28 @@ with c1:
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
-                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                    st.session_state.s = ""; st.rerun()
+                    n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}])
+                    save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
             if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
 
 with c2:
-    # JASKRAWOCZERWONY GDY MINUS W APLIKACJI
-    got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
-    got_txt = "white" if s_got < 0 else "black"
+    got_bg, got_txt = ("#FF0000", "white") if s_got < 0 else ("#fff3cd", "black")
     st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    
     if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
     if st.session_state.s == "G":
-        with st.container(border=True):
-            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            for o in osoby:
-                if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun()
-                if st.session_state.os == o:
-                    with st.container(border=True):
-                        st.markdown(f"Dla: **{o}**")
-                        d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
-                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}")
-                        cs, cb = st.columns(2)
-                        if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
-                            if kw_g:
-                                n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}
-                                save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                                st.session_state.s = ""; st.session_state.os = None; st.rerun()
-                        if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun()
-            st.divider()
-            if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): st.session_state.s = ""; st.session_state.os = None; st.rerun()
+        osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+        for o in osoby:
+            if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun()
+            if st.session_state.os == o:
+                with st.container(border=True):
+                    d_g = st.date_input("Data", datetime.now(), key=f"date_g_{o}")
+                    kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}")
+                    cs, cb = st.columns(2)
+                    if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
+                        if kw_g:
+                            n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}])
+                            save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.session_state.os = None; st.rerun()
+                    if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
@@ -184,98 +152,53 @@ with c3:
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w:
-                    n = {'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}
-                    save_data(pd.concat([load_data(), pd.DataFrame([n])], ignore_index=True))
-                    st.session_state.s = ""; st.rerun()
-            if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
+                    n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}])
+                    save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
 
 # --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
-        pdf_file = create_pdf(df_active, s_og, s_got, s_wyd)
-        csv_file = df_active.to_csv(index=False).encode('utf-8')
-        with st.spinner("Wysyłanie..."):
-            if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
+        pdf_f = create_pdf(df_active_calc, s_og, s_got, s_wyd)
+        csv_f = df_active_calc.to_csv(index=False).encode('utf-8')
+        if send_email_with_reports(pdf_f, csv_f): st.success("✅ Wysłano!")
 
     st.divider()
-    
     if 'selected_indices' in st.session_state and len(st.session_state.selected_indices) > 0:
         if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_indices)})", use_container_width=True, type="primary"):
-            st.session_state.ask_del_line = True
-        
-        if st.session_state.get('ask_del_line'):
-            st.warning("Usunąć zaznaczone?")
-            cy, cn = st.columns(2)
-            if cy.button("TAK", key="line_y"):
-                full = load_data()
-                full.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum'
-                save_data(full)
-                st.session_state.ask_del_line = False
-                st.session_state.selected_indices = []
-                st.rerun()
-            if cn.button("NIE", key="line_n"):
-                st.session_state.ask_del_line = False
-                st.rerun()
+            data.loc[st.session_state.selected_indices, 'Status'] = 'Archiwum'
+            save_data(data); st.session_state.selected_indices = []; st.rerun()
 
     st.divider()
-    st.download_button("📥 Pobierz CSV", data=df_active.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
-    st.download_button("📥 Pobierz PDF", data=create_pdf(df_active, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
+    st.download_button("📥 Pobierz CSV", data=df_active_calc.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     
     st.divider()
-    if 'del_step' not in st.session_state: st.session_state.del_step = 0
     if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True): st.session_state.del_step = 1
-    if st.session_state.del_step >= 1:
-        with st.container(border=True):
-            st.warning("Potwierdź usunięcie CAŁOŚCI")
-            check = st.checkbox("Zgadzam się")
-            if check:
-                if st.button("🔥 WYCZYŚĆ WSZYSTKO", use_container_width=True, type="primary"): st.session_state.del_step = 2
-            if st.session_state.del_step == 2:
-                st.error("CZY JESTEŚ PEWIEN?")
-                ct, cn = st.columns(2)
-                if ct.button("TAK", key="full_y", use_container_width=True):
-                    full = load_data()
-                    full.loc[df_active.index, 'Status'] = 'Archiwum'
-                    save_data(full)
-                    st.session_state.del_step = 0
-                    st.rerun()
-                if cn.button("NIE", key="full_n", use_container_width=True): st.session_state.del_step = 0; st.rerun()
+    if st.session_state.get('del_step', 0) == 1:
+        st.warning("Na pewno wyczyścić wszystko?")
+        if st.button("🔥 TAK, WYCZYŚĆ", use_container_width=True, type="primary"):
+            data['Status'] = 'Archiwum'; save_data(data); st.session_state.del_step = 0; st.rerun()
+        if st.button("NIE", use_container_width=True): st.session_state.del_step = 0; st.rerun()
 
     st.divider()
     if st.button("🔓 Wyloguj", use_container_width=True):
-        cookies["is_logged"] = "false"
-        cookies.save()
-        st.rerun()
+        cookies["is_logged"] = "false"; cookies.save(); st.rerun()
 
 # --- 6. HISTORIA ---
 st.divider()
 st.subheader("Historia wpisów")
-if not df_active.empty:
-    df_editor = df_active.copy()
-    cols_to_show = ["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"]
-    df_editor = df_editor[cols_to_show]
+if not data.empty:
+    df_editor = data.copy().iloc[::-1]
     df_editor.insert(0, "Wybierz", False)
-    
     res = st.data_editor(
-        df_editor.iloc[::-1],
+        df_editor[["Wybierz", "Data zdarzenia", "Typ", "Kwota", "Opis", "Status"]],
         column_config={
-            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small", default=False),
-            "Data": st.column_config.TextColumn("Data", width="medium"),
-            "Data zdarzenia": st.column_config.TextColumn("Dzień", width="small"),
-            "Typ": st.column_config.TextColumn("Typ", width="medium"),
-            "Kwota": st.column_config.NumberColumn("Kwota", width="small", format="%.2f zł"),
-            "Opis": st.column_config.TextColumn("Opis", width="large")
+            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
+            "Status": st.column_config.TextColumn("Status", disabled=True),
         },
-        disabled=["Data", "Data zdarzenia", "Typ", "Kwota", "Opis"],
-        hide_index=True,
-        use_container_width=True,
-        key="pizza_editor"
+        use_container_width=True, hide_index=True, key="piz_ed"
     )
- 
-    current_selected = res[res["Wybierz"] == True].index.tolist()
-    if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
-        st.session_state.selected_indices = current_selected
-        st.rerun()
+    # Wyłapujemy tylko Aktywne do usunięcia
+    st.session_state.selected_indices = res[(res["Wybierz"] == True) & (res["Status"] == "Aktywny")].index.tolist()
 else:
-    st.info("Brak aktywnych wpisów.")
+    st.info("Brak wpisów.")
