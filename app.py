@@ -150,11 +150,9 @@ with c1:
                 st.rerun()
 
 with c2:
-    # --- TUTAJ JEST LOGIKA CZERWONEGO KOLORU ---
     got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
     got_txt = "white" if s_got < 0 else "black"
     st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    
     if st.button("➕ DODAJ", key="g"): 
         st.session_state.s = "G" if st.session_state.s != "G" else ""
         st.session_state.os = None
@@ -209,7 +207,6 @@ with c3:
 with st.sidebar:
     st.header("⚙️ Menu")
     
-    # NOWA FUNKCJA ZAMYKANIA OKRESU
     if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
         st.session_state.lock_step = 1
 
@@ -229,8 +226,7 @@ with st.sidebar:
                         st.rerun()
             elif h_szef != "": st.error("Złe hasło")
             if st.button("Anuluj rozliczanie", use_container_width=True):
-                st.session_state.lock_step = 0
-                st.rerun()
+                st.session_state.lock_step = 0; st.rerun()
 
     st.divider()
     
@@ -246,45 +242,22 @@ with st.sidebar:
             st.session_state.ask_del_line = True
         
         if st.session_state.get('ask_del_line'):
-            st.warning("Zarchiwizować zaznaczone?")
+            st.error("USUNĄĆ NA STAŁE?")
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
                 for rid in st.session_state.selected_ids:
-                    supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(rid)).execute()
+                    # --- TU JEST ZMIANA: DELETE ZAMIAST UPDATE ---
+                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
                 st.session_state.ask_del_line = False
                 st.session_state.selected_ids = []
                 st.rerun()
             if cn.button("NIE", key="line_n"):
-                st.session_state.ask_del_line = False
-                st.rerun()
+                st.session_state.ask_del_line = False; st.rerun()
 
     st.divider()
     st.download_button("📥 Pobierz CSV", data=data[data['status']=='Aktywny'].to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=create_pdf(data, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
     
-    st.divider()
-    if 'del_step' not in st.session_state: st.session_state.del_step = 0
-    if st.button("🗑️ USUŃ CAŁĄ HISTORIĘ", use_container_width=True): st.session_state.del_step = 1
-    if st.session_state.del_step >= 1:
-        with st.container(border=True):
-            st.warning("Potwierdź usunięcie CAŁOŚCI")
-            check = st.checkbox("Zgadzam się")
-            if check:
-                if st.button("🔥 WYCZYŚĆ WSZYSTKO", use_container_width=True, type="primary"): 
-                    st.session_state.del_step = 2
-            if st.session_state.del_step == 2:
-                st.error("CZY JESTEŚ PEWIEN?")
-                ct, cn = st.columns(2)
-                if ct.button("TAK", key="full_y", use_container_width=True):
-                    df_active_to_del = data[data['status'] == 'Aktywny']
-                    for _, row in df_active_to_del.iterrows():
-                        supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(row['id'])).execute()
-                    st.session_state.del_step = 0
-                    st.rerun()
-                if cn.button("NIE", key="full_n", use_container_width=True): 
-                    st.session_state.del_step = 0
-                    st.rerun()
-
     st.divider()
     if st.button("🔓 Wyloguj", use_container_width=True):
         cookies["is_logged"] = "false"
