@@ -322,26 +322,48 @@ with st.sidebar:
 st.divider()
 st.subheader("Historia wpisów (Bieżący okres)")
 
+# Funkcja pomocnicza do natychmiastowej aktualizacji zaznaczenia
+def handle_editor_change():
+    if "pizza_editor" in st.session_state:
+        # Pobieramy edytowane dane (zaznaczone checkboxy)
+        edited_rows = st.session_state["pizza_editor"]["edited_rows"]
+        # Musimy odnieść się do aktualnego DataFrame, żeby wyciągnąć ID na podstawie indeksu wiersza
+        temp_df = df_active_calc.iloc[::-1].copy()
+        
+        selected = []
+        for idx, changes in edited_rows.items():
+            if changes.get("Wybierz") is True:
+                # Wyciągamy ID z wiersza o danym indeksie
+                row_id = temp_df.iloc[int(idx)]["id"]
+                selected.append(row_id)
+        
+        st.session_state.selected_ids = selected
+
 if not df_active_calc.empty:
     df_editor_input = df_active_calc.iloc[::-1].copy()
-    df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
-    df_editor_input.insert(0, "Wybierz", False)
+    # Przygotowujemy kolumny do wyświetlenia
+    df_display = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]].copy()
+    df_display.insert(0, "Wybierz", False)
 
+    # Używamy on_change, aby przycisk usuwania pojawiał się natychmiast
     res = st.data_editor(
-        df_editor_input,
+        df_display,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": None,
+            "id": None, # Ukrywa kolumnę ID
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
         },
         disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"],
         hide_index=True,
         use_container_width=True,
-        key="pizza_editor"
+        key="pizza_editor",
+        on_change=handle_editor_change
     )
-
+    
+    # Dodatkowa synchronizacja dla bezpieczeństwa
     selected_ids = res[res["Wybierz"] == True]["id"].tolist()
     if st.session_state.selected_ids != selected_ids:
         st.session_state.selected_ids = selected_ids
+        st.rerun()
 else:
     st.info("Brak wpisów w obecnym okresie.")
