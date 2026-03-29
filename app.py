@@ -191,7 +191,7 @@ with st.sidebar:
             st.session_state.ask_del_line = True
         
         if st.session_state.get('ask_del_line'):
-            st.warning("Usunąć zaznaczone?")
+            st.warning("Zarchiwizować zaznaczone?")
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
                 df_view = data.iloc[::-1]
@@ -231,20 +231,22 @@ with st.sidebar:
     if st.button("🔓 Wyloguj", use_container_width=True):
         cookies["is_logged"] = "false"; cookies.save(); st.rerun()
 
-# --- 6. HISTORIA Z WYRAŹNYM OZNACZENIEM ---
+# --- 6. HISTORIA Z WYSZARZANIEM ---
 st.divider()
 st.subheader("Historia wpisów")
 if not data.empty:
     df_display = data.iloc[::-1].copy()
     
-    def apply_visual_delete(row):
+    # Symulacja wyszarzenia przez zmianę tekstu w KAŻDEJ kolumnie
+    def gray_out(row):
         if row['status'] == 'Usunieto':
-            row['typ'] = f"⚪ {row['typ']}"
-            row['opis'] = f"--- USUNIĘTO --- {row['opis']}"
-            row['kwota'] = 0.0
+            # Dodajemy znak blokady/wyblaknięcia do każdego tekstu
+            for col in ['data', 'data_zdarzenia', 'typ', 'opis']:
+                row[col] = f"░ {row[col]}"
+            row['kwota'] = 0.0 # Zerujemy wizualnie
         return row
 
-    df_display = df_display.apply(apply_visual_delete, axis=1)
+    df_display = df_display.apply(gray_out, axis=1)
     
     df_editor_input = df_display[["data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
     df_editor_input.insert(0, "Wybierz", False)
@@ -253,13 +255,18 @@ if not data.empty:
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "status": st.column_config.TextColumn("Status", disabled=True),
-            "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł")
+            "data": st.column_config.TextColumn("Data systemowa"),
+            "data_zdarzenia": st.column_config.TextColumn("Dzień"),
+            "typ": st.column_config.TextColumn("Typ"),
+            "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
+            "opis": st.column_config.TextColumn("Opis"),
+            "status": st.column_config.TextColumn("Status")
         },
         disabled=["data", "data_zdarzenia", "typ", "kwota", "opis", "status"],
         hide_index=True, use_container_width=True, key="pizza_editor"
     )
     
+    # Poprawione wykrywanie zaznaczonych linii
     current_selected = res[res["Wybierz"] == True].index.tolist()
     if 'selected_indices' not in st.session_state or st.session_state.selected_indices != current_selected:
         st.session_state.selected_indices = current_selected
