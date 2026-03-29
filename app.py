@@ -86,13 +86,12 @@ def add_to_supabase(item):
 
 data = load_data()
 
-# --- OBLICZENIA (Tylko Aktywne) ---
-df_active_calc = data[data['status'] == 'Aktywny'].copy()
-if not df_active_calc.empty:
-    df_active_calc['kwota'] = pd.to_numeric(df_active_calc['kwota'], errors='coerce').fillna(0)
-    s_og = df_active_calc[df_active_calc['typ'] == 'Przychód ogólny']['kwota'].sum()
-    s_wyd = df_active_calc[df_active_calc['typ'] == 'Wydatki gotówkowe']['kwota'].sum()
-    s_got = df_active_calc[df_active_calc['typ'].astype(str).str.contains('Gotówka', na=False)]['kwota'].sum() - s_wyd
+# --- OBLICZENIA ---
+if not data.empty:
+    data['kwota'] = pd.to_numeric(data['kwota'], errors='coerce').fillna(0)
+    s_og = data[data['typ'] == 'Przychód ogólny']['kwota'].sum()
+    s_wyd = data[data['typ'] == 'Wydatki gotówkowe']['kwota'].sum()
+    s_got = data[data['typ'].astype(str).str.contains('Gotówka', na=False)]['kwota'].sum() - s_wyd
 else:
     s_og, s_wyd, s_got = 0.0, 0.0, 0.0
 
@@ -115,7 +114,7 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
-    for _, row in df[df['status']=='Aktywny'].iterrows():
+    for _, row in df.iterrows():
         linia = f"{row['data_zdarzenia']} | {row['typ']} | {row['kwota']:.2f} zl | {row['opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
     return pdf.output(dest="S").encode("latin-1")
@@ -182,21 +181,22 @@ with st.sidebar:
     st.header("⚙️ Menu")
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
         pdf_file = create_pdf(data, s_og, s_got, s_wyd)
-        csv_file = data[data['status']=='Aktywny'].to_csv(index=False).encode('utf-8')
+        csv_file = data.to_csv(index=False).encode('utf-8')
         if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
 
     st.divider()
-    # USUWANIE LINII
+    # TRWAŁE USUWANIE LINII
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
         
         if st.session_state.get('ask_del_line'):
-            st.warning("Zarchiwizować zaznaczone?")
+            st.error("USUNĄĆ TRWALE?")
             cy, cn = st.columns(2)
             if cy.button("TAK", key="line_y"):
                 for rid in st.session_state.selected_ids:
-                    supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(rid)).execute()
+                    # TUTAJ ZMIANA: .delete() zamiast .update()
+                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
                 st.session_state.ask_del_line = False
                 st.session_state.selected_ids = []
                 st.rerun()
@@ -204,7 +204,7 @@ with st.sidebar:
                 st.session_state.ask_del_line = False; st.rerun()
 
     st.divider()
-    st.download_button("📥 Pobierz CSV", data=data[data['status']=='Aktywny'].to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
+    st.download_button("📥 Pobierz CSV", data=data.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=create_pdf(data, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
     
     st.divider()
@@ -220,9 +220,9 @@ with st.sidebar:
                 st.error("CZY JESTEŚ PEWIEN?")
                 ct, cn = st.columns(2)
                 if ct.button("TAK", key="full_y", use_container_width=True):
-                    df_active_to_del = data[data['status'] == 'Aktywny']
-                    for _, row in df_active_to_del.iterrows():
-                        supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(row['id'])).execute()
+                    # TUTAJ ZMIANA: .delete() zamiast .update()
+                    for _, row in data.iterrows():
+                        supabase.table("finanse").delete().eq("id", int(row['id'])).execute()
                     st.session_state.del_step = 0; st.rerun()
                 if cn.button("NIE", key="full_n", use_container_width=True): st.session_state.del_step = 0; st.rerun()
 
@@ -230,24 +230,11 @@ with st.sidebar:
     if st.button("🔓 Wyloguj", use_container_width=True):
         cookies["is_logged"] = "false"; cookies.save(); st.rerun()
 
-# --- 6. HISTORIA Z WYSZARZANIEM (POPRAWIONE ZAZNACZANIE) ---
+# --- 6. HISTORIA ---
 st.divider()
 st.subheader("Historia wpisów")
 if not data.empty:
     df_display = data.iloc[::-1].copy()
-    
-    # Funkcja wizualnego wyszarzania
-    def gray_out(row):
-        if row['status'] == 'Usunieto':
-            row['data_zdarzenia'] = f"░ {row['data_zdarzenia']}"
-            row['typ'] = f"░ {row['typ']}"
-            row['opis'] = f"░ {row['opis']}"
-            row['kwota'] = 0.0
-        return row
-
-    df_display = df_display.apply(gray_out, axis=1)
-    
-    # Przygotowanie danych do edytora - WAŻNE: zachowujemy kolumnę 'id' ukrytą
     df_editor_input = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
     df_editor_input.insert(0, "Wybierz", False)
     
@@ -255,17 +242,14 @@ if not data.empty:
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": None,  # Ukrywamy kolumnę ID, żeby nie psuła wyglądu
+            "id": None,
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
-            "status": st.column_config.TextColumn("Status")
         },
         disabled=["data", "data_zdarzenia", "typ", "kwota", "opis", "status"],
         hide_index=True, use_container_width=True, key="pizza_editor"
     )
     
-    # Zbieramy ID zaznaczonych linii zamiast ich indeksów
     selected_ids = res[res["Wybierz"] == True]["id"].tolist()
-    
     if 'selected_ids' not in st.session_state or st.session_state.selected_ids != selected_ids:
         st.session_state.selected_ids = selected_ids
         st.rerun()
