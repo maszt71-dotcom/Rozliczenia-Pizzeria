@@ -234,7 +234,6 @@ with st.sidebar:
 
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ NA STAŁE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
-            # TU ZOSTANIE DODANE PODWÓJNE ZABEZPIECZENIE PO KOLEJNYM TAK
             for rid in st.session_state.selected_ids:
                 supabase.table("finanse").delete().eq("id", int(rid)).execute()
             st.session_state.selected_ids = []
@@ -263,7 +262,7 @@ if not df_active_calc.empty:
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": st.column_config.Column(visible=False), # POPRAWKA :none:
+            "id": st.column_config.TextColumn("ID", disabled=True), # NAPRAWA BŁĘDU I UKRYCIE :none:
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
             "status": st.column_config.TextColumn("Status")
         },
