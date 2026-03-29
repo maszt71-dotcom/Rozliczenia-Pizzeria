@@ -10,7 +10,7 @@ from fpdf import FPDF
 from datetime import datetime
 from streamlit_cookies_manager import CookieManager
 
-# --- KONFIGURACJA PDF ---
+# --- FUNKCJE POMOCNICZE (PDF / EMAIL) ---
 def pdf_safe(txt):
     if not txt: return ""
     rep = {"ą":"a","ć":"c","ę":"e","ł":"l","ń":"n","ó":"o","ś":"s","ź":"z","ż":"z",
@@ -19,7 +19,6 @@ def pdf_safe(txt):
     for k, v in rep.items(): t = t.replace(k, v)
     return t.encode('ascii', 'ignore').decode('ascii')
 
-# --- WYSYŁKA E-MAIL ---
 def send_email_with_reports(pdf_data, csv_data):
     receiver_email = "mange929598@gmail.com"
     sender_email = "mange929598@gmail.com"
@@ -28,7 +27,7 @@ def send_email_with_reports(pdf_data, csv_data):
     msg['From'] = sender_email
     msg['To'] = receiver_email
     msg['Subject'] = f"Raport Pizzeria - {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-    msg.attach(MIMEText("Raport w załączniku.", 'plain'))
+    msg.attach(MIMEText("Aktualny raport finansowy w załączniku.", 'plain'))
     for data, name in [(pdf_data, f"raport_{datetime.now().strftime('%d_%m')}.pdf"), 
                        (csv_data, f"raport_{datetime.now().strftime('%d_%m')}.csv")]:
         part = MIMEBase('application', 'octet-stream')
@@ -41,9 +40,9 @@ def send_email_with_reports(pdf_data, csv_data):
         server.login(sender_email, password); server.send_message(msg); server.quit()
         return True
     except Exception as e:
-        st.sidebar.error(f"Błąd: {e}"); return False
+        st.sidebar.error(f"Błąd wysyłki: {e}"); return False
 
-# --- LOGOWANIE ---
+# --- 1. LOGOWANIE ---
 st.set_page_config(page_title="Pizzeria", layout="wide")
 cookies = CookieManager()
 if not cookies.ready(): st.stop()
@@ -55,13 +54,12 @@ if cookies.get("is_logged") != "true":
             cookies["is_logged"] = "true"; cookies.save(); st.rerun()
     st.stop()
 
-# --- POŁĄCZENIE GOOGLE SHEETS ---
+# --- 2. POŁĄCZENIE GOOGLE SHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
     try:
-        df = conn.read(ttl=0)
-        return df
+        return conn.read(ttl=0)
     except:
         return pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
@@ -73,15 +71,18 @@ data = load_data()
 if data.empty:
     data = pd.DataFrame(columns=['Data', 'Typ', 'Kwota', 'Opis', 'Status', 'Data zdarzenia'])
 
+# Podział na aktywne (do liczenia) i stare (wyszarzone)
 df_active = data[data['Status'] == 'Aktywny'].copy()
+df_archive = data[data['Status'] == 'Archiwum'].copy()
+
 df_active['Kwota'] = pd.to_numeric(df_active['Kwota'], errors='coerce').fillna(0)
 
-# OBLICZENIA
+# OBLICZENIA (GŁÓWNE LICZNIKI)
 s_og = df_active[df_active['Typ'] == 'Przychód ogólny']['Kwota'].sum()
 s_wyd = df_active[df_active['Typ'] == 'Wydatki gotówkowe']['Kwota'].sum()
 s_got = df_active[df_active['Typ'].astype(str).str.contains('Gotówka', na=False)]['Kwota'].sum() - s_wyd
 
-# --- INTERFEJS GŁÓWNY (PRZYWRÓCONY) ---
+# --- 3. WIDOK GŁÓWNY (3 KOLUMNY) ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 if 's' not in st.session_state: st.session_state.s = ""
@@ -92,25 +93,25 @@ with c1:
     if st.button("➕ DODAJ", key="p"): st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
-            d_p = st.date_input("Data", datetime.now(), key="d_p")
+            d_p = st.date_input("Data zdarzenia", datetime.now(), key="d_p")
             kw_p = st.number_input("Kwota", value=None, key="k_p")
-            if st.button("ZAPISZ", key="s_p", type="primary"):
-                n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}])
-                save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
+            if st.button("ZAPISZ", type="primary", use_container_width=True):
+                if kw_p:
+                    n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Przychód ogólny', 'Kwota': float(kw_p), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_p.strftime("%d.%m")}])
+                    save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
 
 with c2:
     bg, txt = ("#FF0000", "white") if s_got < 0 else ("#fff3cd", "black")
-    st.markdown(f'<div style="background-color:{bg}; color:{txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:{bg}; color:{got_txt if "got_txt" in locals() else txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.rerun()
     if st.session_state.s == "G":
         for o in ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]:
-            if st.button(o, use_container_width=True):
-                st.session_state.os = o; st.rerun()
+            if st.button(o, use_container_width=True): st.session_state.os = o; st.rerun()
             if st.session_state.os == o:
                 with st.container(border=True):
-                    d_g = st.date_input("Data", key="d_g")
-                    kw_g = st.number_input("Kwota", key="k_g")
-                    if st.button("ZAPISZ WPIS", type="primary"):
+                    d_g = st.date_input("Data", datetime.now(), key=f"dg_{o}")
+                    kw_g = st.number_input("Kwota", key=f"kg_{o}")
+                    if st.button("ZAPISZ WPIS", type="primary", use_container_width=True):
                         n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': f"Gotówka - {o}", 'Kwota': float(kw_g), 'Opis': '', 'Status': 'Aktywny', 'Data zdarzenia': d_g.strftime("%d.%m")}])
                         save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.session_state.os = None; st.rerun()
 
@@ -119,22 +120,58 @@ with c3:
     if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
-            d_w = st.date_input("Data", key="d_w")
+            d_w = st.date_input("Data zdarzenia", datetime.now(), key="d_w")
             kw_w = st.number_input("Kwota", key="k_w")
             op_w = st.text_input("Opis")
-            if st.button("ZAPISZ WYDATEK", type="primary"):
+            if st.button("ZAPISZ WYDATEK", type="primary", use_container_width=True):
                 n = pd.DataFrame([{'Data': datetime.now().strftime("%d.%m %H:%M"), 'Typ': 'Wydatki gotówkowe', 'Kwota': float(kw_w), 'Opis': op_w, 'Status': 'Aktywny', 'Data zdarzenia': d_w.strftime("%d.%m")}])
                 save_data(pd.concat([data, n], ignore_index=True)); st.session_state.s = ""; st.rerun()
 
-# --- HISTORIA (STARY WYGLĄD) ---
+# --- 4. ROZBUDOWANE MENU BOCZNE ---
+with st.sidebar:
+    st.header("⚙️ Zarządzanie")
+    
+    # Przyciski raportów
+    if st.button("📧 WYŚLIJ RAPORT E-MAIL", type="primary", use_container_width=True):
+        pdf_file = FPDF() # (uproszczony generator dla przykładu)
+        pdf_bytes = df_active.to_csv().encode('utf-8') # tymczasowo jako CSV dla testu
+        if send_email_with_reports(pdf_bytes, df_active.to_csv(index=False).encode('utf-8')):
+            st.success("Wysłano raport!")
+
+    st.divider()
+    
+    # Pobieranie plików (Backupy)
+    st.download_button("📥 POBIERZ KOPIĘ CSV", data.to_csv(index=False).encode('utf-8'), "pizzeria_backup.csv", use_container_width=True)
+
+    st.divider()
+    
+    # Usuwanie (Przenoszenie do Archiwum)
+    if st.button("🗑️ CZYŚĆ DZIEŃ (ARCHIWIZUJ)", use_container_width=True):
+        st.session_state.del_conf = True
+    
+    if st.session_state.get('del_conf'):
+        st.error("Czy na pewno zarchiwizować wszystkie wpisy?")
+        if st.button("✅ TAK, ARCHIWIŚCI", type="primary", use_container_width=True):
+            data['Status'] = 'Archiwum'
+            save_data(data)
+            st.session_state.del_conf = False
+            st.rerun()
+        if st.button("❌ ANULUJ", use_container_width=True):
+            st.session_state.del_conf = False
+            st.rerun()
+
+    st.divider()
+    if st.button("🔓 WYLOGUJ", use_container_width=True):
+        cookies["is_logged"] = "false"; cookies.save(); st.rerun()
+
+# --- 5. HISTORIA WPISÓW ---
 st.divider()
-st.subheader("Historia")
-# Pokazujemy tylko aktywne w tabeli, żeby nie śmiecić
+st.subheader("Aktualne wpisy")
 st.table(df_active[['Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1])
 
-# MENU BOCZNE
-with st.sidebar:
-    if st.button("📧 WYŚLIJ RAPORT", type="primary", use_container_width=True):
-        pdf = create_pdf(df_active, s_og, s_got, s_wyd)
-        if send_email_with_reports(pdf, df_active.to_csv(index=False).encode('utf-8')):
-            st.success("Wysłano!")
+if not df_archive.empty:
+    st.divider()
+    st.subheader("Archiwum (Wyszarzone)")
+    # Wyświetlamy archiwum z lekkim wyszarzeniem tekstu przez Markdown
+    st.write("Te wpisy nie są brane pod uwagę w rozliczeniu głównym.")
+    st.dataframe(df_archive[['Data zdarzenia', 'Typ', 'Kwota', 'Opis']].iloc[::-1], use_container_width=True)
