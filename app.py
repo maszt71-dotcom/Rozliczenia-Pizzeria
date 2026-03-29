@@ -88,6 +88,7 @@ data = load_data()
 
 # --- OBLICZENIA (Tylko Aktywne) ---
 df_active_calc = data[data['status'] == 'Aktywny'].copy()
+
 if not df_active_calc.empty:
     df_active_calc['kwota'] = pd.to_numeric(df_active_calc['kwota'], errors='coerce').fillna(0)
     s_og = df_active_calc[df_active_calc['typ'] == 'Przychód ogólny']['kwota'].sum()
@@ -106,15 +107,18 @@ def create_pdf(df, s_og, s_got, s_wyd):
     pdf.set_font("Helvetica", 'B', 12)
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(60, 10, pdf_safe(f"Przychod: {s_og:.2f} zl"), border=1, fill=True, align='C')
+    
     if s_got < 0:
         pdf.set_fill_color(255, 0, 0); pdf.set_text_color(255, 255, 255)
     else:
         pdf.set_fill_color(255, 243, 205); pdf.set_text_color(0, 0, 0)
+        
     pdf.cell(60, 10, pdf_safe(f"Gotowka: {s_got:.2f} zl"), border=1, fill=True, align='C')
     pdf.set_text_color(0, 0, 0); pdf.set_fill_color(248, 215, 218)
     pdf.cell(60, 10, pdf_safe(f"Wydatki: {s_wyd:.2f} zl"), border=1, ln=1, fill=True, align='C')
     pdf.ln(5)
     pdf.set_font("Helvetica", size=10)
+    
     for _, row in df[df['status']=='Aktywny'].iterrows():
         linia = f"{row['data_zdarzenia']} | {row['typ']} | {row['kwota']:.2f} zl | {row['opis']}"
         pdf.cell(0, 10, pdf_safe(linia), ln=True, border=1)
@@ -129,7 +133,9 @@ if 'os' not in st.session_state: st.session_state.os = None
 
 with c1:
     st.markdown(f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="p"): st.session_state.s = "P" if st.session_state.s != "P" else ""; st.rerun()
+    if st.button("➕ DODAJ", key="p"): 
+        st.session_state.s = "P" if st.session_state.s != "P" else ""
+        st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
             d_p = st.date_input("Data zdarzenia", datetime.now(), key="date_p")
@@ -137,19 +143,29 @@ with c1:
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p:
                     add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': 'Przychód ogólny', 'kwota': float(kw_p), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_p.strftime("%d.%m")})
-                    st.session_state.s = ""; st.rerun()
-            if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): st.session_state.s = ""; st.rerun()
+                    st.session_state.s = ""
+                    st.rerun()
+            if st.button("⬅️ POWRÓT", key="back_p", use_container_width=True): 
+                st.session_state.s = ""
+                st.rerun()
 
 with c2:
+    # --- TUTAJ JEST LOGIKA CZERWONEGO KOLORU ---
     got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
     got_txt = "white" if s_got < 0 else "black"
     st.markdown(f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="g"): st.session_state.s = "G" if st.session_state.s != "G" else ""; st.session_state.os = None; st.rerun()
+    
+    if st.button("➕ DODAJ", key="g"): 
+        st.session_state.s = "G" if st.session_state.s != "G" else ""
+        st.session_state.os = None
+        st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
             for o in osoby:
-                if st.button(o, key=f"os_{o}", use_container_width=True): st.session_state.os = o if st.session_state.os != o else None; st.rerun()
+                if st.button(o, key=f"os_{o}", use_container_width=True): 
+                    st.session_state.os = o if st.session_state.os != o else None
+                    st.rerun()
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
@@ -159,13 +175,22 @@ with c2:
                         if cs.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g:
                                 add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': f"Gotówka - {o}", 'kwota': float(kw_g), 'opis': '', 'status': 'Aktywny', 'data_zdarzenia': d_g.strftime("%d.%m")})
-                                st.session_state.s = ""; st.session_state.os = None; st.rerun()
-                        if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): st.session_state.os = None; st.rerun()
-            if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): st.session_state.s = ""; st.session_state.os = None; st.rerun()
+                                st.session_state.s = ""
+                                st.session_state.os = None
+                                st.rerun()
+                        if cb.button("COFNIJ", key=f"back_g_{o}", use_container_width=True): 
+                            st.session_state.os = None
+                            st.rerun()
+            if st.button("⬅️ POWRÓT", key="back_g_main", use_container_width=True): 
+                st.session_state.s = ""
+                st.session_state.os = None
+                st.rerun()
 
 with c3:
     st.markdown(f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>', unsafe_allow_html=True)
-    if st.button("➕ DODAJ", key="w"): st.session_state.s = "W" if st.session_state.s != "W" else ""; st.rerun()
+    if st.button("➕ DODAJ", key="w"): 
+        st.session_state.s = "W" if st.session_state.s != "W" else ""
+        st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
             d_w = st.date_input("Data zdarzenia", datetime.now(), key="date_w")
@@ -174,19 +199,48 @@ with c3:
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w:
                     add_to_supabase({'data': datetime.now().strftime("%d.%m %H:%M"), 'typ': 'Wydatki gotówkowe', 'kwota': float(kw_w), 'opis': op_w, 'status': 'Aktywny', 'data_zdarzenia': d_w.strftime("%d.%m")})
-                    st.session_state.s = ""; st.rerun()
-            if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): st.session_state.s = ""; st.rerun()
+                    st.session_state.s = ""
+                    st.rerun()
+            if st.button("⬅️ POWRÓT", key="back_w", use_container_width=True): 
+                st.session_state.s = ""
+                st.rerun()
 
 # --- 5. PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
+    
+    # NOWA FUNKCJA ZAMYKANIA OKRESU
+    if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
+        st.session_state.lock_step = 1
+
+    if st.session_state.get('lock_step', 0) >= 1:
+        with st.container(border=True):
+            h_szef = st.text_input("Hasło Szefa:", type="password")
+            if h_szef == "szef123":
+                st.warning("Potwierdź: wysyłka raportu i zerowanie.")
+                if st.button("✅ POTWIERDZAM I ROZLICZAM", use_container_width=True):
+                    if not df_active_calc.empty:
+                        pdf_rep = create_pdf(data, s_og, s_got, s_wyd)
+                        csv_rep = df_active_calc.to_csv(index=False).encode('utf-8')
+                        send_email_with_reports(pdf_rep, csv_rep)
+                        for rid in df_active_calc['id'].tolist():
+                            supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
+                        st.session_state.lock_step = 0
+                        st.rerun()
+            elif h_szef != "": st.error("Złe hasło")
+            if st.button("Anuluj rozliczanie", use_container_width=True):
+                st.session_state.lock_step = 0
+                st.rerun()
+
+    st.divider()
+    
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
         pdf_file = create_pdf(data, s_og, s_got, s_wyd)
         csv_file = data[data['status']=='Aktywny'].to_csv(index=False).encode('utf-8')
         if send_email_with_reports(pdf_file, csv_file): st.success("✅ Wysłano!")
 
     st.divider()
-    # USUWANIE LINII
+    
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ LINIE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
             st.session_state.ask_del_line = True
@@ -201,7 +255,8 @@ with st.sidebar:
                 st.session_state.selected_ids = []
                 st.rerun()
             if cn.button("NIE", key="line_n"):
-                st.session_state.ask_del_line = False; st.rerun()
+                st.session_state.ask_del_line = False
+                st.rerun()
 
     st.divider()
     st.download_button("📥 Pobierz CSV", data=data[data['status']=='Aktywny'].to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
@@ -215,7 +270,8 @@ with st.sidebar:
             st.warning("Potwierdź usunięcie CAŁOŚCI")
             check = st.checkbox("Zgadzam się")
             if check:
-                if st.button("🔥 WYCZYŚĆ WSZYSTKO", use_container_width=True, type="primary"): st.session_state.del_step = 2
+                if st.button("🔥 WYCZYŚĆ WSZYSTKO", use_container_width=True, type="primary"): 
+                    st.session_state.del_step = 2
             if st.session_state.del_step == 2:
                 st.error("CZY JESTEŚ PEWIEN?")
                 ct, cn = st.columns(2)
@@ -223,20 +279,24 @@ with st.sidebar:
                     df_active_to_del = data[data['status'] == 'Aktywny']
                     for _, row in df_active_to_del.iterrows():
                         supabase.table("finanse").update({"status": "Usunieto"}).eq("id", int(row['id'])).execute()
-                    st.session_state.del_step = 0; st.rerun()
-                if cn.button("NIE", key="full_n", use_container_width=True): st.session_state.del_step = 0; st.rerun()
+                    st.session_state.del_step = 0
+                    st.rerun()
+                if cn.button("NIE", key="full_n", use_container_width=True): 
+                    st.session_state.del_step = 0
+                    st.rerun()
 
     st.divider()
     if st.button("🔓 Wyloguj", use_container_width=True):
-        cookies["is_logged"] = "false"; cookies.save(); st.rerun()
+        cookies["is_logged"] = "false"
+        cookies.save()
+        st.rerun()
 
-# --- 6. HISTORIA Z WYSZARZANIEM (POPRAWIONE ZAZNACZANIE) ---
+# --- 6. HISTORIA ---
 st.divider()
 st.subheader("Historia wpisów")
 if not data.empty:
     df_display = data.iloc[::-1].copy()
     
-    # Funkcja wizualnego wyszarzania
     def gray_out(row):
         if row['status'] == 'Usunieto':
             row['data_zdarzenia'] = f"░ {row['data_zdarzenia']}"
@@ -246,8 +306,6 @@ if not data.empty:
         return row
 
     df_display = df_display.apply(gray_out, axis=1)
-    
-    # Przygotowanie danych do edytora - WAŻNE: zachowujemy kolumnę 'id' ukrytą
     df_editor_input = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]].copy()
     df_editor_input.insert(0, "Wybierz", False)
     
@@ -255,7 +313,7 @@ if not data.empty:
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": None,  # Ukrywamy kolumnę ID, żeby nie psuła wyglądu
+            "id": None,
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
             "status": st.column_config.TextColumn("Status")
         },
@@ -263,7 +321,6 @@ if not data.empty:
         hide_index=True, use_container_width=True, key="pizza_editor"
     )
     
-    # Zbieramy ID zaznaczonych linii zamiast ich indeksów
     selected_ids = res[res["Wybierz"] == True]["id"].tolist()
     
     if 'selected_ids' not in st.session_state or st.session_state.selected_ids != selected_ids:
