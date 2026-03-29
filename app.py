@@ -234,13 +234,24 @@ with st.sidebar:
 
     if 'selected_ids' in st.session_state and len(st.session_state.selected_ids) > 0:
         if st.button(f"🗑️ USUŃ NA STAŁE ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary"):
-            for rid in st.session_state.selected_ids:
-                supabase.table("finanse").delete().eq("id", int(rid)).execute()
-            st.session_state.selected_ids = []
-            st.rerun()
+            st.session_state.confirm_del = True
+        
+        if st.session_state.get('confirm_del'):
+            st.error("NA PEWNO USUNĄĆ?")
+            cy, cn = st.columns(2)
+            if cy.button("TAK", use_container_width=True):
+                for rid in st.session_state.selected_ids:
+                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
+                st.session_state.selected_ids = []
+                st.session_state.confirm_del = False
+                st.rerun()
+            if cn.button("NIE", use_container_width=True):
+                st.session_state.confirm_del = False
+                st.rerun()
 
     st.divider()
     
+    # NAPRAWA BŁĘDU None W SIDEBARZE
     st.download_button("📥 Pobierz CSV", data=df_active_calc.to_csv(index=False).encode('utf-8'), file_name="raport.csv", use_container_width=True)
     st.download_button("📥 Pobierz PDF", data=create_pdf(df_active_calc, s_og, s_got, s_wyd), file_name="raport.pdf", use_container_width=True)
 
@@ -262,7 +273,7 @@ if not df_active_calc.empty:
         df_editor_input,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": st.column_config.TextColumn("ID", disabled=True),
+            "id": None, # CAŁKOWITE UKRYCIE KOLUMNY ID
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
             "status": st.column_config.TextColumn("Status")
         },
