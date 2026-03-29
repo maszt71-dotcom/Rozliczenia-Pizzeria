@@ -290,6 +290,38 @@ with st.sidebar:
 
     st.divider()
 
+    # USUWANIE Z LEWEGO MENU
+    if len(st.session_state.selected_ids) > 0:
+        if st.button(
+            f"🗑️ USUŃ LINIĘ ({len(st.session_state.selected_ids)})",
+            use_container_width=True,
+            type="primary"
+        ):
+            st.session_state.show_delete_confirm = True
+
+        if st.session_state.get("show_delete_confirm", False):
+            st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
+
+            if st.button(
+                "✅ POTWIERDŹ USUNIĘCIE",
+                use_container_width=True,
+                type="primary"
+            ):
+                for rid in st.session_state.selected_ids:
+                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
+
+                st.session_state.selected_ids = []
+                st.session_state.show_delete_confirm = False
+                st.rerun()
+
+            if st.button("Anuluj", use_container_width=True):
+                st.session_state.show_delete_confirm = False
+                st.rerun()
+    else:
+        st.session_state.show_delete_confirm = False
+
+    st.divider()
+
     _ = st.download_button(
         "📥 Pobierz CSV",
         data=df_active_calc.to_csv(index=False).encode("utf-8"),
@@ -334,32 +366,12 @@ if not df_active_calc.empty:
     )
 
     selected_ids = res[res["Wybierz"] == True]["id"].tolist()
-    st.session_state.selected_ids = selected_ids
 
-    if len(selected_ids) > 0:
-        st.markdown("")
-        if st.button(f"🗑️ USUŃ LINIĘ ({len(selected_ids)})", type="primary", use_container_width=True):
-            st.session_state.show_delete_confirm = True
-
-        if st.session_state.get("show_delete_confirm", False):
-            st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if st.button("✅ POTWIERDŹ USUNIĘCIE", use_container_width=True):
-                    for rid in selected_ids:
-                        supabase.table("finanse").delete().eq("id", int(rid)).execute()
-                    st.session_state.selected_ids = []
-                    st.session_state.show_delete_confirm = False
-                    st.rerun()
-
-            with col2:
-                if st.button("Anuluj", use_container_width=True):
-                    st.session_state.show_delete_confirm = False
-                    st.rerun()
-    else:
+    # ŻEBY PRZYCISK W SIDEBARZE POJAWIAŁ SIĘ OD RAZU PO ZAZNACZENIU
+    if st.session_state.selected_ids != selected_ids:
+        st.session_state.selected_ids = selected_ids
         st.session_state.show_delete_confirm = False
+        st.rerun()
 
 else:
     st.info("Brak wpisów w obecnym okresie.")
