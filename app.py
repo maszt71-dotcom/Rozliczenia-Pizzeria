@@ -11,6 +11,13 @@ import pytz
 from streamlit_cookies_manager import CookieManager
 from supabase import create_client, Client
 
+# --- USTAWIENIA APLIKACJI ---
+st.set_page_config(
+    page_title="Pizzeria",
+    page_icon="🍕",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 # --- 0. POŁĄCZENIE Z SUPABASE ---
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
