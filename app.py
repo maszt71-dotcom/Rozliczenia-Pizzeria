@@ -279,6 +279,17 @@ with st.sidebar:
             if h == "szef123":
                 if st.button("✅ POTWIERDZAM I ROZLICZAM", use_container_width=True, key="confirm_close_sidebar"):
                     if not df_active_calc.empty:
+                        # --- ZAPIS RAPORTU DO BAZY ---
+                        okres_od = df_active_calc["data_zdarzenia"].min()
+                        okres_do = df_active_calc["data_zdarzenia"].max()
+                        supabase.table("raporty").insert({
+                            "okres_od": str(okres_od),
+                            "okres_do": str(okres_do),
+                            "suma_przychodow": float(s_og),
+                            "suma_gotowki": float(s_got),
+                            "suma_wydatkow": float(s_wyd)
+                        }).execute()
+                        
                         p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
                         c_r = df_active_calc.to_csv(index=False).encode("utf-8")
                         send_email_with_reports(p_r, c_r)
@@ -380,68 +391,25 @@ if not df_active_calc.empty:
 else:
     st.info("Brak wpisów w obecnym okresie.")
 
-# --- 8. AKCJE MOBILNE ---
+# --- 8. ARCHIWUM RAPORTÓW (Z BAZY) ---
 st.divider()
-st.subheader("⚡ Szybkie akcje")
+st.subheader("📋 Archiwum Zamkniętych Raportów")
 
-m1, m2, m3 = st.columns(3)
+def load_reports():
+    res = supabase.table("raporty").select("*").order("id", desc=True).execute()
+    if res.data:
+        return pd.DataFrame(res.data)
+    return pd.DataFrame()
 
-with m1:
-    if st.button("📧 Raport", use_container_width=True, key="mobile_report"):
-        pdf_f = create_pdf(df_active_calc, s_og, s_got, s_wyd)
-        csv_f = df_active_calc.to_csv(index=False).encode("utf-8")
-        if send_email_with_reports(pdf_f, csv_f):
-            st.success("✅ Wysłano raport!")
-
-with m2:
-    if st.button("🔒 Zamknij", use_container_width=True, key="mobile_lock"):
-        st.session_state.lock_step = 1
-        st.rerun()
-
-with m3:
-    if len(st.session_state.selected_ids) > 0:
-        if st.button(f"🗑️ Usuń ({len(st.session_state.selected_ids)})", use_container_width=True, key="mobile_delete"):
-            st.session_state.show_delete_confirm = True
-            st.rerun()
-
-if st.session_state.get("lock_step", 0) >= 1:
-    with st.container(border=True):
-        st.markdown("**Zamknij i rozlicz okres**")
-        h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
-        if h_mobile == "szef123":
-            c_a, c_b = st.columns(2)
-            with c_a:
-                if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_close_mobile"):
-                    if not df_active_calc.empty:
-                        p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
-                        c_r = df_active_calc.to_csv(index=False).encode("utf-8")
-                        send_email_with_reports(p_r, c_r)
-
-                        for rid in df_active_calc["id"].tolist():
-                            supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
-
-                        st.session_state.lock_step = 0
-                        st.rerun()
-            with c_b:
-                if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
-                    st.session_state.lock_step = 0
-                    st.rerun()
-
-if st.session_state.get("show_delete_confirm", False) and len(st.session_state.selected_ids) > 0:
-    with st.container(border=True):
-        st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
-        d1, d2 = st.columns(2)
-
-        with d1:
-            if st.button("✅ Potwierdź usunięcie", use_container_width=True, key="delete_mobile_confirm"):
-                for rid in st.session_state.selected_ids:
-                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
-
-                st.session_state.selected_ids = []
-                st.session_state.show_delete_confirm = False
-                st.rerun()
-
-        with d2:
-            if st.button("Anuluj", use_container_width=True, key="delete_mobile_cancel"):
-                st.session_state.show_delete_confirm = False
-                st.rerun()
+df_rep_hist = load_reports()
+if not df_rep_hist.empty:
+    st.dataframe(
+        df_rep_hist[["okres_od", "okres_do", "suma_przychodow", "suma_gotowki", "suma_wydatkow"]],
+        column_config={
+            "suma_przychodow": "Przychód",
+            "suma_gotowki": "Gotówka",
+            "suma_wydatkow": "Wydatki"
+        },
+        hide_index=True,
+        use_container_width=True
+    )
