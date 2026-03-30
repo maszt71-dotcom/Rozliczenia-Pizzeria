@@ -11,14 +11,15 @@ import pytz
 from streamlit_cookies_manager import CookieManager
 from supabase import create_client, Client
 
-# --- USTAWIENIA APLIKACJI ---
+# --- 1. USTAWIENIA APLIKACJI ---
 st.set_page_config(
     page_title="Pizzeria",
-    page_icon="🍕",
+    page_icon="cool_pizza_logo.jpg",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-# --- 0. POŁĄCZENIE Z SUPABASE ---
+
+# --- 2. POŁĄCZENIE Z SUPABASE ---
 url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
@@ -70,18 +71,13 @@ def send_email_with_reports(pdf_data, csv_data):
         st.error(f"Błąd wysyłki maila: {e}")
         return False
 
-# --- 1. KONFIGURACJA I LOGOWANIE ---
-st.set_page_config(
-    page_title="Pizzeria",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
+# --- 3. LOGOWANIE ---
 cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
 if cookies.get("is_logged") != "true":
+    st.image("cool_pizza_logo.jpg", width=130)
     st.title("🍕 Logowanie")
     haslo = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
@@ -91,7 +87,7 @@ if cookies.get("is_logged") != "true":
             st.rerun()
     st.stop()
 
-# --- 2. DANE Z SUPABASE ---
+# --- 4. DANE Z SUPABASE ---
 def load_data():
     res = supabase.table("finanse").select("*").order("id").execute()
     if res.data:
@@ -109,7 +105,7 @@ if not df_active_calc.empty:
 else:
     s_og, s_wyd, s_got = 0.0, 0.0, 0.0
 
-# --- 3. GENERATOR PDF ---
+# --- 5. GENERATOR PDF ---
 def create_pdf(df, p, g, w):
     pdf = FPDF()
     pdf.add_page()
@@ -157,7 +153,7 @@ def create_pdf(df, p, g, w):
 
     return pdf.output(dest="S").encode("latin-1")
 
-# --- 4. STANY SESJI ---
+# --- 6. STANY SESJI ---
 if "s" not in st.session_state:
     st.session_state.s = ""
 if "os" not in st.session_state:
@@ -169,7 +165,8 @@ if "lock_step" not in st.session_state:
 if "show_delete_confirm" not in st.session_state:
     st.session_state.show_delete_confirm = False
 
-# --- 5. WIDOK GŁÓWNY ---
+# --- 7. WIDOK GŁÓWNY ---
+st.image("cool_pizza_logo.jpg", width=110)
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
 
@@ -265,8 +262,9 @@ with c3:
                     st.session_state.s = ""
                     st.rerun()
 
-# --- 6. PASEK BOCZNY ---
+# --- 8. PASEK BOCZNY ---
 with st.sidebar:
+    st.image("cool_pizza_logo.jpg", width=120)
     st.header("⚙️ Menu")
 
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
@@ -356,7 +354,7 @@ with st.sidebar:
         cookies.save()
         st.rerun()
 
-# --- 7. HISTORIA ---
+# --- 9. HISTORIA ---
 st.divider()
 st.subheader("Historia wpisów (Bieżący okres)")
 
@@ -387,7 +385,7 @@ if not df_active_calc.empty:
 else:
     st.info("Brak wpisów w obecnym okresie.")
 
-# --- 8. AKCJE MOBILNE ---
+# --- 10. AKCJE MOBILNE ---
 st.divider()
 st.subheader("⚡ Szybkie akcje")
 
