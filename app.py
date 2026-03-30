@@ -279,7 +279,7 @@ with st.sidebar:
             if h == "szef123":
                 if st.button("✅ POTWIERDZAM I ROZLICZAM", use_container_width=True, key="confirm_close_sidebar"):
                     if not df_active_calc.empty:
-                        # ZAPIS DO TABELI RAPORTY
+                        # --- ZAPIS RAPORTU DO BAZY ---
                         okres_od = df_active_calc["data_zdarzenia"].min()
                         okres_do = df_active_calc["data_zdarzenia"].max()
                         supabase.table("raporty").insert({
@@ -289,7 +289,7 @@ with st.sidebar:
                             "suma_gotowki": float(s_got),
                             "suma_wydatkow": float(s_wyd)
                         }).execute()
-
+                        
                         p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
                         c_r = df_active_calc.to_csv(index=False).encode("utf-8")
                         send_email_with_reports(p_r, c_r)
@@ -391,9 +391,9 @@ if not df_active_calc.empty:
 else:
     st.info("Brak wpisów w obecnym okresie.")
 
-# --- 8. ARCHIWUM RAPORTÓW ---
+# --- 8. ARCHIWUM RAPORTÓW (Z BAZY) ---
 st.divider()
-st.subheader("📋 Archiwum Raportów")
+st.subheader("📋 Archiwum Zamkniętych Raportów")
 
 def load_reports():
     res = supabase.table("raporty").select("*").order("id", desc=True).execute()
@@ -401,16 +401,14 @@ def load_reports():
         return pd.DataFrame(res.data)
     return pd.DataFrame()
 
-df_reports_history = load_reports()
-
-if not df_reports_history.empty:
+df_rep_hist = load_reports()
+if not df_rep_hist.empty:
     st.dataframe(
-        df_reports_history[["okres_od", "okres_do", "suma_przychodow", "suma_gotowki", "suma_wydatkow", "data_wygenerowania"]],
+        df_rep_hist[["okres_od", "okres_do", "suma_przychodow", "suma_gotowki", "suma_wydatkow"]],
         column_config={
             "suma_przychodow": "Przychód",
             "suma_gotowki": "Gotówka",
-            "suma_wydatkow": "Wydatki",
-            "data_wygenerowania": "Data"
+            "suma_wydatkow": "Wydatki"
         },
         hide_index=True,
         use_container_width=True
