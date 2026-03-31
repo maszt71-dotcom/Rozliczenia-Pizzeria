@@ -118,6 +118,19 @@ def filter_data_by_date_range(df, date_from, date_to):
 
     return filtered.drop(columns=["parsed_date"], errors="ignore")
 
+def calculate_range_sums(df):
+    if df.empty:
+        return 0.0, 0.0, 0.0
+
+    temp = df.copy()
+    temp["kwota"] = pd.to_numeric(temp["kwota"], errors="coerce").fillna(0)
+
+    przychod = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
+    wydatki = temp[temp["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
+    gotowka = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
+
+    return przychod, gotowka, wydatki
+
 data = load_data()
 df_active_calc = data[data["status"] == "Aktywny"].copy()
 
@@ -201,6 +214,8 @@ if "show_delete_confirm" not in st.session_state:
     st.session_state.show_delete_confirm = False
 if "show_report_picker" not in st.session_state:
     st.session_state.show_report_picker = False
+if "show_send_picker" not in st.session_state:
+    st.session_state.show_send_picker = False
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
@@ -302,11 +317,46 @@ with c3:
 with st.sidebar:
     st.header("⚙️ Menu")
 
-    if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary"):
-        pdf_f = create_pdf(df_active_calc, s_og, s_got, s_wyd)
-        csv_f = df_active_calc.to_csv(index=False).encode("utf-8")
-        if send_email_with_reports(pdf_f, csv_f):
-            st.success("✅ Wysłano raport!")
+    if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="open_send_picker"):
+        st.session_state.show_send_picker = not st.session_state.show_send_picker
+        if st.session_state.show_send_picker:
+            st.session_state.show_report_picker = False
+        st.rerun()
+
+    if st.session_state.show_send_picker:
+        with st.container(border=True):
+            send_date_from = st.date_input(
+                "Data od",
+                value=get_now().date(),
+                key="send_date_from"
+            )
+
+            send_date_to = st.date_input(
+                "Data do",
+                value=get_now().date(),
+                key="send_date_to"
+            )
+
+            if send_date_from > send_date_to:
+                st.error("Data od nie może być większa niż data do")
+            else:
+                df_send_range = filter_data_by_date_range(
+                    df_active_calc,
+                    send_date_from,
+                    send_date_to
+                ).copy()
+
+                send_p, send_g, send_w = calculate_range_sums(df_send_range)
+
+                if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
+                    pdf_f = create_pdf(df_send_range, send_p, send_g, send_w)
+                    csv_f = df_send_range.to_csv(index=False).encode("utf-8")
+                    if send_email_with_reports(pdf_f, csv_f):
+                        st.success("✅ Wysłano raport!")
+
+                if st.button("↩️ Powrót", use_container_width=True, key="send_back_btn"):
+                    st.session_state.show_send_picker = False
+                    st.rerun()
 
     st.divider()
 
@@ -370,6 +420,8 @@ with st.sidebar:
 
     if st.button("📥 Pobierz raport", use_container_width=True, key="open_report_picker"):
         st.session_state.show_report_picker = not st.session_state.show_report_picker
+        if st.session_state.show_report_picker:
+            st.session_state.show_send_picker = False
         st.rerun()
 
     if st.session_state.show_report_picker:
@@ -395,24 +447,7 @@ with st.sidebar:
                     report_date_to
                 ).copy()
 
-                if not df_report_range.empty:
-                    df_report_range["kwota"] = pd.to_numeric(
-                        df_report_range["kwota"], errors="coerce"
-                    ).fillna(0)
-
-                    report_p = df_report_range[
-                        df_report_range["typ"] == "Przychód ogólny"
-                    ]["kwota"].sum()
-
-                    report_w = df_report_range[
-                        df_report_range["typ"] == "Wydatki gotówkowe"
-                    ]["kwota"].sum()
-
-                    report_g = df_report_range[
-                        df_report_range["typ"].astype(str).str.contains("Gotówka", na=False)
-                    ]["kwota"].sum() - report_w
-                else:
-                    report_p, report_w, report_g = 0.0, 0.0, 0.0
+                report_p, report_g, report_w = calculate_range_sums(df_report_range)
 
                 _ = st.download_button(
                     "📥 Pobierz PDF",
@@ -429,6 +464,10 @@ with st.sidebar:
                     use_container_width=True,
                     key="download_csv_range"
                 )
+
+                if st.button("↩️ Powrót", use_container_width=True, key="report_back_btn"):
+                    st.session_state.show_report_picker = False
+                    st.rerun()
 
     st.divider()
 
