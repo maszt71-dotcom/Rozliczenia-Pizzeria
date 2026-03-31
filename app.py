@@ -91,6 +91,33 @@ def load_data():
         return pd.DataFrame(res.data)
     return pd.DataFrame(columns=["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"])
 
+def filter_data_by_date_range(df, date_from, date_to):
+    if df.empty:
+        return df.copy()
+
+    temp = df.copy()
+
+    parsed_full = pd.to_datetime(
+        temp["data_zdarzenia"].astype(str),
+        format="%d.%m.%Y",
+        errors="coerce"
+    )
+
+    parsed_short = pd.to_datetime(
+        temp["data_zdarzenia"].astype(str) + f".{get_now().year}",
+        format="%d.%m.%Y",
+        errors="coerce"
+    )
+
+    temp["parsed_date"] = parsed_full.fillna(parsed_short).dt.date
+
+    filtered = temp[
+        (temp["parsed_date"] >= date_from) &
+        (temp["parsed_date"] <= date_to)
+    ].copy()
+
+    return filtered.drop(columns=["parsed_date"], errors="ignore")
+
 data = load_data()
 df_active_calc = data[data["status"] == "Aktywny"].copy()
 
@@ -129,23 +156,34 @@ def create_pdf(df, p, g, w):
 
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_fill_color(200, 200, 200)
-    pdf.cell(20, 8, "Data", border=1, fill=True, align="C")
-    pdf.cell(50, 8, "Typ", border=1, fill=True, align="C")
+    pdf.cell(28, 8, "Data", border=1, fill=True, align="C")
+    pdf.cell(52, 8, "Typ", border=1, fill=True, align="C")
     pdf.cell(30, 8, "Kwota", border=1, fill=True, align="C")
-    pdf.cell(90, 8, "Opis", border=1, ln=1, fill=True, align="C")
+    pdf.cell(80, 8, "Opis", border=1, ln=1, fill=True, align="C")
 
     pdf.set_font("Helvetica", size=9)
     fill = False
-    for _, row in df[df["status"] == "Aktywny"].iterrows():
+
+    df_to_print = df.copy()
+    if "kwota" in df_to_print.columns:
+        df_to_print["kwota"] = pd.to_numeric(df_to_print["kwota"], errors="coerce").fillna(0)
+
+    for _, row in df_to_print.iterrows():
         if fill:
             pdf.set_fill_color(245, 245, 245)
         else:
             pdf.set_fill_color(255, 255, 255)
 
-        pdf.cell(20, 8, pdf_safe(str(row["data_zdarzenia"])), border=1, fill=True, align="C")
-        pdf.cell(50, 8, pdf_safe(str(row["typ"])), border=1, fill=True)
-        pdf.cell(30, 8, pdf_safe(f"{float(row['kwota']):.2f} zl"), border=1, fill=True, align="R")
-        pdf.cell(90, 8, pdf_safe(str(row["opis"])), border=1, ln=1, fill=True)
+        data_txt = str(row.get("data_zdarzenia", ""))
+        typ_txt = str(row.get("typ", ""))
+        kwota_txt = f"{float(row.get('kwota', 0)):.2f} zl"
+        opis_txt = str(row.get("opis", ""))
+
+        pdf.cell(28, 8, pdf_safe(data_txt), border=1, fill=True, align="C")
+        pdf.cell(52, 8, pdf_safe(typ_txt), border=1, fill=True)
+        pdf.cell(30, 8, pdf_safe(kwota_txt), border=1, fill=True, align="R")
+        pdf.cell(80, 8, pdf_safe(opis_txt), border=1, ln=1, fill=True)
+
         fill = not fill
 
     return pdf.output(dest="S").encode("latin-1")
@@ -161,6 +199,8 @@ if "lock_step" not in st.session_state:
     st.session_state.lock_step = 0
 if "show_delete_confirm" not in st.session_state:
     st.session_state.show_delete_confirm = False
+if "show_report_picker" not in st.session_state:
+    st.session_state.show_report_picker = False
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
@@ -187,7 +227,7 @@ with c1:
                         "kwota": float(kw_p),
                         "opis": "",
                         "status": "Aktywny",
-                        "data_zdarzenia": d_p.strftime("%d.%m")
+                        "data_zdarzenia": d_p.strftime("%d.%m.%Y")
                     }).execute()
                     st.session_state.s = ""
                     st.rerun()
@@ -225,7 +265,7 @@ with c2:
                                     "kwota": float(kw_g),
                                     "opis": "",
                                     "status": "Aktywny",
-                                    "data_zdarzenia": d_g.strftime("%d.%m")
+                                    "data_zdarzenia": d_g.strftime("%d.%m.%Y")
                                 }).execute()
                                 st.session_state.s = ""
                                 st.session_state.os = None
@@ -253,7 +293,7 @@ with c3:
                         "kwota": float(kw_w),
                         "opis": op_w,
                         "status": "Aktywny",
-                        "data_zdarzenia": d_w.strftime("%d.%m")
+                        "data_zdarzenia": d_w.strftime("%d.%m.%Y")
                     }).execute()
                     st.session_state.s = ""
                     st.rerun()
@@ -279,17 +319,6 @@ with st.sidebar:
             if h == "szef123":
                 if st.button("✅ POTWIERDZAM I ROZLICZAM", use_container_width=True, key="confirm_close_sidebar"):
                     if not df_active_calc.empty:
-                        # --- ZAPIS RAPORTU DO BAZY ---
-                        okres_od = df_active_calc["data_zdarzenia"].min()
-                        okres_do = df_active_calc["data_zdarzenia"].max()
-                        supabase.table("raporty").insert({
-                            "okres_od": str(okres_od),
-                            "okres_do": str(okres_do),
-                            "suma_przychodow": float(s_og),
-                            "suma_gotowki": float(s_got),
-                            "suma_wydatkow": float(s_wyd)
-                        }).execute()
-                        
                         p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
                         c_r = df_active_calc.to_csv(index=False).encode("utf-8")
                         send_email_with_reports(p_r, c_r)
@@ -339,19 +368,67 @@ with st.sidebar:
 
     st.divider()
 
-    _ = st.download_button(
-        "📥 Pobierz CSV",
-        data=df_active_calc.to_csv(index=False).encode("utf-8"),
-        file_name="raport.csv",
-        use_container_width=True
-    )
+    if st.button("📥 Pobierz raport", use_container_width=True, key="open_report_picker"):
+        st.session_state.show_report_picker = not st.session_state.show_report_picker
+        st.rerun()
 
-    _ = st.download_button(
-        "📥 Pobierz PDF",
-        data=create_pdf(df_active_calc, s_og, s_got, s_wyd),
-        file_name="raport.pdf",
-        use_container_width=True
-    )
+    if st.session_state.show_report_picker:
+        with st.container(border=True):
+            report_date_from = st.date_input(
+                "Data od",
+                value=get_now().date(),
+                key="report_date_from"
+            )
+
+            report_date_to = st.date_input(
+                "Data do",
+                value=get_now().date(),
+                key="report_date_to"
+            )
+
+            if report_date_from > report_date_to:
+                st.error("Data od nie może być większa niż data do")
+            else:
+                df_report_range = filter_data_by_date_range(
+                    df_active_calc,
+                    report_date_from,
+                    report_date_to
+                ).copy()
+
+                if not df_report_range.empty:
+                    df_report_range["kwota"] = pd.to_numeric(
+                        df_report_range["kwota"], errors="coerce"
+                    ).fillna(0)
+
+                    report_p = df_report_range[
+                        df_report_range["typ"] == "Przychód ogólny"
+                    ]["kwota"].sum()
+
+                    report_w = df_report_range[
+                        df_report_range["typ"] == "Wydatki gotówkowe"
+                    ]["kwota"].sum()
+
+                    report_g = df_report_range[
+                        df_report_range["typ"].astype(str).str.contains("Gotówka", na=False)
+                    ]["kwota"].sum() - report_w
+                else:
+                    report_p, report_w, report_g = 0.0, 0.0, 0.0
+
+                _ = st.download_button(
+                    "📥 Pobierz PDF",
+                    data=create_pdf(df_report_range, report_p, report_g, report_w),
+                    file_name=f"raport_{report_date_from}_{report_date_to}.pdf",
+                    use_container_width=True,
+                    key="download_pdf_range"
+                )
+
+                _ = st.download_button(
+                    "📥 Pobierz CSV",
+                    data=df_report_range.to_csv(index=False).encode("utf-8"),
+                    file_name=f"raport_{report_date_from}_{report_date_to}.csv",
+                    use_container_width=True,
+                    key="download_csv_range"
+                )
 
     st.divider()
 
@@ -391,25 +468,68 @@ if not df_active_calc.empty:
 else:
     st.info("Brak wpisów w obecnym okresie.")
 
-# --- 8. ARCHIWUM RAPORTÓW (Z BAZY) ---
+# --- 8. AKCJE MOBILNE ---
 st.divider()
-st.subheader("📋 Archiwum Zamkniętych Raportów")
+st.subheader("⚡ Szybkie akcje")
 
-def load_reports():
-    res = supabase.table("raporty").select("*").order("id", desc=True).execute()
-    if res.data:
-        return pd.DataFrame(res.data)
-    return pd.DataFrame()
+m1, m2, m3 = st.columns(3)
 
-df_rep_hist = load_reports()
-if not df_rep_hist.empty:
-    st.dataframe(
-        df_rep_hist[["okres_od", "okres_do", "suma_przychodow", "suma_gotowki", "suma_wydatkow"]],
-        column_config={
-            "suma_przychodow": "Przychód",
-            "suma_gotowki": "Gotówka",
-            "suma_wydatkow": "Wydatki"
-        },
-        hide_index=True,
-        use_container_width=True
-    )
+with m1:
+    if st.button("📧 Raport", use_container_width=True, key="mobile_report"):
+        pdf_f = create_pdf(df_active_calc, s_og, s_got, s_wyd)
+        csv_f = df_active_calc.to_csv(index=False).encode("utf-8")
+        if send_email_with_reports(pdf_f, csv_f):
+            st.success("✅ Wysłano raport!")
+
+with m2:
+    if st.button("🔒 Zamknij", use_container_width=True, key="mobile_lock"):
+        st.session_state.lock_step = 1
+        st.rerun()
+
+with m3:
+    if len(st.session_state.selected_ids) > 0:
+        if st.button(f"🗑️ Usuń ({len(st.session_state.selected_ids)})", use_container_width=True, key="mobile_delete"):
+            st.session_state.show_delete_confirm = True
+            st.rerun()
+
+if st.session_state.get("lock_step", 0) >= 1:
+    with st.container(border=True):
+        st.markdown("**Zamknij i rozlicz okres**")
+        h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
+        if h_mobile == "szef123":
+            c_a, c_b = st.columns(2)
+            with c_a:
+                if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_close_mobile"):
+                    if not df_active_calc.empty:
+                        p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
+                        c_r = df_active_calc.to_csv(index=False).encode("utf-8")
+                        send_email_with_reports(p_r, c_r)
+
+                        for rid in df_active_calc["id"].tolist():
+                            supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
+
+                        st.session_state.lock_step = 0
+                        st.rerun()
+            with c_b:
+                if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
+                    st.session_state.lock_step = 0
+                    st.rerun()
+
+if st.session_state.get("show_delete_confirm", False) and len(st.session_state.selected_ids) > 0:
+    with st.container(border=True):
+        st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
+        d1, d2 = st.columns(2)
+
+        with d1:
+            if st.button("✅ Potwierdź usunięcie", use_container_width=True, key="delete_mobile_confirm"):
+                for rid in st.session_state.selected_ids:
+                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
+
+                st.session_state.selected_ids = []
+                st.session_state.show_delete_confirm = False
+                st.rerun()
+
+        with d2:
+            if st.button("Anuluj", use_container_width=True, key="delete_mobile_cancel"):
+                st.session_state.show_delete_confirm = False
+                st.rerun()
