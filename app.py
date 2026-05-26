@@ -91,32 +91,43 @@ def load_data():
         return pd.DataFrame(res.data)
     return pd.DataFrame(columns=["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"])
 
+def load_archived_reports():
+    res = supabase.table("raporty").select("*").order("id", descending=True).execute()
+    if res.data:
+        return pd.DataFrame(res.data)
+    return pd.DataFrame(columns=["id", "data", "okres_od", "okres_do", "przychod", "gotowka", "wydatki"])
+
+# NAPRAWIONA FUNKCJA - teraz idealnie dopasowuje i zasysa daty formatu DD.MM.YYYY
 def filter_data_by_date_range(df, date_from, date_to):
     if df.empty:
         return df.copy()
 
     temp = df.copy()
+    temp["date_str"] = temp["data_zdarzenia"].astype(str).str.strip()
 
-    parsed_full = pd.to_datetime(
-        temp["data_zdarzenia"].astype(str),
-        format="%d.%m.%Y",
-        errors="coerce"
-    )
+    # Bezpieczne rozpoznawanie dat z rokiem lub bez
+    parsed_dates = []
+    current_year = get_now().year
+    
+    for val in temp["date_str"]:
+        try:
+            if len(val.split('.')) == 3:
+                d = datetime.strptime(val, "%d.%m.%Y").date()
+            else:
+                d = datetime.strptime(f"{val}.{current_year}", "%d.%m.%Y").date()
+            parsed_dates.append(d)
+        except Exception:
+            parsed_dates.append(None)
 
-    parsed_short = pd.to_datetime(
-        temp["data_zdarzenia"].astype(str) + f".{get_now().year}",
-        format="%d.%m.%Y",
-        errors="coerce"
-    )
-
-    temp["parsed_date"] = parsed_full.fillna(parsed_short).dt.date
-
+    temp["parsed_date"] = parsed_dates
+    
     filtered = temp[
+        (temp["parsed_date"].notna()) &
         (temp["parsed_date"] >= date_from) &
         (temp["parsed_date"] <= date_to)
     ].copy()
 
-    return filtered.drop(columns=["parsed_date"], errors="ignore")
+    return filtered.drop(columns=["parsed_date", "date_str"], errors="ignore")
 
 def calculate_range_sums(df):
     if df.empty:
@@ -147,7 +158,7 @@ def create_pdf(df, p, g, w):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, pdf_safe(f"RAPORT ZAMKNIECIA - {get_now().strftime('%d.%m.%Y')}"), ln=True, align="C")
+    pdf.cell(0, 10, pdf_safe(f"RAPORT SZCZEGOLOWY - {get_now().strftime('%d.%m.%Y')}"), ln=True, align="C")
     pdf.ln(5)
 
     pdf.set_font("Helvetica", "B", 12)
@@ -216,6 +227,8 @@ if "show_report_picker" not in st.session_state:
     st.session_state.show_report_picker = False
 if "show_send_picker" not in st.session_state:
     st.session_state.show_send_picker = False
+if "show_archive_picker" not in st.session_state:
+    st.session_state.show_archive_picker = False
 
 if "lock_confirm_1" not in st.session_state:
     st.session_state.lock_confirm_1 = False
@@ -326,31 +339,18 @@ with st.sidebar:
         st.session_state.show_send_picker = not st.session_state.show_send_picker
         if st.session_state.show_send_picker:
             st.session_state.show_report_picker = False
+            st.session_state.show_archive_picker = False
         st.rerun()
 
     if st.session_state.show_send_picker:
         with st.container(border=True):
-            send_date_from = st.date_input(
-                "Data od",
-                value=get_now().date(),
-                key="send_date_from"
-            )
-
-            send_date_to = st.date_input(
-                "Data do",
-                value=get_now().date(),
-                key="send_date_to"
-            )
+            send_date_from = st.date_input("Data od", value=get_now().date(), key="send_date_from")
+            send_date_to = st.date_input("Data do", value=get_now().date(), key="send_date_to")
 
             if send_date_from > send_date_to:
                 st.error("Data od nie może być większa niż data do")
             else:
-                df_send_range = filter_data_by_date_range(
-                    df_active_calc,
-                    send_date_from,
-                    send_date_to
-                ).copy()
-
+                df_send_range = filter_data_by_date_range(df_active_calc, send_date_from, send_date_to).copy()
                 send_p, send_g, send_w = calculate_range_sums(df_send_range)
 
                 if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
@@ -395,7 +395,7 @@ with st.sidebar:
                             c_r = df_lock_range.to_csv(index=False).encode("utf-8")
                             send_email_with_reports(p_r, c_r)
 
-                            # NOWOŚĆ: Zapis podsumowania raportu bezpośrednio do tabeli 'raporty' w Supabase
+                            # Zapis podsumowania raportu do tabeli 'raporty'
                             supabase.table("raporty").insert({
                                 "data": get_now().strftime("%d.%m.%Y %H:%M"),
                                 "okres_od": lock_date_from.strftime("%d.%m.%Y"),
@@ -422,30 +422,17 @@ with st.sidebar:
     st.divider()
 
     if len(st.session_state.selected_ids) > 0:
-        if st.button(
-            f"🗑️ USUŃ LINIĘ ({len(st.session_state.selected_ids)})",
-            use_container_width=True,
-            type="primary",
-            key="delete_sidebar_btn"
-        ):
+        if st.button(f"🗑️ USUŃ LINIĘ ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary", key="delete_sidebar_btn"):
             st.session_state.show_delete_confirm = True
 
         if st.session_state.get("show_delete_confirm", False):
             st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
-
-            if st.button(
-                "✅ POTWIERDŹ USUNIĘCIE",
-                use_container_width=True,
-                type="primary",
-                key="delete_sidebar_confirm"
-            ):
+            if st.button("✅ POTWIERDŹ USUNIĘCIE", use_container_width=True, type="primary", key="delete_sidebar_confirm"):
                 for rid in st.session_state.selected_ids:
                     supabase.table("finanse").delete().eq("id", int(rid)).execute()
-
                 st.session_state.selected_ids = []
                 st.session_state.show_delete_confirm = False
                 st.rerun()
-
             if st.button("Anuluj", use_container_width=True, key="delete_sidebar_cancel"):
                 st.session_state.show_delete_confirm = False
                 st.rerun()
@@ -454,39 +441,29 @@ with st.sidebar:
 
     st.divider()
 
+    # --- POBIERZ RAPORT: TERAZ POPRAWNIE ZASYSA HISTORIĘ Z SUPABASE ---
     if st.button("📥 Pobierz raport", use_container_width=True, key="open_report_picker"):
         st.session_state.show_report_picker = not st.session_state.show_report_picker
         if st.session_state.show_report_picker:
             st.session_state.show_send_picker = False
+            st.session_state.show_archive_picker = False
         st.rerun()
 
     if st.session_state.show_report_picker:
         with st.container(border=True):
-            report_date_from = st.date_input(
-                "Data od",
-                value=get_now().date(),
-                key="report_date_from"
-            )
-
-            report_date_to = st.date_input(
-                "Data do",
-                value=get_now().date(),
-                key="report_date_to"
-            )
+            report_date_from = st.date_input("Data od", value=get_now().date(), key="report_date_from")
+            report_date_to = st.date_input("Data do", value=get_now().date(), key="report_date_to")
 
             if report_date_from > report_date_to:
                 st.error("Data od nie może być większa niż data do")
             else:
-                df_report_range = filter_data_by_date_range(
-                    df_active_calc,
-                    report_date_from,
-                    report_date_to
-                ).copy()
-
+                # ZASSANIE: pobieramy całą bazę (łącznie ze starym kwietniem)
+                df_all_database = load_data() 
+                df_report_range = filter_data_by_date_range(df_all_database, report_date_from, report_date_to).copy()
                 report_p, report_g, report_w = calculate_range_sums(df_report_range)
 
                 _ = st.download_button(
-                    "📥 Pobierz PDF",
+                    "📥 Pobierz PDF (Szczegółowy)",
                     data=create_pdf(df_report_range, report_p, report_g, report_w),
                     file_name=f"raport_{report_date_from}_{report_date_to}.pdf",
                     use_container_width=True,
@@ -494,7 +471,7 @@ with st.sidebar:
                 )
 
                 _ = st.download_button(
-                    "📥 Pobierz CSV",
+                    "📥 Pobierz CSV (Szczegółowy)",
                     data=df_report_range.to_csv(index=False).encode("utf-8"),
                     file_name=f"raport_{report_date_from}_{report_date_to}.csv",
                     use_container_width=True,
@@ -503,6 +480,52 @@ with st.sidebar:
 
                 if st.button("↩️ Powrót", use_container_width=True, key="report_back_btn"):
                     st.session_state.show_report_picker = False
+                    st.rerun()
+
+    st.divider()
+
+    if st.button("📜 Archiwum raportów", use_container_width=True, key="open_archive_picker"):
+        st.session_state.show_archive_picker = not st.session_state.show_archive_picker
+        if st.session_state.show_archive_picker:
+            st.session_state.show_send_picker = False
+            st.session_state.show_report_picker = False
+        st.rerun()
+
+    if st.session_state.show_archive_picker:
+        with st.container(border=True):
+            st.markdown("**Zapisane zamknięcia z bazy:**")
+            df_arch = load_archived_reports()
+            
+            if df_arch.empty:
+                st.info("Brak zapisanych raportów w bazie.")
+            else:
+                for _, r_row in df_arch.iterrows():
+                    lbl = f"📅 {r_row['okres_od']} - {r_row['okres_do']}"
+                    with st.expander(lbl):
+                        st.write(f"**Wygenerowano:** {r_row['data']}")
+                        st.write(f"💰 Przychód: {r_row['przychod']:.2f} zł")
+                        st.write(f"💵 Gotówka: {r_row['gotowka']:.2f} zł")
+                        st.write(f"📉 Wydatki: {r_row['wydatki']:.2f} zł")
+                        
+                        try:
+                            d_from_parsed = datetime.strptime(r_row['okres_od'], "%d.%m.%Y").date()
+                            d_to_parsed = datetime.strptime(r_row['okres_do'], "%d.%m.%Y").date()
+                            
+                            df_all_raw = load_data()
+                            df_filtered_arch = filter_data_by_date_range(df_all_raw, d_from_parsed, d_to_parsed)
+                            
+                            st.download_button(
+                                "📥 Pobierz CSV (Dane)",
+                                data=df_filtered_arch.to_csv(index=False).encode("utf-8"),
+                                file_name=f"archiwum_{r_row['okres_od']}_{r_row['okres_do']}.csv",
+                                key=f"dl_arch_{r_row['id']}",
+                                use_container_width=True
+                            )
+                        except Exception:
+                            st.error("Nie udało się odtworzyć pełnych danych.")
+
+                if st.button("↩️ Powrót", use_container_width=True, key="archive_back_btn"):
+                    st.session_state.show_archive_picker = False
                     st.rerun()
 
     st.divider()
@@ -595,7 +618,7 @@ if st.session_state.get("lock_step", 0) >= 1:
                             c_r = df_lock_range_m.to_csv(index=False).encode("utf-8")
                             send_email_with_reports(p_r, c_r)
 
-                            # NOWOŚĆ: Mobilny zapis podsumowania raportu do tabeli 'raporty' w Supabase
+                            # Zapis podsumowania raportu do tabeli 'raporty'
                             supabase.table("raporty").insert({
                                 "data": get_now().strftime("%d.%m.%Y %H:%M"),
                                 "okres_od": lock_date_from_m.strftime("%d.%m.%Y"),
@@ -635,7 +658,6 @@ if st.session_state.get("show_delete_confirm", False) and len(st.session_state.s
             if st.button("✅ Potwierdź usunięcie", use_container_width=True, key="delete_mobile_confirm"):
                 for rid in st.session_state.selected_ids:
                     supabase.table("finanse").delete().eq("id", int(rid)).execute()
-
                 st.session_state.selected_ids = []
                 st.session_state.show_delete_confirm = False
                 st.rerun()
