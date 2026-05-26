@@ -92,7 +92,7 @@ def load_data():
     return pd.DataFrame(columns=["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"])
 
 def load_archived_reports():
-    res = supabase.table("raporty").select("*").order("id", descending=True).execute()
+    res = supabase.table("raporty").select("*").order("id", desc=True).execute()
     if res.data:
         return pd.DataFrame(res.data)
     return pd.DataFrame(columns=["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow"])
