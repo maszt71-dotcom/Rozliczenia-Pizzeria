@@ -140,9 +140,23 @@ def calculate_range_sums(df):
 
     return przychod, gotowka, wydatki
 
-data = load_data()
-df_active_calc = data[data["status"] == "Aktywny"].copy()
 
+# --- PASEK BOCZNY (USTAWIENIE WIDOKU) ---
+with st.sidebar:
+    st.header("⚙️ Menu")
+    pokaz_rozliczone = st.checkbox("📂 Pokaż rozliczone wpisy (Archiwum)", value=False)
+    st.divider()
+
+# Ładowanie świeżych danych
+data = load_data()
+
+# Filtrowanie głównego widoku
+if pokaz_rozliczone:
+    df_active_calc = data.copy()
+else:
+    df_active_calc = data[data["status"] == "Aktywny"].copy()
+
+# Wyliczanie kafelków u góry strony
 if not df_active_calc.empty:
     df_active_calc["kwota"] = pd.to_numeric(df_active_calc["kwota"], errors="coerce").fillna(0)
     s_og = df_active_calc[df_active_calc["typ"] == "Przychód ogólny"]["kwota"].sum()
@@ -329,10 +343,8 @@ with c3:
                     st.session_state.s = ""
                     st.rerun()
 
-# --- 6. PASEK BOCZNY ---
+# --- BLOK ZAMYKANIA OKRESU W SIDEBARZE ---
 with st.sidebar:
-    st.header("⚙️ Menu")
-
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="open_send_picker"):
         st.session_state.show_send_picker = not st.session_state.show_send_picker
         if st.session_state.show_send_picker:
@@ -363,6 +375,7 @@ with st.sidebar:
 
     st.divider()
 
+    # Potrójne zabezpieczenie przed zamknięciem
     if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
         st.session_state.lock_step = 1
         st.session_state.lock_confirm_1 = False
@@ -385,7 +398,9 @@ with st.sidebar:
                 elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
                     st.warning("⚠️ Tej czynności nie można cofnąć!")
                     if st.button("💥 POTWIERDZAM I ROZLICZAM", use_container_width=True, type="primary", key="confirm_2_sidebar"):
-                        df_lock_range = filter_data_by_date_range(df_active_calc, lock_date_from, lock_date_to).copy()
+                        
+                        df_all_raw_data = load_data()
+                        df_lock_range = filter_data_by_date_range(df_all_raw_data[df_all_raw_data["status"] == "Aktywny"], lock_date_from, lock_date_to).copy()
                         
                         if not df_lock_range.empty:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range)
@@ -393,7 +408,6 @@ with st.sidebar:
                             c_r = df_lock_range.to_csv(index=False).encode("utf-8")
                             send_email_with_reports(p_r, c_r)
 
-                            # POPRAWKA: Dostosowanie do Twoich dokładnych nazw kolumn z Supabase
                             supabase.table("raporty").insert({
                                 "data_wygenerowania": get_now().isoformat(),
                                 "okres_od": lock_date_from.strftime("%d.%m.%Y"),
@@ -527,13 +541,17 @@ with st.sidebar:
         cookies.save()
         st.rerun()
 
-# --- 7. HISTORIA ---
+# --- 7. HISTORIA WPISÓW ---
 st.divider()
-st.subheader("Historia wpisów (Bieżący okres)")
+
+if pokaz_rozliczone:
+    st.subheader("Historia wpisów (Wszystkie dane - Archiwum)")
+else:
+    st.subheader("Historia wpisów (Bieżący okres)")
 
 if not df_active_calc.empty:
     df_editor_input = df_active_calc.iloc[::-1].copy()
-    df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
+    df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]]
     df_editor_input.insert(0, "Wybierz", False)
 
     res = st.data_editor(
@@ -542,8 +560,9 @@ if not df_active_calc.empty:
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
             "id": None,
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
+            "status": st.column_config.TextColumn("Status"),
         },
-        disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"],
+        disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"],
         hide_index=True,
         use_container_width=True,
         key="pizza_editor"
@@ -557,6 +576,37 @@ if not df_active_calc.empty:
         st.rerun()
 else:
     st.info("Brak wpisów w obecnym okresie.")
+
+
+# --- 7.5 PANEL ODZYSKIWANIA / PRZYWRACANIA WPISÓW (AKTYWNY W TRYBIE ARCHIWUM) ---
+if pokaz_rozliczone:
+    df_rozliczone_only = data[data["status"] == "Rozliczono"].copy()
+    if not df_rozliczone_only.empty:
+        with st.container(border=True):
+            st.markdown("### ↩️ Panel Przywracania Wpisów")
+            st.info("Zaznacz opcję poniżej, aby cofnąć zamknięcie wpisu i przenieść go z powrotem do aktywnego okresu rozliczeniowego.")
+            
+            # Tworzymy ładną listę opcji do wyboru
+            df_rozliczone_only["opcja_label"] = (
+                df_rozliczone_only["data_zdarzenia"].astype(str) + " | " +
+                df_rozliczone_only["typ"].astype(str) + " | " +
+                df_rozliczone_only["kwota"].astype(str) + " zł | " +
+                df_rozliczone_only["opis"].astype(str)
+            )
+            
+            wybrane_do_przywrocenia = st.multiselect(
+                "Wybierz wpisy do przywrócenia:",
+                options=df_rozliczone_only["id"].tolist(),
+                format_func=lambda x: df_rozliczone_only[df_rozliczone_only["id"] == x]["opcja_label"].values[0]
+            )
+            
+            if wybrane_do_przywrocenia:
+                if st.button("↩️ PRZYWRÓĆ WYBRANE WPISY", type="primary", use_container_width=True):
+                    for r_id in wybrane_do_przywrocenia:
+                        supabase.table("finanse").update({"status": "Aktywny"}).eq("id", int(r_id)).execute()
+                    st.success("✅ Wybrane wpisy zostały pomyślnie przywrócone do aktywnego okresu!")
+                    st.rerun()
+
 
 # --- 8. AKCJE MOBILNE ---
 st.divider()
@@ -602,7 +652,8 @@ if st.session_state.get("lock_step", 0) >= 1:
                 c_a, c_b = st.columns(2)
                 with c_a:
                     if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_2_mobile", type="primary"):
-                        df_lock_range_m = filter_data_by_date_range(df_active_calc, lock_date_from_m, lock_date_to_m).copy()
+                        df_all_raw_data_m = load_data()
+                        df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m[df_all_raw_data_m["status"] == "Aktywny"], lock_date_from_m, lock_date_to_m).copy()
                         
                         if not df_lock_range_m.empty:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
@@ -610,7 +661,6 @@ if st.session_state.get("lock_step", 0) >= 1:
                             c_r = df_lock_range_m.to_csv(index=False).encode("utf-8")
                             send_email_with_reports(p_r, c_r)
 
-                            # POPRAWKA: Mobilne dostosowanie do nazw kolumn
                             supabase.table("raporty").insert({
                                 "data_wygenerowania": get_now().isoformat(),
                                 "okres_od": lock_date_from_m.strftime("%d.%m.%Y"),
