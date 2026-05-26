@@ -92,10 +92,22 @@ def load_data():
     return pd.DataFrame(columns=["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"])
 
 def load_archived_reports():
+    # Poprawka 1: desc=True zamiast descending=True
     res = supabase.table("raporty").select("*").order("id", desc=True).execute()
+    expected_cols = ["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow"]
+    
     if res.data:
-        return pd.DataFrame(res.data)
-    return pd.DataFrame(columns=["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow"])
+        df = pd.DataFrame(res.data)
+        # Poprawka 2: Zabezpieczenie przed brakiem kolumn dla starych raportów
+        for col in expected_cols:
+            if col not in df.columns:
+                if col == "suma_przychodow":
+                    df[col] = 0.0
+                else:
+                    df[col] = "Brak daty"
+        return df
+        
+    return pd.DataFrame(columns=expected_cols)
 
 def filter_data_by_date_range(df, date_from, date_to):
     if df.empty:
@@ -512,19 +524,23 @@ with st.sidebar:
                         st.write(f"💰 Suma Przychodów: {r_row['suma_przychodow']:.2f} zł")
                         
                         try:
-                            d_from_parsed = datetime.strptime(r_row['okres_od'], "%d.%m.%Y").date()
-                            d_to_parsed = datetime.strptime(r_row['okres_do'], "%d.%m.%Y").date()
-                            
-                            df_all_raw = load_data()
-                            df_filtered_arch = filter_data_by_date_range(df_all_raw, d_from_parsed, d_to_parsed)
-                            
-                            st.download_button(
-                                "📥 Pobierz CSV (Dane)",
-                                data=df_filtered_arch.to_csv(index=False).encode("utf-8"),
-                                file_name=f"archiwum_{r_row['okres_od']}_{r_row['okres_do']}.csv",
-                                key=f"dl_arch_{r_row['id']}",
-                                use_container_width=True
-                            )
+                            # Jeśli daty są ustawione na "Brak daty" ze względu na starsze wpisy, pomijamy odtwarzanie pełnego zakresu
+                            if r_row['okres_od'] == "Brak daty" or r_row['okres_do'] == "Brak daty":
+                                st.warning("Ten wpis jest zbyt stary, aby odtworzyć pełne dane źródłowe.")
+                            else:
+                                d_from_parsed = datetime.strptime(r_row['okres_od'], "%d.%m.%Y").date()
+                                d_to_parsed = datetime.strptime(r_row['okres_do'], "%d.%m.%Y").date()
+                                
+                                df_all_raw = load_data()
+                                df_filtered_arch = filter_data_by_date_range(df_all_raw, d_from_parsed, d_to_parsed)
+                                
+                                st.download_button(
+                                    "📥 Pobierz CSV (Dane)",
+                                    data=df_filtered_arch.to_csv(index=False).encode("utf-8"),
+                                    file_name=f"archiwum_{r_row['okres_od']}_{r_row['okres_do']}.csv",
+                                    key=f"dl_arch_{r_row['id']}",
+                                    use_container_width=True
+                                )
                         except Exception:
                             st.error("Nie udało się odtworzyć pełnych danych.")
 
@@ -606,26 +622,29 @@ if pokaz_rozliczone:
                 
                 if st.button("↩️ OTWÓRZ OKRES NA NOWO (Przywróć wszystkie wpisy)", type="primary", use_container_width=True):
                     try:
-                        d_from_p = datetime.strptime(rap_dane['okres_od'], "%d.%m.%Y").date()
-                        d_to_p = datetime.strptime(rap_dane['okres_do'], "%d.%m.%Y").date()
-                        
-                        df_wszystkie_surowe = load_data()
-                        df_do_odblokowania = filter_data_by_date_range(
-                            df_wszystkie_surowe[df_wszystkie_surowe["status"] == "Rozliczono"], 
-                            d_from_p, 
-                            d_to_p
-                        )
-                        
-                        if not df_do_odblokowania.empty:
-                            for r_id in df_do_odblokowania["id"].tolist():
-                                supabase.table("finanse").update({"status": "Aktywny"}).eq("id", int(r_id)).execute()
-                            
-                            supabase.table("raporty").delete().eq("id", int(wybrany_raport_id)).execute()
-                            
-                            st.success(f"✅ Okres {rap_dane['okres_od']} - {rap_dane['okres_do']} został pomyślnie otwarty! Wszystkie wpisy wrócą na ekran główny.")
-                            st.rerun()
+                        if rap_dane['okres_od'] == "Brak daty" or rap_dane['okres_do'] == "Brak daty":
+                             st.error("Ten stary wpis nie zawiera dat. Otwarcie masowe jest niedostępne dla tego rekordu.")
                         else:
-                            st.warning("Nie znaleziono rozliczonych wpisów w tym przedziale dat.")
+                            d_from_p = datetime.strptime(rap_dane['okres_od'], "%d.%m.%Y").date()
+                            d_to_p = datetime.strptime(rap_dane['okres_do'], "%d.%m.%Y").date()
+                            
+                            df_wszystkie_surowe = load_data()
+                            df_do_odblokowania = filter_data_by_date_range(
+                                df_wszystkie_surowe[df_wszystkie_surowe["status"] == "Rozliczono"], 
+                                d_from_p, 
+                                d_to_p
+                            )
+                            
+                            if not df_do_odblokowania.empty:
+                                for r_id in df_do_odblokowania["id"].tolist():
+                                    supabase.table("finanse").update({"status": "Aktywny"}).eq("id", int(r_id)).execute()
+                                
+                                supabase.table("raporty").delete().eq("id", int(wybrany_raport_id)).execute()
+                                
+                                st.success(f"✅ Okres {rap_dane['okres_od']} - {rap_dane['okres_do']} został pomyślnie otwarty! Wszystkie wpisy wrócą na ekran główny.")
+                                st.rerun()
+                            else:
+                                st.warning("Nie znaleziono rozliczonych wpisów w tym przedziale dat.")
                     except Exception as e:
                         st.error(f"Błąd podczas przywracania okresu: {e}")
     else:
@@ -668,7 +687,7 @@ if st.session_state.get("lock_step", 0) >= 1:
         h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
         if h_mobile == "szef123":
             if not st.session_state.lock_confirm_1:
-                if st.button("❓ Jestes pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
+                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
                     st.session_state.lock_confirm_1 = True
                     st.rerun()
             
@@ -709,25 +728,4 @@ if st.session_state.get("lock_step", 0) >= 1:
 
         if not st.session_state.lock_confirm_1:
             if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
-                st.session_state.lock_step = 0
-                st.session_state.lock_confirm_1 = False
-                st.session_state.lock_confirm_2 = False
-                st.rerun()
-
-if st.session_state.get("show_delete_confirm", False) and len(st.session_state.selected_ids) > 0:
-    with st.container(border=True):
-        st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
-        d1, d2 = st.columns(2)
-
-        with d1:
-            if st.button("✅ Potwierdź usunięcie", use_container_width=True, key="delete_mobile_confirm"):
-                for rid in st.session_state.selected_ids:
-                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
-                st.session_state.selected_ids = []
-                st.session_state.show_delete_confirm = False
-                st.rerun()
-
-        with d2:
-            if st.button("Anuluj", use_container_width=True, key="delete_mobile_cancel"):
-                st.session_state.show_delete_confirm = False
-                st.rerun()
+                st.session_state.lock
