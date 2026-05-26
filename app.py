@@ -95,9 +95,8 @@ def load_archived_reports():
     res = supabase.table("raporty").select("*").order("id", descending=True).execute()
     if res.data:
         return pd.DataFrame(res.data)
-    return pd.DataFrame(columns=["id", "data", "okres_od", "okres_do", "przychod", "gotowka", "wydatki"])
+    return pd.DataFrame(columns=["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow"])
 
-# NAPRAWIONA FUNKCJA - teraz idealnie dopasowuje i zasysa daty formatu DD.MM.YYYY
 def filter_data_by_date_range(df, date_from, date_to):
     if df.empty:
         return df.copy()
@@ -105,7 +104,6 @@ def filter_data_by_date_range(df, date_from, date_to):
     temp = df.copy()
     temp["date_str"] = temp["data_zdarzenia"].astype(str).str.strip()
 
-    # Bezpieczne rozpoznawanie dat z rokiem lub bez
     parsed_dates = []
     current_year = get_now().year
     
@@ -395,14 +393,12 @@ with st.sidebar:
                             c_r = df_lock_range.to_csv(index=False).encode("utf-8")
                             send_email_with_reports(p_r, c_r)
 
-                            # Zapis podsumowania raportu do tabeli 'raporty'
+                            # POPRAWKA: Dostosowanie do Twoich dokładnych nazw kolumn z Supabase
                             supabase.table("raporty").insert({
-                                "data": get_now().strftime("%d.%m.%Y %H:%M"),
+                                "data_wygenerowania": get_now().isoformat(),
                                 "okres_od": lock_date_from.strftime("%d.%m.%Y"),
                                 "okres_do": lock_date_to.strftime("%d.%m.%Y"),
-                                "przychod": float(lock_p),
-                                "gotowka": float(lock_g),
-                                "wydatki": float(lock_w)
+                                "suma_przychodow": float(lock_p)
                             }).execute()
 
                             for rid in df_lock_range["id"].tolist():
@@ -441,7 +437,6 @@ with st.sidebar:
 
     st.divider()
 
-    # --- POBIERZ RAPORT: TERAZ POPRAWNIE ZASYSA HISTORIĘ Z SUPABASE ---
     if st.button("📥 Pobierz raport", use_container_width=True, key="open_report_picker"):
         st.session_state.show_report_picker = not st.session_state.show_report_picker
         if st.session_state.show_report_picker:
@@ -457,7 +452,6 @@ with st.sidebar:
             if report_date_from > report_date_to:
                 st.error("Data od nie może być większa niż data do")
             else:
-                # ZASSANIE: pobieramy całą bazę (łącznie ze starym kwietniem)
                 df_all_database = load_data() 
                 df_report_range = filter_data_by_date_range(df_all_database, report_date_from, report_date_to).copy()
                 report_p, report_g, report_w = calculate_range_sums(df_report_range)
@@ -502,10 +496,8 @@ with st.sidebar:
                 for _, r_row in df_arch.iterrows():
                     lbl = f"📅 {r_row['okres_od']} - {r_row['okres_do']}"
                     with st.expander(lbl):
-                        st.write(f"**Wygenerowano:** {r_row['data']}")
-                        st.write(f"💰 Przychód: {r_row['przychod']:.2f} zł")
-                        st.write(f"💵 Gotówka: {r_row['gotowka']:.2f} zł")
-                        st.write(f"📉 Wydatki: {r_row['wydatki']:.2f} zł")
+                        st.write(f"**Wygenerowano:** {r_row.get('data_wygenerowania', r_row.get('data', ''))}")
+                        st.write(f"💰 Suma Przychodów: {r_row['suma_przychodow']:.2f} zł")
                         
                         try:
                             d_from_parsed = datetime.strptime(r_row['okres_od'], "%d.%m.%Y").date()
@@ -618,14 +610,12 @@ if st.session_state.get("lock_step", 0) >= 1:
                             c_r = df_lock_range_m.to_csv(index=False).encode("utf-8")
                             send_email_with_reports(p_r, c_r)
 
-                            # Zapis podsumowania raportu do tabeli 'raporty'
+                            # POPRAWKA: Mobilne dostosowanie do nazw kolumn
                             supabase.table("raporty").insert({
-                                "data": get_now().strftime("%d.%m.%Y %H:%M"),
+                                "data_wygenerowania": get_now().isoformat(),
                                 "okres_od": lock_date_from_m.strftime("%d.%m.%Y"),
                                 "okres_do": lock_date_to_m.strftime("%d.%m.%Y"),
-                                "przychod": float(lock_p),
-                                "gotowka": float(lock_g),
-                                "wydatki": float(lock_w)
+                                "suma_przychodow": float(lock_p)
                             }).execute()
 
                             for rid in df_lock_range_m["id"].tolist():
