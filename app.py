@@ -141,22 +141,22 @@ def calculate_range_sums(df):
     return przychod, gotowka, wydatki
 
 
-# --- PASEK BOCZNY (USTAWIENIE WIDOKU) ---
+# --- PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     pokaz_rozliczone = st.checkbox("📂 Pokaż rozliczone wpisy (Archiwum)", value=False)
     st.divider()
 
-# Ładowanie świeżych danych
+# Ładowanie danych z bazy
 data = load_data()
 
-# Filtrowanie głównego widoku
+# Filtrowanie na podstawie wybranego trybu widoku
 if pokaz_rozliczone:
     df_active_calc = data.copy()
 else:
     df_active_calc = data[data["status"] == "Aktywny"].copy()
 
-# Wyliczanie kafelków u góry strony
+# Przeliczanie głównych kafelków finansowych
 if not df_active_calc.empty:
     df_active_calc["kwota"] = pd.to_numeric(df_active_calc["kwota"], errors="coerce").fillna(0)
     s_og = df_active_calc[df_active_calc["typ"] == "Przychód ogólny"]["kwota"].sum()
@@ -343,7 +343,7 @@ with c3:
                     st.session_state.s = ""
                     st.rerun()
 
-# --- BLOK ZAMYKANIA OKRESU W SIDEBARZE ---
+# --- 6. PASEK BOCZNY (AKCJE) ---
 with st.sidebar:
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="open_send_picker"):
         st.session_state.show_send_picker = not st.session_state.show_send_picker
@@ -375,7 +375,6 @@ with st.sidebar:
 
     st.divider()
 
-    # Potrójne zabezpieczenie przed zamknięciem
     if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
         st.session_state.lock_step = 1
         st.session_state.lock_confirm_1 = False
@@ -398,7 +397,6 @@ with st.sidebar:
                 elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
                     st.warning("⚠️ Tej czynności nie można cofnąć!")
                     if st.button("💥 POTWIERDZAM I ROZLICZAM", use_container_width=True, type="primary", key="confirm_2_sidebar"):
-                        
                         df_all_raw_data = load_data()
                         df_lock_range = filter_data_by_date_range(df_all_raw_data[df_all_raw_data["status"] == "Aktywny"], lock_date_from, lock_date_to).copy()
                         
@@ -578,34 +576,61 @@ else:
     st.info("Brak wpisów w obecnym okresie.")
 
 
-# --- 7.5 PANEL ODZYSKIWANIA / PRZYWRACANIA WPISÓW (AKTYWNY W TRYBIE ARCHIWUM) ---
+# --- 7.5 PANEL HURTOWEGO ODZYSKIWANIA CAŁEGO RAPORTU (AKTYWNY W TRYBIE ARCHIWUM) ---
 if pokaz_rozliczone:
-    df_rozliczone_only = data[data["status"] == "Rozliczono"].copy()
-    if not df_rozliczone_only.empty:
+    df_raporty_baza = load_archived_reports()
+    
+    if not df_raporty_baza.empty:
         with st.container(border=True):
-            st.markdown("### ↩️ Panel Przywracania Wpisów")
-            st.info("Zaznacz opcję poniżej, aby cofnąć zamknięcie wpisu i przenieść go z powrotem do aktywnego okresu rozliczeniowego.")
+            st.markdown("### ↩️ Hurtowe Przywracanie Całego Okresu")
+            st.info("Wybierz zamknięty raport z listy. Kliknięcie przycisku przywróci WSZYSTKIE wpisy z tamtego okresu z powrotem do bieżących rozliczeń.")
             
-            # Tworzymy ładną listę opcji do wyboru
-            df_rozliczone_only["opcja_label"] = (
-                df_rozliczone_only["data_zdarzenia"].astype(str) + " | " +
-                df_rozliczone_only["typ"].astype(str) + " | " +
-                df_rozliczone_only["kwota"].astype(str) + " zł | " +
-                df_rozliczone_only["opis"].astype(str)
+            df_raporty_baza["raport_label"] = (
+                "📅 Okres: " + df_raporty_baza["okres_od"].astype(str) + 
+                " do " + df_raporty_baza["okres_do"].astype(str) + 
+                " | Przychód: " + df_raporty_baza["suma_przychodow"].astype(str) + " zł"
             )
             
-            wybrane_do_przywrocenia = st.multiselect(
-                "Wybierz wpisy do przywrócenia:",
-                options=df_rozliczone_only["id"].tolist(),
-                format_func=lambda x: df_rozliczone_only[df_rozliczone_only["id"] == x]["opcja_label"].values[0]
+            raporty_dict = df_raporty_baza.set_index("id").to_dict(orient="index")
+            
+            wybrany_raport_id = st.selectbox(
+                "Wybierz raport, który chcesz anulować i przywrócić:",
+                options=df_raporty_baza["id"].tolist(),
+                format_func=lambda x: raporty_dict[x]["raport_label"],
+                index=None,
+                placeholder="Wybierz raport z listy..."
             )
             
-            if wybrane_do_przywrocenia:
-                if st.button("↩️ PRZYWRÓĆ WYBRANE WPISY", type="primary", use_container_width=True):
-                    for r_id in wybrane_do_przywrocenia:
-                        supabase.table("finanse").update({"status": "Aktywny"}).eq("id", int(r_id)).execute()
-                    st.success("✅ Wybrane wpisy zostały pomyślnie przywrócone do aktywnego okresu!")
-                    st.rerun()
+            if wybrany_raport_id is not None:
+                rap_dane = raporty_dict[wybrany_raport_id]
+                
+                if st.button("↩️ OTWÓRZ OKRES NA NOWO (Przywróć wszystkie wpisy)", type="primary", use_container_width=True):
+                    try:
+                        d_from_p = datetime.strptime(rap_dane['okres_od'], "%d.%m.%Y").date()
+                        d_to_p = datetime.strptime(rap_dane['okres_do'], "%d.%m.%Y").date()
+                        
+                        df_wszystkie_surowe = load_data()
+                        df_do_odblokowania = filter_data_by_date_range(
+                            df_wszystkie_surowe[df_wszystkie_surowe["status"] == "Rozliczono"], 
+                            d_from_p, 
+                            d_to_p
+                        )
+                        
+                        if not df_do_odblokowania.empty:
+                            for r_id in df_do_odblokowania["id"].tolist():
+                                supabase.table("finanse").update({"status": "Aktywny"}).eq("id", int(r_id)).execute()
+                            
+                            supabase.table("raporty").delete().eq("id", int(wybrany_raport_id)).execute()
+                            
+                            st.success(f"✅ Okres {rap_dane['okres_od']} - {rap_dane['okres_do']} został pomyślnie otwarty! Wszystkie wpisy wrócą na ekran główny.")
+                            st.rerun()
+                        else:
+                            st.warning("Nie znaleziono rozliczonych wpisów w tym przedziale dat.")
+                    except Exception as e:
+                        st.error(f"Błąd podczas przywracania okresu: {e}")
+    else:
+        with st.container(border=True):
+            st.info("Brak zamkniętych raportów w bazie danych.")
 
 
 # --- 8. AKCJE MOBILNE ---
@@ -643,7 +668,7 @@ if st.session_state.get("lock_step", 0) >= 1:
         h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
         if h_mobile == "szef123":
             if not st.session_state.lock_confirm_1:
-                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
+                if st.button("❓ Jestes pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
                     st.session_state.lock_confirm_1 = True
                     st.rerun()
             
