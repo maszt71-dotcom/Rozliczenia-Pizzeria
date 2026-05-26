@@ -217,6 +217,11 @@ if "show_report_picker" not in st.session_state:
 if "show_send_picker" not in st.session_state:
     st.session_state.show_send_picker = False
 
+if "lock_confirm_1" not in st.session_state:
+    st.session_state.lock_confirm_1 = False
+if "lock_confirm_2" not in st.session_state:
+    st.session_state.lock_confirm_2 = False
+
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
@@ -362,25 +367,56 @@ with st.sidebar:
 
     if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
         st.session_state.lock_step = 1
+        st.session_state.lock_confirm_1 = False
+        st.session_state.lock_confirm_2 = False
+        st.rerun()
 
     if st.session_state.get("lock_step", 0) >= 1:
         with st.container(border=True):
+            lock_date_from = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_sidebar")
+            lock_date_to = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_sidebar")
+            
             h = st.text_input("Hasło Szefa:", type="password", key="boss_pass_sidebar")
+            
             if h == "szef123":
-                if st.button("✅ POTWIERDZAM I ROZLICZAM", use_container_width=True, key="confirm_close_sidebar"):
-                    if not df_active_calc.empty:
-                        p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
-                        c_r = df_active_calc.to_csv(index=False).encode("utf-8")
-                        send_email_with_reports(p_r, c_r)
+                if not st.session_state.lock_confirm_1:
+                    if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_sidebar"):
+                        st.session_state.lock_confirm_1 = True
+                        st.rerun()
+                
+                elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
+                    st.warning("⚠️ Tej czynności nie można cofnąć!")
+                    if st.button("💥 POTWIERDZAM I ROZLICZAM", use_container_width=True, type="primary", key="confirm_2_sidebar"):
+                        df_lock_range = filter_data_by_date_range(df_active_calc, lock_date_from, lock_date_to).copy()
+                        
+                        if not df_lock_range.empty:
+                            lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range)
+                            p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w)
+                            c_r = df_lock_range.to_csv(index=False).encode("utf-8")
+                            send_email_with_reports(p_r, c_r)
 
-                        for rid in df_active_calc["id"].tolist():
-                            supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
+                            # NOWOŚĆ: Zapis podsumowania raportu bezpośrednio do tabeli 'raporty' w Supabase
+                            supabase.table("raporty").insert({
+                                "data": get_now().strftime("%d.%m.%Y %H:%M"),
+                                "okres_od": lock_date_from.strftime("%d.%m.%Y"),
+                                "okres_do": lock_date_to.strftime("%d.%m.%Y"),
+                                "przychod": float(lock_p),
+                                "gotowka": float(lock_g),
+                                "wydatki": float(lock_w)
+                            }).execute()
+
+                            for rid in df_lock_range["id"].tolist():
+                                supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
 
                         st.session_state.lock_step = 0
+                        st.session_state.lock_confirm_1 = False
+                        st.session_state.lock_confirm_2 = False
                         st.rerun()
 
             if st.button("Anuluj", use_container_width=True, key="cancel_close_sidebar"):
                 st.session_state.lock_step = 0
+                st.session_state.lock_confirm_1 = False
+                st.session_state.lock_confirm_2 = False
                 st.rerun()
 
     st.divider()
@@ -523,6 +559,8 @@ with m1:
 with m2:
     if st.button("🔒 Zamknij", use_container_width=True, key="mobile_lock"):
         st.session_state.lock_step = 1
+        st.session_state.lock_confirm_1 = False
+        st.session_state.lock_confirm_2 = False
         st.rerun()
 
 with m3:
@@ -534,25 +572,59 @@ with m3:
 if st.session_state.get("lock_step", 0) >= 1:
     with st.container(border=True):
         st.markdown("**Zamknij i rozlicz okres**")
+        lock_date_from_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
+        lock_date_to_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
+        
         h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
         if h_mobile == "szef123":
-            c_a, c_b = st.columns(2)
-            with c_a:
-                if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_close_mobile"):
-                    if not df_active_calc.empty:
-                        p_r = create_pdf(df_active_calc, s_og, s_got, s_wyd)
-                        c_r = df_active_calc.to_csv(index=False).encode("utf-8")
-                        send_email_with_reports(p_r, c_r)
+            if not st.session_state.lock_confirm_1:
+                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
+                    st.session_state.lock_confirm_1 = True
+                    st.rerun()
+            
+            elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
+                st.warning("⚠️ Tej czynności nie można cofnąć!")
+                c_a, c_b = st.columns(2)
+                with c_a:
+                    if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_2_mobile", type="primary"):
+                        df_lock_range_m = filter_data_by_date_range(df_active_calc, lock_date_from_m, lock_date_to_m).copy()
+                        
+                        if not df_lock_range_m.empty:
+                            lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
+                            p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w)
+                            c_r = df_lock_range_m.to_csv(index=False).encode("utf-8")
+                            send_email_with_reports(p_r, c_r)
 
-                        for rid in df_active_calc["id"].tolist():
-                            supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
+                            # NOWOŚĆ: Mobilny zapis podsumowania raportu do tabeli 'raporty' w Supabase
+                            supabase.table("raporty").insert({
+                                "data": get_now().strftime("%d.%m.%Y %H:%M"),
+                                "okres_od": lock_date_from_m.strftime("%d.%m.%Y"),
+                                "okres_do": lock_date_to_m.strftime("%d.%m.%Y"),
+                                "przychod": float(lock_p),
+                                "gotowka": float(lock_g),
+                                "wydatki": float(lock_w)
+                            }).execute()
+
+                            for rid in df_lock_range_m["id"].tolist():
+                                supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
 
                         st.session_state.lock_step = 0
+                        st.session_state.lock_confirm_1 = False
+                        st.session_state.lock_confirm_2 = False
                         st.rerun()
-            with c_b:
-                if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
-                    st.session_state.lock_step = 0
-                    st.rerun()
+                with c_b:
+                    if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile_inner"):
+                        st.session_state.lock_step = 0
+                        st.session_state.lock_confirm_1 = False
+                        st.session_state.lock_confirm_2 = False
+                        st.rerun()
+
+        if not st.session_state.lock_confirm_1:
+            if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
+                st.session_state.lock_step = 0
+                st.session_state.lock_confirm_1 = False
+                st.session_state.lock_confirm_2 = False
+                st.rerun()
 
 if st.session_state.get("show_delete_confirm", False) and len(st.session_state.selected_ids) > 0:
     with st.container(border=True):
