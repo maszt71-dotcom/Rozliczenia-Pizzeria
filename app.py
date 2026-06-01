@@ -441,16 +441,36 @@ def apply_main_filters(df, date_from, date_to):
 def apply_history_filters(df, date_from, date_to):
     return filter_data_by_date_range(df.copy(), date_from, date_to).copy()
 
+def get_latest_event_date(df):
+    dates = []
+    if not df.empty and "data_zdarzenia" in df.columns:
+        for val in df["data_zdarzenia"].astype(str).str.strip():
+            parsed = parse_event_date(val)
+            if parsed:
+                dates.append(parsed)
+    return max(dates) if dates else get_now().date()
+
+
 default_date_from, default_date_to = get_default_date_range(data)
+
+# Główne kafelki i historia pokazują tylko wpisy niewłączone jeszcze do zapisanego raportu.
+df_current_all = exclude_archived_entries(data)
+default_cumulative_from, _ = get_default_date_range(df_current_all)
 
 # --- PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     pokaz_rozliczone = False
+    st.markdown("**Kwoty narastająco:**")
+    cumulative_date_from = st.date_input("Pokaż od", value=default_cumulative_from, key="cumulative_date_from")
     st.divider()
 
-# Główne kafelki i historia pokazują tylko wpisy niewłączone jeszcze do zapisanego raportu.
-df_current = exclude_archived_entries(data)
+cumulative_date_to = get_latest_event_date(df_current_all)
+if cumulative_date_from > cumulative_date_to:
+    df_current = pd.DataFrame(columns=data.columns)
+else:
+    df_current = filter_data_by_date_range(df_current_all, cumulative_date_from, cumulative_date_to).copy()
+
 df_active_calc = df_current.copy()
 df_history = df_current.copy()
 
@@ -572,6 +592,7 @@ if "lock_confirm_2" not in st.session_state:
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
+st.caption(f"Kwoty narastająco od {cumulative_date_from.strftime('%d.%m.%Y')} do {cumulative_date_to.strftime('%d.%m.%Y')}")
 
 st.markdown(
     f'<div style="background-color:#dbeafe; padding:15px; border-radius:10px; text-align:center; margin-bottom:12px;">Gotówka z przeniesienia: <b>{s_przeniesienie:,.2f} zł</b></div>',
