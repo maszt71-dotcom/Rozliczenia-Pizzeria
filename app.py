@@ -190,7 +190,7 @@ if not is_valid_auth_token(cookies.get("auth_token")):
         st.stop()
 
     with st.container(border=True):
-        haslo = st.text_input("Hasło", type="password", autofocus=True)
+        haslo = st.text_input("Hasło", type="password")
         if st.button("Zaloguj", type="primary", use_container_width=True):
             if check_secret_password(haslo, "APP_PASSWORD"):
                 cookies["auth_token"] = make_auth_token()
