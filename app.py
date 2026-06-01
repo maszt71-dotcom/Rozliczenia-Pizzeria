@@ -728,4 +728,7 @@ if st.session_state.get("lock_step", 0) >= 1:
 
         if not st.session_state.lock_confirm_1:
             if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
-                st.session_state.lock
+                st.session_state.lock_step = 0
+st.session_state.lock_confirm_1 = False
+st.session_state.lock_confirm_2 = False
+st.rerun()
