@@ -30,8 +30,6 @@ DEFAULT_SECRETS = {
 }
 
 def get_secret(name, default=None):
-    if name.startswith("REPORT_") and name in DEFAULT_SECRETS:
-        return DEFAULT_SECRETS[name]
     try:
         return st.secrets.get(name, DEFAULT_SECRETS.get(name, default))
     except Exception:
@@ -135,22 +133,55 @@ def load_report_rows(report_row):
     return sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), d_from_parsed, d_to_parsed))
 
 # --- FUNKCJA WYSYŁKI E-MAIL ---
+def clean_app_password(value):
+    return str(value or "").replace(" ", "").strip()
+
+def get_email_configs():
+    configs = []
+
+    try:
+        secrets_receiver = st.secrets.get("REPORT_RECEIVER_EMAIL")
+        secrets_sender = st.secrets.get("REPORT_SENDER_EMAIL")
+        secrets_password = st.secrets.get("REPORT_EMAIL_PASSWORD")
+        if secrets_receiver and secrets_sender and secrets_password:
+            configs.append({
+                "receiver": str(secrets_receiver).strip(),
+                "sender": str(secrets_sender).strip(),
+                "password": clean_app_password(secrets_password),
+                "source": "Streamlit secrets",
+            })
+    except Exception:
+        pass
+
+    configs.append({
+        "receiver": DEFAULT_SECRETS["REPORT_RECEIVER_EMAIL"],
+        "sender": DEFAULT_SECRETS["REPORT_SENDER_EMAIL"],
+        "password": clean_app_password(DEFAULT_SECRETS["REPORT_EMAIL_PASSWORD"]),
+        "source": "kod aplikacji",
+    })
+
+    # Awaryjnie sprawdź oba adresy, bo w rozmowie pojawiły się dwie bardzo podobne nazwy konta.
+    for sender in ("mange989592@gmail.com", "mange929598@gmail.com"):
+        configs.append({
+            "receiver": DEFAULT_SECRETS["REPORT_RECEIVER_EMAIL"],
+            "sender": sender,
+            "password": clean_app_password(DEFAULT_SECRETS["REPORT_EMAIL_PASSWORD"]),
+            "source": "awaryjny nadawca",
+        })
+
+    unique = []
+    seen = set()
+    for cfg in configs:
+        key = (cfg["receiver"], cfg["sender"], cfg["password"])
+        if cfg["receiver"] and cfg["sender"] and cfg["password"] and key not in seen:
+            unique.append(cfg)
+            seen.add(key)
+    return unique
+
 def has_email_config():
-    return bool(
-        get_secret("REPORT_RECEIVER_EMAIL")
-        and get_secret("REPORT_SENDER_EMAIL")
-        and get_secret("REPORT_EMAIL_PASSWORD")
-    )
+    return bool(get_email_configs())
 
-def send_email_with_reports(pdf_data, csv_data):
-    receiver_email = get_secret("REPORT_RECEIVER_EMAIL")
-    sender_email = get_secret("REPORT_SENDER_EMAIL")
-    password = get_secret("REPORT_EMAIL_PASSWORD")
-
-    if not receiver_email or not sender_email or not password:
-        st.error("Brakuje konfiguracji e-mail w st.secrets.")
-        return False
-
+def build_email_message(sender_email, receiver_email, pdf_data, csv_data):
     msg = MIMEMultipart()
     msg["From"] = sender_email
     msg["To"] = receiver_email
@@ -163,22 +194,35 @@ def send_email_with_reports(pdf_data, csv_data):
         encoders.encode_base64(part)
         part.add_header("Content-Disposition", f"attachment; filename=raport.{ext}")
         msg.attach(part)
+    return msg
 
-    try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(sender_email, password)
-            server.send_message(msg)
-        return True
-    except smtplib.SMTPAuthenticationError:
+def send_email_with_reports(pdf_data, csv_data):
+    configs = get_email_configs()
+    if not configs:
+        st.error("Brakuje konfiguracji e-mail.")
+        return False
+
+    auth_failed = []
+    for cfg in configs:
+        try:
+            msg = build_email_message(cfg["sender"], cfg["receiver"], pdf_data, csv_data)
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(cfg["sender"], cfg["password"])
+                server.send_message(msg)
+            return True
+        except smtplib.SMTPAuthenticationError:
+            auth_failed.append(cfg["sender"])
+        except Exception:
+            continue
+
+    if auth_failed:
         st.error(
-            "Nie udało się wysłać maila: Gmail odrzucił adres nadawcy albo hasło aplikacji. "
-            "Wygeneruj nowe hasło aplikacji dla konta nadawcy i wpisz je w REPORT_EMAIL_PASSWORD."
+            "Nie udało się wysłać maila: Gmail odrzucił hasło aplikacji dla konta nadawcy. "
+            "Wygeneruj nowe hasło aplikacji Gmail dla konta: " + ", ".join(sorted(set(auth_failed)))
         )
-        return False
-    except Exception:
+    else:
         st.error("Nie udało się wysłać maila. Sprawdź konfigurację Gmail i spróbuj ponownie.")
-        return False
+    return False
 
 # --- 1. KONFIGURACJA I LOGOWANIE ---
 st.set_page_config(
