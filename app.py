@@ -327,19 +327,11 @@ default_date_from, default_date_to = get_default_date_range(data)
 with st.sidebar:
     st.header("⚙️ Menu")
     pokaz_rozliczone = False
-    st.markdown("**Zakres danych na ekranie:**")
-    main_date_from = st.date_input("Data od", value=default_date_from, key="main_date_from_current_month")
-    main_date_to = st.date_input("Data do", value=default_date_to, key="main_date_to_current_month")
     st.divider()
 
-# Filtrowanie na podstawie wybranego trybu widoku i zakresu dat
-if main_date_from > main_date_to:
-    st.error("Data od nie może być większa niż data do")
-    df_active_calc = pd.DataFrame(columns=data.columns)
-else:
-    df_active_calc = apply_main_filters(data, main_date_from, main_date_to)
-
-df_history = apply_history_filters(data, main_date_from, main_date_to) if main_date_from <= main_date_to else pd.DataFrame(columns=data.columns)
+# Główne kafelki i historia pokazują bieżące aktywne wpisy bez filtra dat.
+df_active_calc = data[data["status"] == "Aktywny"].copy() if not data.empty else pd.DataFrame(columns=data.columns)
+df_history = data.copy()
 
 # Przeliczanie głównych kafelków finansowych
 if not df_active_calc.empty:
@@ -438,7 +430,6 @@ if "lock_confirm_2" not in st.session_state:
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
-st.caption(f"Okres kafelków: {main_date_from.strftime('%d.%m.%Y')} - {main_date_to.strftime('%d.%m.%Y')} | kafelki liczą tylko wpisy aktywne")
 
 st.markdown(
     f'<div style="background-color:#dbeafe; padding:15px; border-radius:10px; text-align:center; margin-bottom:12px;">Gotówka z przeniesienia: <b>{s_przeniesienie:,.2f} zł</b></div>',
@@ -675,28 +666,35 @@ with st.sidebar:
 
     if st.session_state.show_report_picker:
         with st.container(border=True):
-            st.info(f"Raport zostanie pobrany z historii wpisów: {main_date_from.strftime('%d.%m.%Y')} - {main_date_to.strftime('%d.%m.%Y')}.")
-            df_report_range = sort_df_by_data_zdarzenia(df_history.copy())
-            report_p, report_g, report_w = calculate_range_sums(df_report_range)
-            st.write(f"Przychód: **{report_p:,.2f} zł**")
-            st.write(f"Gotówka: **{report_g:,.2f} zł**")
-            st.write(f"Wydatki: **{report_w:,.2f} zł**")
+            report_date_from = st.date_input("Data od", value=default_date_from, key="report_date_from_picker")
+            report_date_to = st.date_input("Data do", value=default_date_to, key="report_date_to_picker")
 
-            _ = st.download_button(
-                "📥 Pobierz PDF (Szczegółowy)",
-                data=create_pdf(df_report_range, report_p, report_g, report_w),
-                file_name=f"raport_{main_date_from}_{main_date_to}.pdf",
-                use_container_width=True,
-                key="download_pdf_range"
-            )
+            if report_date_from > report_date_to:
+                st.error("Data od nie może być większa niż data do")
+            else:
+                st.info(f"Raport zostanie pobrany z historii wpisów: {report_date_from.strftime('%d.%m.%Y')} - {report_date_to.strftime('%d.%m.%Y')}.")
+                df_report_range = filter_data_by_date_range(data, report_date_from, report_date_to).copy()
+                df_report_range = sort_df_by_data_zdarzenia(df_report_range)
+                report_p, report_g, report_w = calculate_range_sums(df_report_range)
+                st.write(f"Przychód: **{report_p:,.2f} zł**")
+                st.write(f"Gotówka: **{report_g:,.2f} zł**")
+                st.write(f"Wydatki: **{report_w:,.2f} zł**")
 
-            _ = st.download_button(
-                "📥 Pobierz CSV (Szczegółowy)",
-                data=df_report_range.to_csv(index=False).encode("utf-8"),
-                file_name=f"raport_{main_date_from}_{main_date_to}.csv",
-                use_container_width=True,
-                key="download_csv_range"
-            )
+                _ = st.download_button(
+                    "📥 Pobierz PDF (Szczegółowy)",
+                    data=create_pdf(df_report_range, report_p, report_g, report_w),
+                    file_name=f"raport_{report_date_from}_{report_date_to}.pdf",
+                    use_container_width=True,
+                    key="download_pdf_range"
+                )
+
+                _ = st.download_button(
+                    "📥 Pobierz CSV (Szczegółowy)",
+                    data=df_report_range.to_csv(index=False).encode("utf-8"),
+                    file_name=f"raport_{report_date_from}_{report_date_to}.csv",
+                    use_container_width=True,
+                    key="download_csv_range"
+                )
 
             if st.button("↩️ Powrót", use_container_width=True, key="report_back_btn"):
                 st.session_state.show_report_picker = False
