@@ -76,7 +76,8 @@ if not cookies.ready():
 
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
-    haslo = st.text_input("Hasło", type="password")
+    # DODANO AUTOFOCUS - Kursor myszy pojawia się tu automatycznie po załadowaniu
+    haslo = st.text_input("Hasło", type="password", autofocus=True)
     if st.button("Zaloguj"):
         if haslo == "dup@":
             cookies["is_logged"] = "true"
@@ -498,7 +499,6 @@ with st.sidebar:
             else:
                 df_all_database = load_data() 
                 df_report_range = filter_data_by_date_range(df_all_database, report_date_from, report_date_to).copy()
-                # NOWOŚĆ: Sortowanie danych chronologicznie przed przekazaniem do PDF i CSV
                 df_report_range = sort_df_by_data_zdarzenia(df_report_range)
                 
                 report_p, report_g, report_w = calculate_range_sums(df_report_range)
@@ -587,7 +587,6 @@ else:
     st.subheader("Historia wpisów (Bieżący okres)")
 
 if not df_active_calc.empty:
-    # Wykorzystanie uniwersalnej funkcji do ułożenia danych chronologicznie na ekranie głównym
     df_editor_input = sort_df_by_data_zdarzenia(df_active_calc)
     df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]]
     df_editor_input.insert(0, "Wybierz", False)
@@ -668,7 +667,7 @@ if pokaz_rozliczone:
                                 st.success(f"✅ Okres {rap_dane['okres_od']} - {rap_dane['okres_do']} został pomyślnie otwarty! Wszystkie wpisy wrócą na ekran główny.")
                                 st.rerun()
                             else:
-                                st.warning("Nie znaleziono rozliczonych wpisów w tym przedziale dat.")
+                                st.warning("Nie znaleziono rozliczonych wpisów in tym przedziale dat.")
                     except Exception as e:
                         st.error(f"Błąd podczas przywracania okresu: {e}")
     else:
