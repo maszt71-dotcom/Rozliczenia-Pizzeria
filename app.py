@@ -297,14 +297,20 @@ data = load_data()
 def get_default_date_range(df):
     dates = []
     if not df.empty and "data_zdarzenia" in df.columns:
-        for val in df["data_zdarzenia"].astype(str).str.strip():
+        source = df.copy()
+        if "status" in source.columns:
+            active = source[source["status"] == "Aktywny"].copy()
+            if not active.empty:
+                source = active
+        for val in source["data_zdarzenia"].astype(str).str.strip():
             parsed = parse_event_date(val)
             if parsed:
                 dates.append(parsed)
     if dates:
-        return min(dates), max(dates)
+        latest = max(dates)
+        return latest.replace(day=1), latest
     today = get_now().date()
-    return today, today
+    return today.replace(day=1), today
 
 def apply_main_filters(df, date_from, date_to):
     if df.empty:
@@ -322,8 +328,8 @@ with st.sidebar:
     st.header("⚙️ Menu")
     pokaz_rozliczone = False
     st.markdown("**Zakres danych na ekranie:**")
-    main_date_from = st.date_input("Data od", value=default_date_from, key="main_date_from")
-    main_date_to = st.date_input("Data do", value=default_date_to, key="main_date_to")
+    main_date_from = st.date_input("Data od", value=default_date_from, key="main_date_from_current_month")
+    main_date_to = st.date_input("Data do", value=default_date_to, key="main_date_to_current_month")
     st.divider()
 
 # Filtrowanie na podstawie wybranego trybu widoku i zakresu dat
@@ -432,6 +438,7 @@ if "lock_confirm_2" not in st.session_state:
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
+st.caption(f"Okres kafelków: {main_date_from.strftime('%d.%m.%Y')} - {main_date_to.strftime('%d.%m.%Y')} | kafelki liczą tylko wpisy aktywne")
 
 st.markdown(
     f'<div style="background-color:#dbeafe; padding:15px; border-radius:10px; text-align:center; margin-bottom:12px;">Gotówka z przeniesienia: <b>{s_przeniesienie:,.2f} zł</b></div>',
