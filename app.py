@@ -174,7 +174,7 @@ if not is_valid_auth_token(cookies.get("auth_token")):
         st.error("Brakuje APP_PASSWORD w st.secrets.")
         st.stop()
 
-    haslo = st.text_input("Hasło", type="password")
+    haslo = st.text_input("Hasło", type="password", autofocus=True)
     if st.button("Zaloguj"):
         if check_secret_password(haslo, "APP_PASSWORD"):
             cookies["auth_token"] = make_auth_token()
@@ -188,24 +188,8 @@ if not is_valid_auth_token(cookies.get("auth_token")):
 def load_data():
     res = supabase.table("finanse").select("*").order("id").execute()
     if res.data:
-        df = pd.DataFrame(res.data)
-    else:
-        df = pd.DataFrame()
-
-    expected_cols = ["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"]
-    defaults = {
-        "id": None,
-        "data": "",
-        "typ": "",
-        "kwota": 0.0,
-        "opis": "",
-        "status": "Aktywny",
-        "data_zdarzenia": "",
-    }
-    for col in expected_cols:
-        if col not in df.columns:
-            df[col] = defaults[col]
-    return df
+        return pd.DataFrame(res.data)
+    return pd.DataFrame(columns=["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"])
 
 def load_archived_reports():
     res = supabase.table("raporty").select("*").order("id", desc=True).execute()
@@ -221,7 +205,6 @@ def load_archived_reports():
                     df[col] = None
                 else:
                     df[col] = "Brak daty"
-        df["suma_przychodow"] = pd.to_numeric(df["suma_przychodow"], errors="coerce").fillna(0.0)
         return df
         
     return pd.DataFrame(columns=expected_cols)
@@ -231,8 +214,6 @@ def filter_data_by_date_range(df, date_from, date_to):
         return df.copy()
 
     temp = df.copy()
-    if "data_zdarzenia" not in temp.columns:
-        temp["data_zdarzenia"] = ""
     temp["date_str"] = temp["data_zdarzenia"].astype(str).str.strip()
 
     parsed_dates = []
@@ -254,10 +235,6 @@ def calculate_range_sums(df):
         return 0.0, 0.0, 0.0
 
     temp = df.copy()
-    if "kwota" not in temp.columns:
-        temp["kwota"] = 0.0
-    if "typ" not in temp.columns:
-        temp["typ"] = ""
     temp["kwota"] = pd.to_numeric(temp["kwota"], errors="coerce").fillna(0)
 
     przychod = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
@@ -271,10 +248,6 @@ def sort_df_by_data_zdarzenia(df):
     if df.empty:
         return df
     temp = df.copy()
-    if "data_zdarzenia" not in temp.columns:
-        temp["data_zdarzenia"] = ""
-    if "id" not in temp.columns:
-        temp["id"] = 0
     parsed = []
     for val in temp["data_zdarzenia"].astype(str).str.strip():
         parsed.append(parse_event_date(val) or datetime.min.date())
@@ -364,10 +337,7 @@ def create_pdf(df, p, g, w):
 
         fill = not fill
 
-    pdf_output = pdf.output(dest="S")
-    if isinstance(pdf_output, (bytes, bytearray)):
-        return bytes(pdf_output)
-    return pdf_output.encode("latin-1")
+    return pdf.output(dest="S").encode("latin-1")
 
 # --- 4. STANY SESJI ---
 if "s" not in st.session_state:
@@ -534,9 +504,7 @@ with st.sidebar:
             
             h = st.text_input("Hasło Szefa:", type="password", key="boss_pass_sidebar")
             
-            if lock_date_from > lock_date_to:
-                st.error("Data od nie może być większa niż data do")
-            elif check_secret_password(h, "BOSS_PASSWORD"):
+            if check_secret_password(h, "BOSS_PASSWORD"):
                 if not st.session_state.lock_confirm_1:
                     if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_sidebar"):
                         st.session_state.lock_confirm_1 = True
@@ -553,13 +521,11 @@ with st.sidebar:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range)
                             p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w)
                             c_r = df_lock_range.to_csv(index=False).encode("utf-8")
-                            if send_email_with_reports(p_r, c_r):
-                                lock_ids = df_lock_range["id"].tolist()
-                                insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                                update_finance_status(lock_ids, "Rozliczono")
-                            else:
-                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu.")
-                                st.stop()
+                            send_email_with_reports(p_r, c_r)
+
+                            lock_ids = df_lock_range["id"].tolist()
+                            insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
+                            update_finance_status(lock_ids, "Rozliczono")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
@@ -767,7 +733,7 @@ if pokaz_rozliczone:
                                 st.success(f"✅ Okres {rap_dane['okres_od']} - {rap_dane['okres_do']} został pomyślnie otwarty! Wszystkie wpisy wrócą na ekran główny.")
                                 st.rerun()
                             else:
-                                st.warning("Nie znaleziono rozliczonych wpisów w tym przedziale dat.")
+                                st.warning("Nie znaleziono rozliczonych wpisów in tym przedziale dat.")
                     except Exception as e:
                         st.error(f"Błąd podczas przywracania okresu: {e}")
     else:
@@ -809,9 +775,7 @@ if st.session_state.get("lock_step", 0) >= 1:
         lock_date_to_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
         
         h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
-        if lock_date_from_m > lock_date_to_m:
-            st.error("Data od nie może być większa niż data do")
-        elif check_secret_password(h_mobile, "BOSS_PASSWORD"):
+        if check_secret_password(h_mobile, "BOSS_PASSWORD"):
             if not st.session_state.lock_confirm_1:
                 if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
                     st.session_state.lock_confirm_1 = True
@@ -830,13 +794,11 @@ if st.session_state.get("lock_step", 0) >= 1:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
                             p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w)
                             c_r = df_lock_range_m.to_csv(index=False).encode("utf-8")
-                            if send_email_with_reports(p_r, c_r):
-                                lock_ids = df_lock_range_m["id"].tolist()
-                                insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
-                                update_finance_status(lock_ids, "Rozliczono")
-                            else:
-                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu.")
-                                st.stop()
+                            send_email_with_reports(p_r, c_r)
+
+                            lock_ids = df_lock_range_m["id"].tolist()
+                            insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
+                            update_finance_status(lock_ids, "Rozliczono")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
