@@ -92,13 +92,11 @@ def load_data():
     return pd.DataFrame(columns=["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"])
 
 def load_archived_reports():
-    # Poprawka 1: desc=True zamiast descending=True
     res = supabase.table("raporty").select("*").order("id", desc=True).execute()
     expected_cols = ["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow"]
     
     if res.data:
         df = pd.DataFrame(res.data)
-        # Poprawka 2: Zabezpieczenie przed brakiem kolumn dla starych raportów
         for col in expected_cols:
             if col not in df.columns:
                 if col == "suma_przychodow":
@@ -151,6 +149,26 @@ def calculate_range_sums(df):
     gotowka = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
 
     return przychod, gotowka, wydatki
+
+# --- POMOCNICZA FUNKCJA DO SORTOWANIA PO DACIE ZDARZENIA ---
+def sort_df_by_data_zdarzenia(df):
+    if df.empty:
+        return df
+    temp = df.copy()
+    current_year = get_now().year
+    parsed = []
+    for val in temp["data_zdarzenia"].astype(str).str.strip():
+        try:
+            if len(val.split('.')) == 3:
+                d = datetime.strptime(val, "%d.%m.%Y").date()
+            else:
+                d = datetime.strptime(f"{val}.{current_year}", "%d.%m.%Y").date()
+            parsed.append(d)
+        except Exception:
+            parsed.append(datetime.min.date())
+    temp["_sort_date"] = parsed
+    temp = temp.sort_values(by=["_sort_date", "id"], ascending=[True, True])
+    return temp.drop(columns=["_sort_date"], errors="ignore")
 
 
 # --- PASEK BOCZNY ---
@@ -326,7 +344,6 @@ with c2:
                                 }).execute()
                                 st.session_state.s = ""
                                 st.session_state.os = None
-                                East = None
                                 st.rerun()
 
 with c3:
@@ -374,6 +391,7 @@ with st.sidebar:
                 st.error("Data od nie może być większa niż data do")
             else:
                 df_send_range = filter_data_by_date_range(df_active_calc, send_date_from, send_date_to).copy()
+                df_send_range = sort_df_by_data_zdarzenia(df_send_range)
                 send_p, send_g, send_w = calculate_range_sums(df_send_range)
 
                 if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
@@ -412,7 +430,8 @@ with st.sidebar:
                     if st.button("💥 POTWIERDZAM I ROZLICZAM", use_container_width=True, type="primary", key="confirm_2_sidebar"):
                         df_all_raw_data = load_data()
                         df_lock_range = filter_data_by_date_range(df_all_raw_data[df_all_raw_data["status"] == "Aktywny"], lock_date_from, lock_date_to).copy()
-                        
+                        df_lock_range = sort_df_by_data_zdarzenia(df_lock_range)
+
                         if not df_lock_range.empty:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range)
                             p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w)
@@ -479,6 +498,9 @@ with st.sidebar:
             else:
                 df_all_database = load_data() 
                 df_report_range = filter_data_by_date_range(df_all_database, report_date_from, report_date_to).copy()
+                # NOWOŚĆ: Sortowanie danych chronologicznie przed przekazaniem do PDF i CSV
+                df_report_range = sort_df_by_data_zdarzenia(df_report_range)
+                
                 report_p, report_g, report_w = calculate_range_sums(df_report_range)
 
                 _ = st.download_button(
@@ -533,6 +555,7 @@ with st.sidebar:
                                 
                                 df_all_raw = load_data()
                                 df_filtered_arch = filter_data_by_date_range(df_all_raw, d_from_parsed, d_to_parsed)
+                                df_filtered_arch = sort_df_by_data_zdarzenia(df_filtered_arch)
                                 
                                 st.download_button(
                                     "📥 Pobierz CSV (Dane)",
@@ -564,29 +587,8 @@ else:
     st.subheader("Historia wpisów (Bieżący okres)")
 
 if not df_active_calc.empty:
-    df_editor_input = df_active_calc.copy()
-    
-    # 1. Konwersja tekstowej 'data_zdarzenia' na prawdziwą datę (w locie), żeby Python posortował ją prawidłowo
-    current_year = get_now().year
-    parsed_sort_dates = []
-    
-    for val in df_editor_input["data_zdarzenia"].astype(str).str.strip():
-        try:
-            if len(val.split('.')) == 3:
-                d = datetime.strptime(val, "%d.%m.%Y").date()
-            else:
-                d = datetime.strptime(f"{val}.{current_year}", "%d.%m.%Y").date()
-            parsed_sort_dates.append(d)
-        except Exception:
-            # W razie błędnej daty w bazie, ląduje na samym początku (jako najstarsza)
-            parsed_sort_dates.append(datetime.min.date())
-            
-    df_editor_input["_sort_date"] = parsed_sort_dates
-    
-    # 2. Sortowanie: od najstarszej do najnowszej (ascending=True), a przy tych samych datach decyduje kolejność ID
-    df_editor_input = df_editor_input.sort_values(by=["_sort_date", "id"], ascending=[True, True])
-    
-    # 3. Czyszczenie kolumn i przygotowanie pod edytor
+    # Wykorzystanie uniwersalnej funkcji do ułożenia danych chronologicznie na ekranie głównym
+    df_editor_input = sort_df_by_data_zdarzenia(df_active_calc)
     df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]]
     df_editor_input.insert(0, "Wybierz", False)
 
@@ -682,8 +684,9 @@ m1, m2, m3 = st.columns(3)
 
 with m1:
     if st.button("📧 Raport", use_container_width=True, key="mobile_report"):
-        pdf_f = create_pdf(df_active_calc, s_og, s_got, s_wyd)
-        csv_f = df_active_calc.to_csv(index=False).encode("utf-8")
+        df_sorted_mobile = sort_df_by_data_zdarzenia(df_active_calc)
+        pdf_f = create_pdf(df_sorted_mobile, s_og, s_got, s_wyd)
+        csv_f = df_sorted_mobile.to_csv(index=False).encode("utf-8")
         if send_email_with_reports(pdf_f, csv_f):
             st.success("✅ Wysłano raport!")
 
@@ -720,6 +723,7 @@ if st.session_state.get("lock_step", 0) >= 1:
                     if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_2_mobile", type="primary"):
                         df_all_raw_data_m = load_data()
                         df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m[df_all_raw_data_m["status"] == "Aktywny"], lock_date_from_m, lock_date_to_m).copy()
+                        df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
                         
                         if not df_lock_range_m.empty:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
