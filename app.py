@@ -25,7 +25,7 @@ DEFAULT_SECRETS = {
     "APP_PASSWORD": "dup@",
     "AUTH_COOKIE_SECRET": "dup@_sekret_cookie_2026",
     "REPORT_RECEIVER_EMAIL": "maszt71@gmail.com",
-    "REPORT_SENDER_EMAIL": "mange929598@gmail.com",
+    "REPORT_SENDER_EMAIL": "mange989592@gmail.com",
     "REPORT_EMAIL_PASSWORD": "zfuodazqsegtekel",
 }
 
@@ -189,14 +189,15 @@ if not is_valid_auth_token(cookies.get("auth_token")):
         st.error("Brakuje APP_PASSWORD w st.secrets.")
         st.stop()
 
-    haslo = st.text_input("Hasło", type="password")
-    if st.button("Zaloguj"):
-        if check_secret_password(haslo, "APP_PASSWORD"):
-            cookies["auth_token"] = make_auth_token()
-            cookies.save()
-            st.rerun()
-        else:
-            st.error("Nieprawidłowe hasło.")
+    with st.container(border=True):
+        haslo = st.text_input("Hasło", type="password", autofocus=True)
+        if st.button("Zaloguj", type="primary", use_container_width=True):
+            if check_secret_password(haslo, "APP_PASSWORD"):
+                cookies["auth_token"] = make_auth_token()
+                cookies.save()
+                st.rerun()
+            else:
+                st.error("Nieprawidłowe hasło.")
     st.stop()
 
 # --- 2. DANE Z SUPABASE ---
@@ -359,11 +360,32 @@ else:
     s_og, s_wyd, s_got, s_przeniesienie = 0.0, 0.0, 0.0, 0.0
 
 # --- 3. GENERATOR PDF ---
-def create_pdf(df, p, g, w):
+def infer_report_range(df):
+    dates = []
+    if not df.empty and "data_zdarzenia" in df.columns:
+        for val in df["data_zdarzenia"].astype(str).str.strip():
+            parsed = parse_event_date(val)
+            if parsed:
+                dates.append(parsed)
+    if dates:
+        return min(dates), max(dates)
+    today = get_now().date()
+    return today, today
+
+def create_pdf(df, p, g, w, date_from=None, date_to=None):
+    if date_from is None or date_to is None:
+        inferred_from, inferred_to = infer_report_range(df)
+        date_from = date_from or inferred_from
+        date_to = date_to or inferred_to
+
+    generated_at = get_now()
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, pdf_safe(f"RAPORT SZCZEGOLOWY - {get_now().strftime('%d.%m.%Y')}"), ln=True, align="C")
+    pdf.cell(0, 10, pdf_safe("RAPORT SZCZEGOLOWY"), ln=True, align="C")
+    pdf.set_font("Helvetica", size=10)
+    pdf.cell(0, 7, pdf_safe(f"Zakres raportu: {date_from.strftime('%d.%m.%Y')} - {date_to.strftime('%d.%m.%Y')}"), ln=True, align="C")
+    pdf.cell(0, 7, pdf_safe(f"Wygenerowano: {generated_at.strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
     pdf.ln(5)
 
     pdf.set_font("Helvetica", "B", 12)
@@ -588,7 +610,7 @@ with st.sidebar:
                 send_p, send_g, send_w = calculate_range_sums(df_send_range)
 
                 if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
-                    pdf_f = create_pdf(df_send_range, send_p, send_g, send_w)
+                    pdf_f = create_pdf(df_send_range, send_p, send_g, send_w, send_date_from, send_date_to)
                     csv_f = public_csv_data(df_send_range)
                     if send_email_with_reports(pdf_f, csv_f):
                         st.success("✅ Wysłano raport!")
@@ -629,7 +651,7 @@ with st.sidebar:
 
                         if not df_lock_range.empty:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range)
-                            p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w)
+                            p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w, lock_date_from, lock_date_to)
                             c_r = public_csv_data(df_lock_range)
                             if not has_email_config():
                                 st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
@@ -702,7 +724,7 @@ with st.sidebar:
 
                 _ = st.download_button(
                     "📥 Pobierz PDF (Szczegółowy)",
-                    data=create_pdf(df_report_range, report_p, report_g, report_w),
+                    data=create_pdf(df_report_range, report_p, report_g, report_w, report_date_from, report_date_to),
                     file_name=f"raport_{report_date_from}_{report_date_to}.pdf",
                     use_container_width=True,
                     key="download_pdf_range"
@@ -857,7 +879,7 @@ if st.session_state.get("lock_step", 0) >= 1:
                         
                         if not df_lock_range_m.empty:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
-                            p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w)
+                            p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w, lock_date_from_m, lock_date_to_m)
                             c_r = public_csv_data(df_lock_range_m)
                             if not has_email_config():
                                 st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
