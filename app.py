@@ -6,7 +6,8 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from fpdf import FPDF
-from datetime import datetime
+from datetime import datetime, date
+import calendar
 import pytz
 from streamlit_cookies_manager import CookieManager
 from supabase import create_client, Client
@@ -19,6 +20,14 @@ supabase: Client = create_client(url, key)
 # Funkcja czasu dla Polski
 def get_now():
     return datetime.now(pytz.timezone("Europe/Warsaw"))
+
+# Funkcja zwracająca pierwszy i ostatni dzień bieżącego miesiąca
+def get_current_month_range():
+    today = get_now().date()
+    first_day = today.replace(day=1)
+    _, last_day_num = calendar.monthrange(today.year, today.month)
+    last_day = today.replace(day=last_day_num)
+    return first_day, last_day
 
 # --- FUNKCJA BEZPIECZEŃSTWA DLA PDF ---
 def pdf_safe(txt):
@@ -76,7 +85,6 @@ if not cookies.ready():
 
 if cookies.get("is_logged") != "true":
     st.title("🍕 Logowanie")
-    # DODANO AUTOFOCUS - Kursor myszy pojawia się tu automatycznie po załadowaniu
     haslo = st.text_input("Hasło", type="password", autofocus=True)
     if st.button("Zaloguj"):
         if haslo == "dup@":
@@ -278,6 +286,9 @@ if "lock_confirm_1" not in st.session_state:
 if "lock_confirm_2" not in st.session_state:
     st.session_state.lock_confirm_2 = False
 
+# --- Pobranie domyślnego zakresu dla kalendarzy ---
+m_first, m_last = get_current_month_range()
+
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
 c1, c2, c3 = st.columns(3)
@@ -385,8 +396,8 @@ with st.sidebar:
 
     if st.session_state.show_send_picker:
         with st.container(border=True):
-            send_date_from = st.date_input("Data od", value=get_now().date(), key="send_date_from")
-            send_date_to = st.date_input("Data do", value=get_now().date(), key="send_date_to")
+            send_date_from = st.date_input("Data od", value=m_first, key="send_date_from")
+            send_date_to = st.date_input("Data do", value=m_last, key="send_date_to")
 
             if send_date_from > send_date_to:
                 st.error("Data od nie może być większa niż data do")
@@ -415,8 +426,8 @@ with st.sidebar:
 
     if st.session_state.get("lock_step", 0) >= 1:
         with st.container(border=True):
-            lock_date_from = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_sidebar")
-            lock_date_to = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_sidebar")
+            lock_date_from = st.date_input("Rozlicz od:", value=m_first, key="lock_date_from_sidebar")
+            lock_date_to = st.date_input("Rozlicz do:", value=m_last, key="lock_date_to_sidebar")
             
             h = st.text_input("Hasło Szefa:", type="password", key="boss_pass_sidebar")
             
@@ -491,8 +502,9 @@ with st.sidebar:
 
     if st.session_state.show_report_picker:
         with st.container(border=True):
-            report_date_from = st.date_input("Data od", value=get_now().date(), key="report_date_from_picker")
-            report_date_to = st.date_input("Data do", value=get_now().date(), key="report_date_to_picker")
+            # POPRAWKA: Automatycznie podstawia od pierwszego do ostatniego dnia bieżącego miesiąca
+            report_date_from = st.date_input("Data od", value=m_first, key="report_date_from_picker")
+            report_date_to = st.date_input("Data do", value=m_last, key="report_date_to_picker")
 
             if report_date_from > report_date_to:
                 st.error("Data od nie może być większa niż data do")
@@ -667,7 +679,7 @@ if pokaz_rozliczone:
                                 st.success(f"✅ Okres {rap_dane['okres_od']} - {rap_dane['okres_do']} został pomyślnie otwarty! Wszystkie wpisy wrócą na ekran główny.")
                                 st.rerun()
                             else:
-                                st.warning("Nie znaleziono rozliczonych wpisów in tym przedziale dat.")
+                                st.warning("Nie znaleziono rozliczonych wpisów w tym przedziale dat.")
                     except Exception as e:
                         st.error(f"Błąd podczas przywracania okresu: {e}")
     else:
@@ -705,8 +717,8 @@ with m3:
 if st.session_state.get("lock_step", 0) >= 1:
     with st.container(border=True):
         st.markdown("**Zamknij i rozlicz okres**")
-        lock_date_from_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
-        lock_date_to_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
+        lock_date_from_m = st.date_input("Rozlicz od:", value=m_first, key="lock_date_from_mobile")
+        lock_date_to_m = st.date_input("Rozlicz do:", value=m_last, key="lock_date_to_mobile")
         
         h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
         if h_mobile == "szef123":
