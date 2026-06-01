@@ -263,22 +263,53 @@ def parse_entry_ids(value):
             return []
     return []
 
-def get_archived_entry_ids():
+def get_archived_markers():
     df_reports = load_archived_reports()
     archived_ids = set()
-    if not df_reports.empty and "entry_ids" in df_reports.columns:
-        for value in df_reports["entry_ids"]:
-            archived_ids.update(parse_entry_ids(value))
-    return archived_ids
+    archived_ranges = []
+    if df_reports.empty:
+        return archived_ids, archived_ranges
+
+    for _, report in df_reports.iterrows():
+        ids = parse_entry_ids(report.get("entry_ids"))
+        archived_ids.update(ids)
+
+        if not ids:
+            try:
+                date_from = datetime.strptime(str(report.get("okres_od")), "%d.%m.%Y").date()
+                date_to = datetime.strptime(str(report.get("okres_do")), "%d.%m.%Y").date()
+                archived_ranges.append((date_from, date_to))
+            except Exception:
+                pass
+
+    return archived_ids, archived_ranges
 
 def exclude_archived_entries(df):
-    if df.empty or "id" not in df.columns:
+    if df.empty:
         return df.copy()
-    archived_ids = get_archived_entry_ids()
-    if not archived_ids:
+
+    archived_ids, archived_ranges = get_archived_markers()
+    if not archived_ids and not archived_ranges:
         return df.copy()
-    ids = pd.to_numeric(df["id"], errors="coerce")
-    return df[~ids.isin(archived_ids)].copy()
+
+    result = df.copy()
+
+    if archived_ids and "id" in result.columns:
+        ids = pd.to_numeric(result["id"], errors="coerce")
+        result = result[~ids.isin(archived_ids)].copy()
+
+    if archived_ranges and "data_zdarzenia" in result.columns:
+        keep_mask = []
+        for value in result["data_zdarzenia"].astype(str).str.strip():
+            parsed = parse_event_date(value)
+            if not parsed:
+                keep_mask.append(True)
+                continue
+            in_archived_range = any(start <= parsed <= end for start, end in archived_ranges)
+            keep_mask.append(not in_archived_range)
+        result = result[keep_mask].copy()
+
+    return result
 
 def filter_data_by_date_range(df, date_from, date_to):
     if df.empty:
