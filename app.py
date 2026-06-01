@@ -1,13 +1,17 @@
 import streamlit as st
 import pandas as pd
 import smtplib
+import base64
+import hashlib
+import hmac
+import json
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from fpdf import FPDF
-from datetime import datetime, date
-import calendar
+from datetime import datetime
 import pytz
 from streamlit_cookies_manager import CookieManager
 from supabase import create_client, Client
@@ -17,17 +21,15 @@ url = st.secrets["SUPABASE_URL"]
 key = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 
+def get_secret(name, default=None):
+    try:
+        return st.secrets.get(name, default)
+    except Exception:
+        return default
+
 # Funkcja czasu dla Polski
 def get_now():
     return datetime.now(pytz.timezone("Europe/Warsaw"))
-
-# Funkcja zwracająca pierwszy i ostatni dzień bieżącego miesiąca
-def get_current_month_range():
-    today = get_now().date()
-    first_day = today.replace(day=1)
-    _, last_day_num = calendar.monthrange(today.year, today.month)
-    last_day = today.replace(day=last_day_num)
-    return first_day, last_day
 
 # --- FUNKCJA BEZPIECZEŃSTWA DLA PDF ---
 def pdf_safe(txt):
@@ -42,11 +44,95 @@ def pdf_safe(txt):
         t = t.replace(k, v)
     return t.encode("ascii", "ignore").decode("ascii")
 
+def parse_event_date(value):
+    txt = str(value).strip()
+    if not txt or txt.lower() in ("none", "nan", "nat"):
+        return None
+    for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(txt, fmt).date()
+        except ValueError:
+            pass
+    return None
+
+def short_pdf_text(value, max_len=58):
+    text = pdf_safe(value).replace("\n", " ").strip()
+    return text if len(text) <= max_len else text[: max_len - 3] + "..."
+
+def make_auth_token(ttl_seconds=60 * 60 * 12):
+    secret = str(get_secret("AUTH_COOKIE_SECRET") or get_secret("APP_PASSWORD") or "")
+    if not secret:
+        return ""
+    payload = {"logged": True, "exp": int(time.time()) + ttl_seconds}
+    payload_raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(payload_raw).decode("ascii")
+    signature = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{payload_b64}.{signature}"
+
+def is_valid_auth_token(token):
+    secret = str(get_secret("AUTH_COOKIE_SECRET") or get_secret("APP_PASSWORD") or "")
+    if not token or not secret or "." not in str(token):
+        return False
+    payload_b64, signature = str(token).rsplit(".", 1)
+    expected = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        return False
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode("ascii")))
+    except Exception:
+        return False
+    return bool(payload.get("logged")) and int(payload.get("exp", 0)) > int(time.time())
+
+def check_secret_password(value, secret_name):
+    expected = str(get_secret(secret_name) or "")
+    return bool(expected) and hmac.compare_digest(str(value or ""), expected)
+
+def insert_report_with_ids(date_from, date_to, total_income, entry_ids):
+    payload = {
+        "data_wygenerowania": get_now().isoformat(),
+        "okres_od": date_from.strftime("%d.%m.%Y"),
+        "okres_do": date_to.strftime("%d.%m.%Y"),
+        "suma_przychodow": float(total_income),
+        "entry_ids": [int(x) for x in entry_ids],
+    }
+    try:
+        return supabase.table("raporty").insert(payload).execute()
+    except Exception:
+        payload.pop("entry_ids", None)
+        st.warning("Tabela raporty nie ma kolumny entry_ids. Raport zapisano, ale archiwum będzie odtwarzane po datach.")
+        return supabase.table("raporty").insert(payload).execute()
+
+def update_finance_status(ids, status):
+    ids = [int(x) for x in ids]
+    if ids:
+        return supabase.table("finanse").update({"status": status}).in_("id", ids).execute()
+    return None
+
+def load_report_rows(report_row):
+    entry_ids = report_row.get("entry_ids", None)
+    if isinstance(entry_ids, str):
+        try:
+            entry_ids = json.loads(entry_ids)
+        except Exception:
+            entry_ids = None
+
+    if isinstance(entry_ids, list) and entry_ids:
+        res = supabase.table("finanse").select("*").in_("id", [int(x) for x in entry_ids]).execute()
+        return sort_df_by_data_zdarzenia(pd.DataFrame(res.data)) if res.data else pd.DataFrame()
+
+    d_from_parsed = datetime.strptime(report_row["okres_od"], "%d.%m.%Y").date()
+    d_to_parsed = datetime.strptime(report_row["okres_do"], "%d.%m.%Y").date()
+    return sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), d_from_parsed, d_to_parsed))
+
 # --- FUNKCJA WYSYŁKI E-MAIL ---
 def send_email_with_reports(pdf_data, csv_data):
-    receiver_email = "mange929598@gmail.com"
-    sender_email = "mange929598@gmail.com"
-    password = "hlqivtidxgchoqdi"
+    receiver_email = get_secret("REPORT_RECEIVER_EMAIL")
+    sender_email = get_secret("REPORT_SENDER_EMAIL")
+    password = get_secret("REPORT_EMAIL_PASSWORD")
+
+    if not receiver_email or not sender_email or not password:
+        st.error("Brakuje konfiguracji e-mail w st.secrets.")
+        return False
 
     msg = MIMEMultipart()
     msg["From"] = sender_email
@@ -62,11 +148,10 @@ def send_email_with_reports(pdf_data, csv_data):
         msg.attach(part)
 
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(sender_email, password)
-        server.send_message(msg)
-        server.quit()
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender_email, password)
+            server.send_message(msg)
         return True
     except Exception as e:
         st.error(f"Błąd wysyłki maila: {e}")
@@ -83,14 +168,20 @@ cookies = CookieManager()
 if not cookies.ready():
     st.stop()
 
-if cookies.get("is_logged") != "true":
+if not is_valid_auth_token(cookies.get("auth_token")):
     st.title("🍕 Logowanie")
+    if not get_secret("APP_PASSWORD"):
+        st.error("Brakuje APP_PASSWORD w st.secrets.")
+        st.stop()
+
     haslo = st.text_input("Hasło", type="password", autofocus=True)
     if st.button("Zaloguj"):
-        if haslo == "dup@":
-            cookies["is_logged"] = "true"
+        if check_secret_password(haslo, "APP_PASSWORD"):
+            cookies["auth_token"] = make_auth_token()
             cookies.save()
             st.rerun()
+        else:
+            st.error("Nieprawidłowe hasło.")
     st.stop()
 
 # --- 2. DANE Z SUPABASE ---
@@ -102,7 +193,7 @@ def load_data():
 
 def load_archived_reports():
     res = supabase.table("raporty").select("*").order("id", desc=True).execute()
-    expected_cols = ["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow"]
+    expected_cols = ["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow", "entry_ids"]
     
     if res.data:
         df = pd.DataFrame(res.data)
@@ -110,6 +201,8 @@ def load_archived_reports():
             if col not in df.columns:
                 if col == "suma_przychodow":
                     df[col] = 0.0
+                elif col == "entry_ids":
+                    df[col] = None
                 else:
                     df[col] = "Brak daty"
         return df
@@ -124,17 +217,8 @@ def filter_data_by_date_range(df, date_from, date_to):
     temp["date_str"] = temp["data_zdarzenia"].astype(str).str.strip()
 
     parsed_dates = []
-    current_year = get_now().year
-    
     for val in temp["date_str"]:
-        try:
-            if len(val.split('.')) == 3:
-                d = datetime.strptime(val, "%d.%m.%Y").date()
-            else:
-                d = datetime.strptime(f"{val}.{current_year}", "%d.%m.%Y").date()
-            parsed_dates.append(d)
-        except Exception:
-            parsed_dates.append(None)
+        parsed_dates.append(parse_event_date(val))
 
     temp["parsed_date"] = parsed_dates
     
@@ -164,17 +248,9 @@ def sort_df_by_data_zdarzenia(df):
     if df.empty:
         return df
     temp = df.copy()
-    current_year = get_now().year
     parsed = []
     for val in temp["data_zdarzenia"].astype(str).str.strip():
-        try:
-            if len(val.split('.')) == 3:
-                d = datetime.strptime(val, "%d.%m.%Y").date()
-            else:
-                d = datetime.strptime(f"{val}.{current_year}", "%d.%m.%Y").date()
-            parsed.append(d)
-        except Exception:
-            parsed.append(datetime.min.date())
+        parsed.append(parse_event_date(val) or datetime.min.date())
     temp["_sort_date"] = parsed
     temp = temp.sort_values(by=["_sort_date", "id"], ascending=[True, True])
     return temp.drop(columns=["_sort_date"], errors="ignore")
@@ -252,12 +328,12 @@ def create_pdf(df, p, g, w):
         data_txt = str(row.get("data_zdarzenia", ""))
         typ_txt = str(row.get("typ", ""))
         kwota_txt = f"{float(row.get('kwota', 0)):.2f} zl"
-        opis_txt = str(row.get("opis", ""))
+        opis_txt = short_pdf_text(row.get("opis", ""))
 
         pdf.cell(28, 8, pdf_safe(data_txt), border=1, fill=True, align="C")
         pdf.cell(52, 8, pdf_safe(typ_txt), border=1, fill=True)
         pdf.cell(30, 8, pdf_safe(kwota_txt), border=1, fill=True, align="R")
-        pdf.cell(80, 8, pdf_safe(opis_txt), border=1, ln=1, fill=True)
+        pdf.cell(80, 8, opis_txt, border=1, ln=1, fill=True)
 
         fill = not fill
 
@@ -285,9 +361,6 @@ if "lock_confirm_1" not in st.session_state:
     st.session_state.lock_confirm_1 = False
 if "lock_confirm_2" not in st.session_state:
     st.session_state.lock_confirm_2 = False
-
-# --- Pobranie domyślnego zakresu dla kalendarzy ---
-m_first, m_last = get_current_month_range()
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
@@ -396,8 +469,8 @@ with st.sidebar:
 
     if st.session_state.show_send_picker:
         with st.container(border=True):
-            send_date_from = st.date_input("Data od", value=m_first, key="send_date_from")
-            send_date_to = st.date_input("Data do", value=m_last, key="send_date_to")
+            send_date_from = st.date_input("Data od", value=get_now().date(), key="send_date_from")
+            send_date_to = st.date_input("Data do", value=get_now().date(), key="send_date_to")
 
             if send_date_from > send_date_to:
                 st.error("Data od nie może być większa niż data do")
@@ -426,12 +499,12 @@ with st.sidebar:
 
     if st.session_state.get("lock_step", 0) >= 1:
         with st.container(border=True):
-            lock_date_from = st.date_input("Rozlicz od:", value=m_first, key="lock_date_from_sidebar")
-            lock_date_to = st.date_input("Rozlicz do:", value=m_last, key="lock_date_to_sidebar")
+            lock_date_from = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_sidebar")
+            lock_date_to = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_sidebar")
             
             h = st.text_input("Hasło Szefa:", type="password", key="boss_pass_sidebar")
             
-            if h == "szef123":
+            if check_secret_password(h, "BOSS_PASSWORD"):
                 if not st.session_state.lock_confirm_1:
                     if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_sidebar"):
                         st.session_state.lock_confirm_1 = True
@@ -450,15 +523,9 @@ with st.sidebar:
                             c_r = df_lock_range.to_csv(index=False).encode("utf-8")
                             send_email_with_reports(p_r, c_r)
 
-                            supabase.table("raporty").insert({
-                                "data_wygenerowania": get_now().isoformat(),
-                                "okres_od": lock_date_from.strftime("%d.%m.%Y"),
-                                "okres_do": lock_date_to.strftime("%d.%m.%Y"),
-                                "suma_przychodow": float(lock_p)
-                            }).execute()
-
-                            for rid in df_lock_range["id"].tolist():
-                                supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
+                            lock_ids = df_lock_range["id"].tolist()
+                            insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
+                            update_finance_status(lock_ids, "Rozliczono")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
@@ -502,9 +569,8 @@ with st.sidebar:
 
     if st.session_state.show_report_picker:
         with st.container(border=True):
-            # POPRAWKA: Automatycznie podstawia od pierwszego do ostatniego dnia bieżącego miesiąca
-            report_date_from = st.date_input("Data od", value=m_first, key="report_date_from_picker")
-            report_date_to = st.date_input("Data do", value=m_last, key="report_date_to_picker")
+            report_date_from = st.date_input("Data od", value=get_now().date(), key="report_date_from_picker")
+            report_date_to = st.date_input("Data do", value=get_now().date(), key="report_date_to_picker")
 
             if report_date_from > report_date_to:
                 st.error("Data od nie może być większa niż data do")
@@ -562,12 +628,7 @@ with st.sidebar:
                             if r_row['okres_od'] == "Brak daty" or r_row['okres_do'] == "Brak daty":
                                 st.warning("Ten wpis jest zbyt stary, aby odtworzyć pełne dane źródłowe.")
                             else:
-                                d_from_parsed = datetime.strptime(r_row['okres_od'], "%d.%m.%Y").date()
-                                d_to_parsed = datetime.strptime(r_row['okres_do'], "%d.%m.%Y").date()
-                                
-                                df_all_raw = load_data()
-                                df_filtered_arch = filter_data_by_date_range(df_all_raw, d_from_parsed, d_to_parsed)
-                                df_filtered_arch = sort_df_by_data_zdarzenia(df_filtered_arch)
+                                df_filtered_arch = load_report_rows(r_row)
                                 
                                 st.download_button(
                                     "📥 Pobierz CSV (Dane)",
@@ -586,7 +647,7 @@ with st.sidebar:
     st.divider()
 
     if st.button("🔓 Wyloguj", use_container_width=True):
-        cookies["is_logged"] = "false"
+        cookies["auth_token"] = ""
         cookies.save()
         st.rerun()
 
@@ -660,26 +721,19 @@ if pokaz_rozliczone:
                         if rap_dane['okres_od'] == "Brak daty" or rap_dane['okres_do'] == "Brak daty":
                              st.error("Ten stary wpis nie zawiera dat. Otwarcie masowe jest niedostępne dla tego rekordu.")
                         else:
-                            d_from_p = datetime.strptime(rap_dane['okres_od'], "%d.%m.%Y").date()
-                            d_to_p = datetime.strptime(rap_dane['okres_do'], "%d.%m.%Y").date()
-                            
-                            df_wszystkie_surowe = load_data()
-                            df_do_odblokowania = filter_data_by_date_range(
-                                df_wszystkie_surowe[df_wszystkie_surowe["status"] == "Rozliczono"], 
-                                d_from_p, 
-                                d_to_p
-                            )
+                            df_do_odblokowania = load_report_rows(rap_dane)
+                            if not df_do_odblokowania.empty and "status" in df_do_odblokowania.columns:
+                                df_do_odblokowania = df_do_odblokowania[df_do_odblokowania["status"] == "Rozliczono"]
                             
                             if not df_do_odblokowania.empty:
-                                for r_id in df_do_odblokowania["id"].tolist():
-                                    supabase.table("finanse").update({"status": "Aktywny"}).eq("id", int(r_id)).execute()
+                                update_finance_status(df_do_odblokowania["id"].tolist(), "Aktywny")
                                 
                                 supabase.table("raporty").delete().eq("id", int(wybrany_raport_id)).execute()
                                 
                                 st.success(f"✅ Okres {rap_dane['okres_od']} - {rap_dane['okres_do']} został pomyślnie otwarty! Wszystkie wpisy wrócą na ekran główny.")
                                 st.rerun()
                             else:
-                                st.warning("Nie znaleziono rozliczonych wpisów w tym przedziale dat.")
+                                st.warning("Nie znaleziono rozliczonych wpisów in tym przedziale dat.")
                     except Exception as e:
                         st.error(f"Błąd podczas przywracania okresu: {e}")
     else:
@@ -717,11 +771,11 @@ with m3:
 if st.session_state.get("lock_step", 0) >= 1:
     with st.container(border=True):
         st.markdown("**Zamknij i rozlicz okres**")
-        lock_date_from_m = st.date_input("Rozlicz od:", value=m_first, key="lock_date_from_mobile")
-        lock_date_to_m = st.date_input("Rozlicz do:", value=m_last, key="lock_date_to_mobile")
+        lock_date_from_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
+        lock_date_to_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
         
         h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
-        if h_mobile == "szef123":
+        if check_secret_password(h_mobile, "BOSS_PASSWORD"):
             if not st.session_state.lock_confirm_1:
                 if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
                     st.session_state.lock_confirm_1 = True
@@ -742,15 +796,9 @@ if st.session_state.get("lock_step", 0) >= 1:
                             c_r = df_lock_range_m.to_csv(index=False).encode("utf-8")
                             send_email_with_reports(p_r, c_r)
 
-                            supabase.table("raporty").insert({
-                                "data_wygenerowania": get_now().isoformat(),
-                                "okres_od": lock_date_from_m.strftime("%d.%m.%Y"),
-                                "okres_do": lock_date_to_m.strftime("%d.%m.%Y"),
-                                "suma_przychodow": float(lock_p)
-                            }).execute()
-
-                            for rid in df_lock_range_m["id"].tolist():
-                                supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
+                            lock_ids = df_lock_range_m["id"].tolist()
+                            insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
+                            update_finance_status(lock_ids, "Rozliczono")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
