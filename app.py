@@ -30,6 +30,8 @@ DEFAULT_SECRETS = {
 }
 
 def get_secret(name, default=None):
+    if name.startswith("REPORT_") and name in DEFAULT_SECRETS:
+        return DEFAULT_SECRETS[name]
     try:
         return st.secrets.get(name, DEFAULT_SECRETS.get(name, default))
     except Exception:
@@ -168,8 +170,14 @@ def send_email_with_reports(pdf_data, csv_data):
             server.login(sender_email, password)
             server.send_message(msg)
         return True
-    except Exception as e:
-        st.error(f"Błąd wysyłki maila: {e}")
+    except smtplib.SMTPAuthenticationError:
+        st.error(
+            "Nie udało się wysłać maila: Gmail odrzucił adres nadawcy albo hasło aplikacji. "
+            "Wygeneruj nowe hasło aplikacji dla konta nadawcy i wpisz je w REPORT_EMAIL_PASSWORD."
+        )
+        return False
+    except Exception:
+        st.error("Nie udało się wysłać maila. Sprawdź konfigurację Gmail i spróbuj ponownie.")
         return False
 
 # --- 1. KONFIGURACJA I LOGOWANIE ---
@@ -221,7 +229,7 @@ def load_data():
     for col in expected_cols:
         if col not in df.columns:
             df[col] = defaults[col]
-    df["status"] = df["status"].fillna("Aktywny").replace("", "Aktywny")
+    df["status"] = "Aktywny"
     return df
 
 def load_archived_reports():
@@ -242,6 +250,35 @@ def load_archived_reports():
         return df
         
     return pd.DataFrame(columns=expected_cols)
+
+def parse_entry_ids(value):
+    if isinstance(value, list):
+        return [int(x) for x in value if str(x).strip()]
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                return [int(x) for x in parsed if str(x).strip()]
+        except Exception:
+            return []
+    return []
+
+def get_archived_entry_ids():
+    df_reports = load_archived_reports()
+    archived_ids = set()
+    if not df_reports.empty and "entry_ids" in df_reports.columns:
+        for value in df_reports["entry_ids"]:
+            archived_ids.update(parse_entry_ids(value))
+    return archived_ids
+
+def exclude_archived_entries(df):
+    if df.empty or "id" not in df.columns:
+        return df.copy()
+    archived_ids = get_archived_entry_ids()
+    if not archived_ids:
+        return df.copy()
+    ids = pd.to_numeric(df["id"], errors="coerce")
+    return df[~ids.isin(archived_ids)].copy()
 
 def filter_data_by_date_range(df, date_from, date_to):
     if df.empty:
@@ -313,12 +350,7 @@ data = load_data()
 def get_default_date_range(df):
     dates = []
     if not df.empty and "data_zdarzenia" in df.columns:
-        source = df.copy()
-        if "status" in source.columns:
-            active = source[source["status"] == "Aktywny"].copy()
-            if not active.empty:
-                source = active
-        for val in source["data_zdarzenia"].astype(str).str.strip():
+        for val in df["data_zdarzenia"].astype(str).str.strip():
             parsed = parse_event_date(val)
             if parsed:
                 dates.append(parsed)
@@ -329,10 +361,7 @@ def get_default_date_range(df):
     return today.replace(day=1), today
 
 def apply_main_filters(df, date_from, date_to):
-    if df.empty:
-        return df.copy()
-    active = df[df["status"] == "Aktywny"].copy()
-    return filter_data_by_date_range(active, date_from, date_to).copy()
+    return filter_data_by_date_range(df.copy(), date_from, date_to).copy()
 
 def apply_history_filters(df, date_from, date_to):
     return filter_data_by_date_range(df.copy(), date_from, date_to).copy()
@@ -345,9 +374,10 @@ with st.sidebar:
     pokaz_rozliczone = False
     st.divider()
 
-# Główne kafelki i historia pokazują bieżące aktywne wpisy bez filtra dat.
-df_active_calc = data[data["status"] == "Aktywny"].copy() if not data.empty else pd.DataFrame(columns=data.columns)
-df_history = data.copy()
+# Główne kafelki i historia pokazują tylko wpisy niewłączone jeszcze do zapisanego raportu.
+df_current = exclude_archived_entries(data)
+df_active_calc = df_current.copy()
+df_history = df_current.copy()
 
 # Przeliczanie głównych kafelków finansowych
 if not df_active_calc.empty:
@@ -646,7 +676,7 @@ with st.sidebar:
                     st.warning("⚠️ Tej czynności nie można cofnąć!")
                     if st.button("💥 POTWIERDZAM I ROZLICZAM", use_container_width=True, type="primary", key="confirm_2_sidebar"):
                         df_all_raw_data = load_data()
-                        df_lock_range = filter_data_by_date_range(df_all_raw_data[df_all_raw_data["status"] == "Aktywny"], lock_date_from, lock_date_to).copy()
+                        df_lock_range = filter_data_by_date_range(df_all_raw_data, lock_date_from, lock_date_to).copy()
                         df_lock_range = sort_df_by_data_zdarzenia(df_lock_range)
 
                         if not df_lock_range.empty:
@@ -663,8 +693,7 @@ with st.sidebar:
 
                             lock_ids = df_lock_range["id"].tolist()
                             insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                            update_finance_status(lock_ids, "Rozliczono")
-                            st.success("✅ Raport wysłany e-mailem i okres rozliczony.")
+                            st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy zostają aktywne.")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
@@ -874,7 +903,7 @@ if st.session_state.get("lock_step", 0) >= 1:
                 with c_a:
                     if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_2_mobile", type="primary"):
                         df_all_raw_data_m = load_data()
-                        df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m[df_all_raw_data_m["status"] == "Aktywny"], lock_date_from_m, lock_date_to_m).copy()
+                        df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m, lock_date_from_m, lock_date_to_m).copy()
                         df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
                         
                         if not df_lock_range_m.empty:
@@ -891,8 +920,7 @@ if st.session_state.get("lock_step", 0) >= 1:
 
                             lock_ids = df_lock_range_m["id"].tolist()
                             insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
-                            update_finance_status(lock_ids, "Rozliczono")
-                            st.success("✅ Raport wysłany e-mailem i okres rozliczony.")
+                            st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy zostają aktywne.")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
