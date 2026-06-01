@@ -429,7 +429,8 @@ with st.sidebar:
             lock_date_from = st.date_input("Rozlicz od:", value=m_first, key="lock_date_from_sidebar")
             lock_date_to = st.date_input("Rozlicz do:", value=m_last, key="lock_date_to_sidebar")
             
-            h = st.text_input("Hasło Szefa:", type="password", key="boss_pass_sidebar")
+            # DODANO AUTOFOCUS - Kursor automatycznie wskakuje w pole hasła w pasku bocznym
+            h = st.text_input("Hasło Szefa:", type="password", key="boss_pass_sidebar", autofocus=True)
             
             if h == "szef123":
                 if not st.session_state.lock_confirm_1:
@@ -502,7 +503,6 @@ with st.sidebar:
 
     if st.session_state.show_report_picker:
         with st.container(border=True):
-            # POPRAWKA: Automatycznie podstawia od pierwszego do ostatniego dnia bieżącego miesiąca
             report_date_from = st.date_input("Data od", value=m_first, key="report_date_from_picker")
             report_date_to = st.date_input("Data do", value=m_last, key="report_date_to_picker")
 
@@ -720,52 +720,12 @@ if st.session_state.get("lock_step", 0) >= 1:
         lock_date_from_m = st.date_input("Rozlicz od:", value=m_first, key="lock_date_from_mobile")
         lock_date_to_m = st.date_input("Rozlicz do:", value=m_last, key="lock_date_to_mobile")
         
-        h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
+        # DODANO AUTOFOCUS - Kursor automatycznie wskakuje w pole hasła w kontenerze mobilnym
+        h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile", autofocus=True)
         if h_mobile == "szef123":
             if not st.session_state.lock_confirm_1:
                 if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
                     st.session_state.lock_confirm_1 = True
                     st.rerun()
             
-            elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
-                st.warning("⚠️ Tej czynności nie można cofnąć!")
-                c_a, c_b = st.columns(2)
-                with c_a:
-                    if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_2_mobile", type="primary"):
-                        df_all_raw_data_m = load_data()
-                        df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m[df_all_raw_data_m["status"] == "Aktywny"], lock_date_from_m, lock_date_to_m).copy()
-                        df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
-                        
-                        if not df_lock_range_m.empty:
-                            lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
-                            p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w)
-                            c_r = df_lock_range_m.to_csv(index=False).encode("utf-8")
-                            send_email_with_reports(p_r, c_r)
-
-                            supabase.table("raporty").insert({
-                                "data_wygenerowania": get_now().isoformat(),
-                                "okres_od": lock_date_from_m.strftime("%d.%m.%Y"),
-                                "okres_do": lock_date_to_m.strftime("%d.%m.%Y"),
-                                "suma_przychodow": float(lock_p)
-                            }).execute()
-
-                            for rid in df_lock_range_m["id"].tolist():
-                                supabase.table("finanse").update({"status": "Rozliczono"}).eq("id", int(rid)).execute()
-
-                        st.session_state.lock_step = 0
-                        st.session_state.lock_confirm_1 = False
-                        st.session_state.lock_confirm_2 = False
-                        st.rerun()
-                with c_b:
-                    if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile_inner"):
-                        st.session_state.lock_step = 0
-                        st.session_state.lock_confirm_1 = False
-                        st.session_state.lock_confirm_2 = False
-                        st.rerun()
-
-        if not st.session_state.lock_confirm_1:
-            if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
-                st.session_state.lock_step = 0
-                st.session_state.lock_confirm_1 = False
-                st.session_state.lock_confirm_2 = False
-                st.rerun()
+            elif st.session_state.lock_confirm_1 and not st.session
