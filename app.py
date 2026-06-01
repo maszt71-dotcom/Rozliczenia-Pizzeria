@@ -81,7 +81,7 @@ if cookies.get("is_logged") != "true":
         if haslo == "dup@":
             cookies["is_logged"] = "true"
             cookies.save()
-            st.rerun()
+            st.success("Zalogowano pomyślnie! Kliknij zaloguj ponownie lub odśwież stronę.")
     st.stop()
 
 # --- 2. DANE Z SUPABASE ---
@@ -92,13 +92,11 @@ def load_data():
     return pd.DataFrame(columns=["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"])
 
 def load_archived_reports():
-    # Poprawka 1: desc=True zamiast descending=True
     res = supabase.table("raporty").select("*").order("id", desc=True).execute()
     expected_cols = ["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow"]
     
     if res.data:
         df = pd.DataFrame(res.data)
-        # Poprawka 2: Zabezpieczenie przed brakiem kolumn dla starych raportów
         for col in expected_cols:
             if col not in df.columns:
                 if col == "suma_przychodow":
@@ -524,7 +522,6 @@ with st.sidebar:
                         st.write(f"💰 Suma Przychodów: {r_row['suma_przychodow']:.2f} zł")
                         
                         try:
-                            # Jeśli daty są ustawione na "Brak daty" ze względu na starsze wpisy, pomijamy odtwarzanie pełnego zakresu
                             if r_row['okres_od'] == "Brak daty" or r_row['okres_do'] == "Brak daty":
                                 st.warning("Ten wpis jest zbyt stary, aby odtworzyć pełne dane źródłowe.")
                             else:
@@ -637,7 +634,7 @@ if pokaz_rozliczone:
                             
                             if not df_do_odblokowania.empty:
                                 for r_id in df_do_odblokowania["id"].tolist():
-                                    supabase.table("finanse").update({"status": "Aktywny"}).eq("id", int(r_id)).execute()
+                                    supabase.table("finanse").update({"status": "Active"}).eq("id", int(r_id)).execute()
                                 
                                 supabase.table("raporty").delete().eq("id", int(wybrany_raport_id)).execute()
                                 
@@ -729,6 +726,6 @@ if st.session_state.get("lock_step", 0) >= 1:
         if not st.session_state.lock_confirm_1:
             if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
                 st.session_state.lock_step = 0
-st.session_state.lock_confirm_1 = False
-st.session_state.lock_confirm_2 = False
-st.rerun()
+                st.session_state.lock_confirm_1 = False
+                st.session_state.lock_confirm_2 = False
+                st.rerun()
