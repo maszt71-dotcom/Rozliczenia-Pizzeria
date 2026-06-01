@@ -284,7 +284,7 @@ def sort_df_by_data_zdarzenia(df):
     for val in temp["data_zdarzenia"].astype(str).str.strip():
         parsed.append(parse_event_date(val) or datetime.min.date())
     temp["_sort_date"] = parsed
-    temp = temp.sort_values(by=["_sort_date", "id"], ascending=[True, True])
+    temp = temp.sort_values(by=["_sort_date", "id"], ascending=[False, False])
     return temp.drop(columns=["_sort_date"], errors="ignore")
 
 
