@@ -24,6 +24,9 @@ supabase: Client = create_client(url, key)
 DEFAULT_SECRETS = {
     "APP_PASSWORD": "dup@",
     "AUTH_COOKIE_SECRET": "dup@_sekret_cookie_2026",
+    "REPORT_RECEIVER_EMAIL": "maszt71@gmail.com",
+    "REPORT_SENDER_EMAIL": "mange929598@gmail.com",
+    "REPORT_EMAIL_PASSWORD": "zfuodazqsegtekel",
 }
 
 def get_secret(name, default=None):
@@ -130,6 +133,13 @@ def load_report_rows(report_row):
     return sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), d_from_parsed, d_to_parsed))
 
 # --- FUNKCJA WYSYŁKI E-MAIL ---
+def has_email_config():
+    return bool(
+        get_secret("REPORT_RECEIVER_EMAIL")
+        and get_secret("REPORT_SENDER_EMAIL")
+        and get_secret("REPORT_EMAIL_PASSWORD")
+    )
+
 def send_email_with_reports(pdf_data, csv_data):
     receiver_email = get_secret("REPORT_RECEIVER_EMAIL")
     sender_email = get_secret("REPORT_SENDER_EMAIL")
@@ -256,6 +266,11 @@ def filter_data_by_date_range(df, date_from, date_to):
     return filtered.drop(columns=["parsed_date", "date_str"], errors="ignore")
 
 CARRYOVER_TYPE = "Gotówka z przeniesienia"
+
+def public_csv_data(df):
+    export_df = df.copy()
+    export_df = export_df.drop(columns=["status"], errors="ignore")
+    return export_df.to_csv(index=False).encode("utf-8")
 
 def calculate_range_sums(df):
     if df.empty:
@@ -568,13 +583,13 @@ with st.sidebar:
             if send_date_from > send_date_to:
                 st.error("Data od nie może być większa niż data do")
             else:
-                df_send_range = filter_data_by_date_range(data, send_date_from, send_date_to).copy()
+                df_send_range = filter_data_by_date_range(df_active_calc, send_date_from, send_date_to).copy()
                 df_send_range = sort_df_by_data_zdarzenia(df_send_range)
                 send_p, send_g, send_w = calculate_range_sums(df_send_range)
 
                 if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
                     pdf_f = create_pdf(df_send_range, send_p, send_g, send_w)
-                    csv_f = df_send_range.to_csv(index=False).encode("utf-8")
+                    csv_f = public_csv_data(df_send_range)
                     if send_email_with_reports(pdf_f, csv_f):
                         st.success("✅ Wysłano raport!")
 
@@ -615,14 +630,19 @@ with st.sidebar:
                         if not df_lock_range.empty:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range)
                             p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w)
-                            c_r = df_lock_range.to_csv(index=False).encode("utf-8")
-                            if send_email_with_reports(p_r, c_r):
-                                lock_ids = df_lock_range["id"].tolist()
-                                insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                                update_finance_status(lock_ids, "Rozliczono")
-                            else:
-                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu.")
+                            c_r = public_csv_data(df_lock_range)
+                            if not has_email_config():
+                                st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
                                 st.stop()
+
+                            if not send_email_with_reports(p_r, c_r):
+                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu e-mailem.")
+                                st.stop()
+
+                            lock_ids = df_lock_range["id"].tolist()
+                            insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
+                            update_finance_status(lock_ids, "Rozliczono")
+                            st.success("✅ Raport wysłany e-mailem i okres rozliczony.")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
@@ -672,8 +692,8 @@ with st.sidebar:
             if report_date_from > report_date_to:
                 st.error("Data od nie może być większa niż data do")
             else:
-                st.info(f"Raport zostanie pobrany z historii wpisów: {report_date_from.strftime('%d.%m.%Y')} - {report_date_to.strftime('%d.%m.%Y')}.")
-                df_report_range = filter_data_by_date_range(data, report_date_from, report_date_to).copy()
+                st.info(f"Raport zostanie pobrany z aktywnych wpisów: {report_date_from.strftime('%d.%m.%Y')} - {report_date_to.strftime('%d.%m.%Y')}.")
+                df_report_range = filter_data_by_date_range(df_active_calc, report_date_from, report_date_to).copy()
                 df_report_range = sort_df_by_data_zdarzenia(df_report_range)
                 report_p, report_g, report_w = calculate_range_sums(df_report_range)
                 st.write(f"Przychód: **{report_p:,.2f} zł**")
@@ -690,7 +710,7 @@ with st.sidebar:
 
                 _ = st.download_button(
                     "📥 Pobierz CSV (Szczegółowy)",
-                    data=df_report_range.to_csv(index=False).encode("utf-8"),
+                    data=public_csv_data(df_report_range),
                     file_name=f"raport_{report_date_from}_{report_date_to}.csv",
                     use_container_width=True,
                     key="download_csv_range"
@@ -731,7 +751,7 @@ with st.sidebar:
                                 
                                 st.download_button(
                                     "📥 Pobierz CSV (Dane)",
-                                    data=df_filtered_arch.to_csv(index=False).encode("utf-8"),
+                                    data=public_csv_data(df_filtered_arch),
                                     file_name=f"archiwum_{r_row['okres_od']}_{r_row['okres_do']}.csv",
                                     key=f"dl_arch_{r_row['id']}",
                                     use_container_width=True
@@ -757,7 +777,7 @@ st.subheader("Historia wpisów")
 
 if not df_history.empty:
     df_editor_input = sort_df_by_data_zdarzenia(df_history)
-    df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]]
+    df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
     df_editor_input.insert(0, "Wybierz", False)
 
     res = st.data_editor(
@@ -766,9 +786,8 @@ if not df_history.empty:
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
             "id": None,
             "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
-            "status": st.column_config.TextColumn("Status"),
         },
-        disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"],
+        disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"],
         hide_index=True,
         use_container_width=True,
         key="pizza_editor"
@@ -792,10 +811,10 @@ m1, m2, m3 = st.columns(3)
 
 with m1:
     if st.button("📧 Raport", use_container_width=True, key="mobile_report"):
-        df_sorted_mobile = sort_df_by_data_zdarzenia(df_history)
+        df_sorted_mobile = sort_df_by_data_zdarzenia(df_active_calc)
         mobile_p, mobile_g, mobile_w = calculate_range_sums(df_sorted_mobile)
         pdf_f = create_pdf(df_sorted_mobile, mobile_p, mobile_g, mobile_w)
-        csv_f = df_sorted_mobile.to_csv(index=False).encode("utf-8")
+        csv_f = public_csv_data(df_sorted_mobile)
         if send_email_with_reports(pdf_f, csv_f):
             st.success("✅ Wysłano raport!")
 
@@ -839,14 +858,19 @@ if st.session_state.get("lock_step", 0) >= 1:
                         if not df_lock_range_m.empty:
                             lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
                             p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w)
-                            c_r = df_lock_range_m.to_csv(index=False).encode("utf-8")
-                            if send_email_with_reports(p_r, c_r):
-                                lock_ids = df_lock_range_m["id"].tolist()
-                                insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
-                                update_finance_status(lock_ids, "Rozliczono")
-                            else:
-                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu.")
+                            c_r = public_csv_data(df_lock_range_m)
+                            if not has_email_config():
+                                st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
                                 st.stop()
+
+                            if not send_email_with_reports(p_r, c_r):
+                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu e-mailem.")
+                                st.stop()
+
+                            lock_ids = df_lock_range_m["id"].tolist()
+                            insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
+                            update_finance_status(lock_ids, "Rozliczono")
+                            st.success("✅ Raport wysłany e-mailem i okres rozliczony.")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
