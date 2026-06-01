@@ -210,6 +210,7 @@ def load_data():
     for col in expected_cols:
         if col not in df.columns:
             df[col] = defaults[col]
+    df["status"] = "Aktywny"
     return df
 
 def load_archived_reports():
@@ -254,6 +255,8 @@ def filter_data_by_date_range(df, date_from, date_to):
 
     return filtered.drop(columns=["parsed_date", "date_str"], errors="ignore")
 
+CARRYOVER_TYPE = "Gotówka z przeniesienia"
+
 def calculate_range_sums(df):
     if df.empty:
         return 0.0, 0.0, 0.0
@@ -288,29 +291,51 @@ def sort_df_by_data_zdarzenia(df):
     return temp.drop(columns=["_sort_date"], errors="ignore")
 
 
-# --- PASEK BOCZNY ---
-with st.sidebar:
-    st.header("⚙️ Menu")
-    pokaz_rozliczone = st.checkbox("📂 Pokaż rozliczone wpisy (Archiwum)", value=False)
-    st.divider()
-
 # Ładowanie danych z bazy
 data = load_data()
 
-# Filtrowanie na podstawie wybranego trybu widoku
-if pokaz_rozliczone:
-    df_active_calc = data.copy()
+def get_default_date_range(df):
+    dates = []
+    if not df.empty and "data_zdarzenia" in df.columns:
+        for val in df["data_zdarzenia"].astype(str).str.strip():
+            parsed = parse_event_date(val)
+            if parsed:
+                dates.append(parsed)
+    if dates:
+        return min(dates), max(dates)
+    today = get_now().date()
+    return today, today
+
+def apply_main_filters(df, date_from, date_to):
+    return filter_data_by_date_range(df.copy(), date_from, date_to).copy()
+
+default_date_from, default_date_to = get_default_date_range(data)
+
+# --- PASEK BOCZNY ---
+with st.sidebar:
+    st.header("⚙️ Menu")
+    pokaz_rozliczone = False
+    st.markdown("**Zakres danych na ekranie:**")
+    main_date_from = st.date_input("Data od", value=default_date_from, key="main_date_from")
+    main_date_to = st.date_input("Data do", value=default_date_to, key="main_date_to")
+    st.divider()
+
+# Filtrowanie na podstawie wybranego trybu widoku i zakresu dat
+if main_date_from > main_date_to:
+    st.error("Data od nie może być większa niż data do")
+    df_active_calc = pd.DataFrame(columns=data.columns)
 else:
-    df_active_calc = data[data["status"] == "Aktywny"].copy()
+    df_active_calc = apply_main_filters(data, main_date_from, main_date_to)
 
 # Przeliczanie głównych kafelków finansowych
 if not df_active_calc.empty:
     df_active_calc["kwota"] = pd.to_numeric(df_active_calc["kwota"], errors="coerce").fillna(0)
     s_og = df_active_calc[df_active_calc["typ"] == "Przychód ogólny"]["kwota"].sum()
     s_wyd = df_active_calc[df_active_calc["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
+    s_przeniesienie = df_active_calc[df_active_calc["typ"] == CARRYOVER_TYPE]["kwota"].sum()
     s_got = df_active_calc[df_active_calc["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - s_wyd
 else:
-    s_og, s_wyd, s_got = 0.0, 0.0, 0.0
+    s_og, s_wyd, s_got, s_przeniesienie = 0.0, 0.0, 0.0, 0.0
 
 # --- 3. GENERATOR PDF ---
 def create_pdf(df, p, g, w):
@@ -399,7 +424,7 @@ if "lock_confirm_2" not in st.session_state:
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
-c1, c2, c3 = st.columns(3)
+c1, c2, c3, c4 = st.columns(4)
 
 with c1:
     st.markdown(
@@ -467,6 +492,33 @@ with c2:
                                 st.rerun()
 
 with c3:
+    st.markdown(
+        f'<div style="background-color:#dbeafe; padding:15px; border-radius:10px; text-align:center;">Gotówka z przeniesienia: <b>{s_przeniesienie:,.2f} zł</b></div>',
+        unsafe_allow_html=True
+    )
+    if st.button("➕ DODAJ", key="zp"):
+        st.session_state.s = "ZP" if st.session_state.s != "ZP" else ""
+        st.rerun()
+
+    if st.session_state.s == "ZP":
+        with st.container(border=True):
+            d_zp = st.date_input("Data zdarzenia", get_now().date(), key="date_zp")
+            kw_zp = st.number_input("Kwota", value=None, step=1.0, key="zp_v", placeholder="Wpisz kwotę")
+            op_zp = st.text_input("Opis", key="desc_zp", placeholder="Opcjonalnie")
+            if st.button("DODAJ", key="save_zp", use_container_width=True, type="primary"):
+                if kw_zp is not None and kw_zp > 0:
+                    supabase.table("finanse").insert({
+                        "data": get_now().strftime("%d.%m %H:%M"),
+                        "typ": CARRYOVER_TYPE,
+                        "kwota": float(kw_zp),
+                        "opis": op_zp,
+                        "status": "Aktywny",
+                        "data_zdarzenia": d_zp.strftime("%d.%m.%Y")
+                    }).execute()
+                    st.session_state.s = ""
+                    st.rerun()
+
+with c4:
     st.markdown(
         f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>',
         unsafe_allow_html=True
@@ -551,7 +603,7 @@ with st.sidebar:
                     st.warning("⚠️ Tej czynności nie można cofnąć!")
                     if st.button("💥 POTWIERDZAM I ROZLICZAM", use_container_width=True, type="primary", key="confirm_2_sidebar"):
                         df_all_raw_data = load_data()
-                        df_lock_range = filter_data_by_date_range(df_all_raw_data[df_all_raw_data["status"] == "Aktywny"], lock_date_from, lock_date_to).copy()
+                        df_lock_range = filter_data_by_date_range(df_all_raw_data, lock_date_from, lock_date_to).copy()
                         df_lock_range = sort_df_by_data_zdarzenia(df_lock_range)
 
                         if not df_lock_range.empty:
@@ -561,7 +613,6 @@ with st.sidebar:
                             if send_email_with_reports(p_r, c_r):
                                 lock_ids = df_lock_range["id"].tolist()
                                 insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                                update_finance_status(lock_ids, "Rozliczono")
                             else:
                                 st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu.")
                                 st.stop()
@@ -608,37 +659,32 @@ with st.sidebar:
 
     if st.session_state.show_report_picker:
         with st.container(border=True):
-            report_date_from = st.date_input("Data od", value=get_now().date(), key="report_date_from_picker")
-            report_date_to = st.date_input("Data do", value=get_now().date(), key="report_date_to_picker")
+            st.info(f"Raport zostanie pobrany dla danych widocznych na ekranie: {main_date_from.strftime('%d.%m.%Y')} - {main_date_to.strftime('%d.%m.%Y')}.")
+            df_report_range = sort_df_by_data_zdarzenia(df_active_calc.copy())
+            report_p, report_g, report_w = calculate_range_sums(df_report_range)
+            st.write(f"Przychód: **{report_p:,.2f} zł**")
+            st.write(f"Gotówka: **{report_g:,.2f} zł**")
+            st.write(f"Wydatki: **{report_w:,.2f} zł**")
 
-            if report_date_from > report_date_to:
-                st.error("Data od nie może być większa niż data do")
-            else:
-                df_all_database = load_data() 
-                df_report_range = filter_data_by_date_range(df_all_database, report_date_from, report_date_to).copy()
-                df_report_range = sort_df_by_data_zdarzenia(df_report_range)
-                
-                report_p, report_g, report_w = calculate_range_sums(df_report_range)
+            _ = st.download_button(
+                "📥 Pobierz PDF (Szczegółowy)",
+                data=create_pdf(df_report_range, report_p, report_g, report_w),
+                file_name=f"raport_{main_date_from}_{main_date_to}.pdf",
+                use_container_width=True,
+                key="download_pdf_range"
+            )
 
-                _ = st.download_button(
-                    "📥 Pobierz PDF (Szczegółowy)",
-                    data=create_pdf(df_report_range, report_p, report_g, report_w),
-                    file_name=f"raport_{report_date_from}_{report_date_to}.pdf",
-                    use_container_width=True,
-                    key="download_pdf_range"
-                )
+            _ = st.download_button(
+                "📥 Pobierz CSV (Szczegółowy)",
+                data=df_report_range.to_csv(index=False).encode("utf-8"),
+                file_name=f"raport_{main_date_from}_{main_date_to}.csv",
+                use_container_width=True,
+                key="download_csv_range"
+            )
 
-                _ = st.download_button(
-                    "📥 Pobierz CSV (Szczegółowy)",
-                    data=df_report_range.to_csv(index=False).encode("utf-8"),
-                    file_name=f"raport_{report_date_from}_{report_date_to}.csv",
-                    use_container_width=True,
-                    key="download_csv_range"
-                )
-
-                if st.button("↩️ Powrót", use_container_width=True, key="report_back_btn"):
-                    st.session_state.show_report_picker = False
-                    st.rerun()
+            if st.button("↩️ Powrót", use_container_width=True, key="report_back_btn"):
+                st.session_state.show_report_picker = False
+                st.rerun()
 
     st.divider()
 
@@ -693,10 +739,7 @@ with st.sidebar:
 # --- 7. HISTORIA WPISÓW ---
 st.divider()
 
-if pokaz_rozliczone:
-    st.subheader("Historia wpisów (Wszystkie dane - Archiwum)")
-else:
-    st.subheader("Historia wpisów (Bieżący okres)")
+st.subheader("Historia wpisów")
 
 if not df_active_calc.empty:
     df_editor_input = sort_df_by_data_zdarzenia(df_active_calc)
@@ -725,59 +768,6 @@ if not df_active_calc.empty:
         st.rerun()
 else:
     st.info("Brak wpisów w obecnym okresie.")
-
-
-# --- 7.5 PANEL HURTOWEGO ODZYSKIWANIA CAŁEGO RAPORTU (AKTYWNY W TRYBIE ARCHIWUM) ---
-if pokaz_rozliczone:
-    df_raporty_baza = load_archived_reports()
-    
-    if not df_raporty_baza.empty:
-        with st.container(border=True):
-            st.markdown("### ↩️ Hurtowe Przywracanie Całego Okresu")
-            st.info("Wybierz zamknięty raport z listy. Kliknięcie przycisku przywróci WSZYSTKIE wpisy z tamtego okresu z powrotem do bieżących rozliczeń.")
-            
-            df_raporty_baza["raport_label"] = (
-                "📅 Okres: " + df_raporty_baza["okres_od"].astype(str) + 
-                " do " + df_raporty_baza["okres_do"].astype(str) + 
-                " | Przychód: " + df_raporty_baza["suma_przychodow"].astype(str) + " zł"
-            )
-            
-            raporty_dict = df_raporty_baza.set_index("id").to_dict(orient="index")
-            
-            wybrany_raport_id = st.selectbox(
-                "Wybierz raport, który chcesz anulować i przywrócić:",
-                options=df_raporty_baza["id"].tolist(),
-                format_func=lambda x: raporty_dict[x]["raport_label"],
-                index=None,
-                placeholder="Wybierz raport z listy..."
-            )
-            
-            if wybrany_raport_id is not None:
-                rap_dane = raporty_dict[wybrany_raport_id]
-                
-                if st.button("↩️ OTWÓRZ OKRES NA NOWO (Przywróć wszystkie wpisy)", type="primary", use_container_width=True):
-                    try:
-                        if rap_dane['okres_od'] == "Brak daty" or rap_dane['okres_do'] == "Brak daty":
-                             st.error("Ten stary wpis nie zawiera dat. Otwarcie masowe jest niedostępne dla tego rekordu.")
-                        else:
-                            df_do_odblokowania = load_report_rows(rap_dane)
-                            if not df_do_odblokowania.empty and "status" in df_do_odblokowania.columns:
-                                df_do_odblokowania = df_do_odblokowania[df_do_odblokowania["status"] == "Rozliczono"]
-                            
-                            if not df_do_odblokowania.empty:
-                                update_finance_status(df_do_odblokowania["id"].tolist(), "Aktywny")
-                                
-                                supabase.table("raporty").delete().eq("id", int(wybrany_raport_id)).execute()
-                                
-                                st.success(f"✅ Okres {rap_dane['okres_od']} - {rap_dane['okres_do']} został pomyślnie otwarty! Wszystkie wpisy wrócą na ekran główny.")
-                                st.rerun()
-                            else:
-                                st.warning("Nie znaleziono rozliczonych wpisów w tym przedziale dat.")
-                    except Exception as e:
-                        st.error(f"Błąd podczas przywracania okresu: {e}")
-    else:
-        with st.container(border=True):
-            st.info("Brak zamkniętych raportów w bazie danych.")
 
 
 # --- 8. AKCJE MOBILNE ---
@@ -828,7 +818,7 @@ if st.session_state.get("lock_step", 0) >= 1:
                 with c_a:
                     if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_2_mobile", type="primary"):
                         df_all_raw_data_m = load_data()
-                        df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m[df_all_raw_data_m["status"] == "Aktywny"], lock_date_from_m, lock_date_to_m).copy()
+                        df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m, lock_date_from_m, lock_date_to_m).copy()
                         df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
                         
                         if not df_lock_range_m.empty:
@@ -838,7 +828,6 @@ if st.session_state.get("lock_step", 0) >= 1:
                             if send_email_with_reports(p_r, c_r):
                                 lock_ids = df_lock_range_m["id"].tolist()
                                 insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
-                                update_finance_status(lock_ids, "Rozliczono")
                             else:
                                 st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu.")
                                 st.stop()
