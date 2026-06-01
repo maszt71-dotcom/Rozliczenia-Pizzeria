@@ -81,7 +81,7 @@ if cookies.get("is_logged") != "true":
         if haslo == "dup@":
             cookies["is_logged"] = "true"
             cookies.save()
-            st.success("Zalogowano pomyślnie! Kliknij zaloguj ponownie lub odśwież stronę.")
+            st.rerun()
     st.stop()
 
 # --- 2. DANE Z SUPABASE ---
@@ -92,11 +92,13 @@ def load_data():
     return pd.DataFrame(columns=["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"])
 
 def load_archived_reports():
+    # Poprawka 1: desc=True zamiast descending=True
     res = supabase.table("raporty").select("*").order("id", desc=True).execute()
     expected_cols = ["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow"]
     
     if res.data:
         df = pd.DataFrame(res.data)
+        # Poprawka 2: Zabezpieczenie przed brakiem kolumn dla starych raportów
         for col in expected_cols:
             if col not in df.columns:
                 if col == "suma_przychodow":
@@ -324,6 +326,7 @@ with c2:
                                 }).execute()
                                 st.session_state.s = ""
                                 st.session_state.os = None
+                                East = None
                                 st.rerun()
 
 with c3:
@@ -468,8 +471,8 @@ with st.sidebar:
 
     if st.session_state.show_report_picker:
         with st.container(border=True):
-            report_date_from = st.date_input("Data od", value=get_now().date(), key="report_date_from")
-            report_date_to = st.date_input("Data do", value=get_now().date(), key="report_date_to")
+            report_date_from = st.date_input("Data od", value=get_now().date(), key="report_date_from_picker")
+            report_date_to = st.date_input("Data do", value=get_now().date(), key="report_date_to_picker")
 
             if report_date_from > report_date_to:
                 st.error("Data od nie może być większa niż data do")
@@ -561,7 +564,29 @@ else:
     st.subheader("Historia wpisów (Bieżący okres)")
 
 if not df_active_calc.empty:
-    df_editor_input = df_active_calc.iloc[::-1].copy()
+    df_editor_input = df_active_calc.copy()
+    
+    # 1. Konwersja tekstowej 'data_zdarzenia' na prawdziwą datę (w locie), żeby Python posortował ją prawidłowo
+    current_year = get_now().year
+    parsed_sort_dates = []
+    
+    for val in df_editor_input["data_zdarzenia"].astype(str).str.strip():
+        try:
+            if len(val.split('.')) == 3:
+                d = datetime.strptime(val, "%d.%m.%Y").date()
+            else:
+                d = datetime.strptime(f"{val}.{current_year}", "%d.%m.%Y").date()
+            parsed_sort_dates.append(d)
+        except Exception:
+            # W razie błędnej daty w bazie, ląduje na samym początku (jako najstarsza)
+            parsed_sort_dates.append(datetime.min.date())
+            
+    df_editor_input["_sort_date"] = parsed_sort_dates
+    
+    # 2. Sortowanie: od najstarszej do najnowszej (ascending=True), a przy tych samych datach decyduje kolejność ID
+    df_editor_input = df_editor_input.sort_values(by=["_sort_date", "id"], ascending=[True, True])
+    
+    # 3. Czyszczenie kolumn i przygotowanie pod edytor
     df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis", "status"]]
     df_editor_input.insert(0, "Wybierz", False)
 
@@ -634,7 +659,7 @@ if pokaz_rozliczone:
                             
                             if not df_do_odblokowania.empty:
                                 for r_id in df_do_odblokowania["id"].tolist():
-                                    supabase.table("finanse").update({"status": "Active"}).eq("id", int(r_id)).execute()
+                                    supabase.table("finanse").update({"status": "Aktywny"}).eq("id", int(r_id)).execute()
                                 
                                 supabase.table("raporty").delete().eq("id", int(wybrany_raport_id)).execute()
                                 
