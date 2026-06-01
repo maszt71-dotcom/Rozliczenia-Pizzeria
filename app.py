@@ -174,7 +174,7 @@ if not is_valid_auth_token(cookies.get("auth_token")):
         st.error("Brakuje APP_PASSWORD w st.secrets.")
         st.stop()
 
-    haslo = st.text_input("Hasło", type="password", autofocus=True)
+    haslo = st.text_input("Hasło", type="password")
     if st.button("Zaloguj"):
         if check_secret_password(haslo, "APP_PASSWORD"):
             cookies["auth_token"] = make_auth_token()
