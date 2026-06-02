@@ -417,6 +417,7 @@ df_history = df_current.copy()
 # Przeliczanie głównych kafelków finansowych
 if not df_active_calc.empty:
     df_active_calc["kwota"] = pd.to_numeric(df_active_calc["kwota"], errors="coerce").fillna(0)
+    st.session_state.all_finance_data = df_active_calc
     s_og = df_active_calc[df_active_calc["typ"] == "Przychód ogólny"]["kwota"].sum()
     s_wyd = df_active_calc[df_active_calc["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
     s_przeniesienie = df_active_calc[df_active_calc["typ"] == CARRYOVER_TYPE]["kwota"].sum()
@@ -510,7 +511,9 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
 # --- FUNKCJA STYLIZOWANIA KOLORÓW W HISTORII ---
 def style_row_by_type(row):
     typ = str(row["typ"])
-    if typ == "Przychód ogólny" or typ == CARRYOVER_TYPE:
+    if typ == CARRYOVER_TYPE:
+        return ["background-color: #dbeafe; color: black;"] * len(row)
+    elif typ == "Przychód ogólny":
         return ["background-color: #d4edda; color: black;"] * len(row)
     elif "Gotówka" in typ:
         return ["background-color: #fff3cd; color: black;"] * len(row)
@@ -874,10 +877,10 @@ if not df_history.empty:
     df_display = sort_df_by_data_zdarzenia(df_history)
     df_display = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
     
-    # Formatowanie wyświetlania kwot w tabeli głównej
+    # Formatowanie wyświetlania kwot w tabeli głównej (z separatorami tysięcznymi)
     df_display["kwota"] = df_display["kwota"].map(lambda x: f"{x:,.2f} zł")
 
-    # Tworzenie selektora usuwania jako wielokrotnego wyboru (zamiast checkboxa w każdym wierszu dla zachowania kolorów)
+    # Tworzenie selektora usuwania jako wielokrotnego wyboru
     options_dict = {row["id"]: f"📅 {row['data_zdarzenia']} | {row['typ']} | {row['kwota']} | {row['opis']}" for _, row in df_display.iterrows()}
     
     selected_ids = st.multiselect(
