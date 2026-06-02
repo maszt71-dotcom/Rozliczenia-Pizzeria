@@ -386,7 +386,7 @@ def public_csv_data(df):
 
 def calculate_range_sums(df):
     if df.empty:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
 
     temp = df.copy()
     if "kwota" not in temp.columns:
@@ -397,9 +397,10 @@ def calculate_range_sums(df):
 
     przychod = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
     wydatki = temp[temp["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
+    przeniesienie = temp[temp["typ"] == CARRYOVER_TYPE]["kwota"].sum()
     gotowka = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
 
-    return przychod, gotowka, wydatki
+    return przychod, gotowka, wydatki, przeniesienie
 
 # --- POMOCNICZA FUNKCJA DO SORTOWANIA PO DACIE ZDARZENIA ---
 def sort_df_by_data_zdarzenia(df):
@@ -497,7 +498,7 @@ def infer_report_range(df):
     today = get_now().date()
     return today, today
 
-def create_pdf(df, p, g, w, date_from=None, date_to=None):
+def create_pdf(df, p, g, w, przeniesienie=0.0, date_from=None, date_to=None):
     if date_from is None or date_to is None:
         inferred_from, inferred_to = infer_report_range(df)
         date_from = date_from or inferred_from
@@ -514,6 +515,9 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
     pdf.ln(5)
 
     pdf.set_font("Helvetica", "B", 12)
+    pdf.set_fill_color(219, 234, 254)
+    pdf.cell(190, 10, pdf_safe(f"Gotowka z przeniesienia: {przeniesienie:,.2f} zl"), border=1, ln=1, fill=True, align="C")
+
     pdf.set_fill_color(212, 237, 218)
     pdf.cell(63, 10, pdf_safe(f"Przychod: {p:,.2f} zl"), border=1, fill=True, align="C")
 
@@ -753,10 +757,10 @@ with st.sidebar:
             else:
                 df_send_range = filter_data_by_date_range(df_active_calc, send_date_from, send_date_to).copy()
                 df_send_range = sort_df_by_data_zdarzenia(df_send_range)
-                send_p, send_g, send_w = calculate_range_sums(df_send_range)
+                send_p, send_g, send_w, send_przeniesienie = calculate_range_sums(df_send_range)
 
                 if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
-                    pdf_f = create_pdf(df_send_range, send_p, send_g, send_w, send_date_from, send_date_to)
+                    pdf_f = create_pdf(df_send_range, send_p, send_g, send_w, send_przeniesienie, send_date_from, send_date_to)
                     csv_f = public_csv_data(df_send_range)
                     if send_email_with_reports(pdf_f, csv_f):
                         st.success("✅ Wysłano raport!")
@@ -794,8 +798,8 @@ with st.sidebar:
                         df_lock_range = sort_df_by_data_zdarzenia(df_lock_range)
 
                         if not df_lock_range.empty:
-                            lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range)
-                            p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w, lock_date_from, lock_date_to)
+                            lock_p, lock_g, lock_w, lock_przeniesienie = calculate_range_sums(df_lock_range)
+                            p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w, lock_przeniesienie, lock_date_from, lock_date_to)
                             c_r = public_csv_data(df_lock_range)
                             if not has_email_config():
                                 st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
@@ -861,14 +865,15 @@ with st.sidebar:
                 st.info(f"Raport zostanie pobrany z wpisów: {report_date_from.strftime('%d.%m.%Y')} - {report_date_to.strftime('%d.%m.%Y')}.")
                 df_report_range = filter_data_by_date_range(df_active_calc, report_date_from, report_date_to).copy()
                 df_report_range = sort_df_by_data_zdarzenia(df_report_range)
-                report_p, report_g, report_w = calculate_range_sums(df_report_range)
+                report_p, report_g, report_w, report_przeniesienie = calculate_range_sums(df_report_range)
+                st.write(f"Gotówka z przeniesienia: **{report_przeniesienie:,.2f} zł**")
                 st.write(f"Przychód: **{report_p:,.2f} zł**")
                 st.write(f"Gotówka: **{report_g:,.2f} zł**")
                 st.write(f"Wydatki: **{report_w:,.2f} zł**")
 
                 _ = st.download_button(
                     "📥 Pobierz PDF (Szczegółowy)",
-                    data=create_pdf(df_report_range, report_p, report_g, report_w, report_date_from, report_date_to),
+                    data=create_pdf(df_report_range, report_p, report_g, report_w, report_przeniesienie, report_date_from, report_date_to),
                     file_name=f"raport_{report_date_from}_{report_date_to}.pdf",
                     use_container_width=True,
                     key="download_pdf_range"
@@ -983,8 +988,8 @@ m1, m2, m3 = st.columns(3)
 with m1:
     if st.button("📧 Raport", use_container_width=True, key="mobile_report"):
         df_sorted_mobile = sort_df_by_data_zdarzenia(df_active_calc)
-        mobile_p, mobile_g, mobile_w = calculate_range_sums(df_sorted_mobile)
-        pdf_f = create_pdf(df_sorted_mobile, mobile_p, mobile_g, mobile_w)
+        mobile_p, mobile_g, mobile_w, mobile_przeniesienie = calculate_range_sums(df_sorted_mobile)
+        pdf_f = create_pdf(df_sorted_mobile, mobile_p, mobile_g, mobile_w, mobile_przeniesienie)
         csv_f = public_csv_data(df_sorted_mobile)
         if send_email_with_reports(pdf_f, csv_f):
             st.success("✅ Wysłano raport!")
@@ -1026,8 +1031,8 @@ if st.session_state.get("lock_step", 0) >= 1:
                         df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
                         
                         if not df_lock_range_m.empty:
-                            lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
-                            p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w, lock_date_from_m, lock_date_to_m)
+                            lock_p, lock_g, lock_w, lock_przeniesienie = calculate_range_sums(df_lock_range_m)
+                            p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w, lock_przeniesienie, lock_date_from_m, lock_date_to_m)
                             c_r = public_csv_data(df_lock_range_m)
                             if not has_email_config():
                                 st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
