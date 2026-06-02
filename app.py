@@ -538,34 +538,41 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
     pdf.cell(80, 8, "Opis", border=1, ln=1, fill=True, align="C")
 
     pdf.set_font("Helvetica", size=9)
-    fill = False
-
     df_to_print = df.copy()
     if "kwota" in df_to_print.columns:
         df_to_print["kwota"] = pd.to_numeric(df_to_print["kwota"], errors="coerce").fillna(0)
 
     for _, row in df_to_print.iterrows():
-        if fill:
-            pdf.set_fill_color(245, 245, 245)
-        else:
-            pdf.set_fill_color(255, 255, 255)
-
         data_txt = str(row.get("data_zdarzenia", ""))
         typ_txt = str(row.get("typ", ""))
         kwota_txt = f"{float(row.get('kwota', 0)):,.2f} zl"
         opis_txt = short_pdf_text(row.get("opis", ""))
+        bg_color, text_color = get_pdf_row_colors(typ_txt)
+        pdf.set_fill_color(*bg_color)
+        pdf.set_text_color(*text_color)
 
         pdf.cell(28, 8, pdf_safe(data_txt), border=1, fill=True, align="C")
         pdf.cell(52, 8, pdf_safe(typ_txt), border=1, fill=True)
         pdf.cell(30, 8, pdf_safe(kwota_txt), border=1, fill=True, align="R")
         pdf.cell(80, 8, opis_txt, border=1, ln=1, fill=True)
-
-        fill = not fill
+        pdf.set_text_color(0, 0, 0)
 
     pdf_output = pdf.output(dest="S")
     if isinstance(pdf_output, (bytes, bytearray)):
         return bytes(pdf_output)
     return pdf_output.encode("latin-1")
+
+def get_pdf_row_colors(typ):
+    typ = str(typ)
+    if typ == CARRYOVER_TYPE:
+        return (219, 234, 254), (0, 0, 0)
+    if typ == "Przychód ogólny":
+        return (212, 237, 218), (0, 0, 0)
+    if typ == "Wydatki gotówkowe":
+        return (248, 215, 218), (0, 0, 0)
+    if "Gotówka" in typ:
+        return (255, 243, 205), (0, 0, 0)
+    return (255, 255, 255), (0, 0, 0)
 
 # --- FUNKCJA STYLIZOWANIA KOLORÓW W HISTORII ---
 def style_row_by_type(row):
