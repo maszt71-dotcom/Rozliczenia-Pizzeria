@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import time
+from pathlib import Path
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
@@ -80,6 +81,13 @@ def metric_card(label, value, color_class):
         """,
         unsafe_allow_html=True
     )
+
+def image_to_data_uri(path):
+    logo_path = Path(path)
+    if not logo_path.exists():
+        return ""
+    encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
 
 def make_auth_token(ttl_seconds=60 * 60 * 12):
     secret = str(get_secret("AUTH_COOKIE_SECRET") or get_secret("APP_PASSWORD") or "")
@@ -278,7 +286,11 @@ st.markdown(
     """
     <style>
         #MainMenu, footer {display: none;}
-        header {visibility: hidden;}
+        header {
+            background: rgba(246, 247, 249, 0.94) !important;
+            border-bottom: 1px solid #e5e7eb;
+            backdrop-filter: blur(14px);
+        }
         .stApp {
             background: #f6f7f9;
             color: #1f2937;
@@ -314,6 +326,19 @@ st.markdown(
         }
         .app-header {
             margin: 0 0 1rem 0;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .app-logo {
+            width: 76px;
+            height: 76px;
+            border-radius: 8px;
+            object-fit: cover;
+            box-shadow: 0 8px 22px rgba(31, 41, 55, 0.14);
+        }
+        .app-heading {
+            min-width: 0;
         }
         .app-title {
             font-size: 2.05rem;
@@ -383,6 +408,13 @@ st.markdown(
             }
             .app-title {
                 font-size: 1.85rem;
+            }
+            .app-header {
+                gap: 0.75rem;
+            }
+            .app-logo {
+                width: 62px;
+                height: 62px;
             }
             .metric-card {
                 padding: 0.95rem;
@@ -752,11 +784,16 @@ if "lock_confirm_2" not in st.session_state:
     st.session_state.lock_confirm_2 = False
 
 # --- 5. WIDOK GŁÓWNY ---
+logo_src = image_to_data_uri("pizza_logo.png")
+logo_html = f'<img class="app-logo" src="{logo_src}" alt="Cool Pizza logo">' if logo_src else ""
 st.markdown(
     f"""
     <div class="app-header">
-        <div class="app-title">Rozliczenie Pizzerii</div>
-        <div class="app-subtitle">Kwoty narastająco od {cumulative_date_from.strftime('%d.%m.%Y')} do {cumulative_date_to.strftime('%d.%m.%Y')}</div>
+        {logo_html}
+        <div class="app-heading">
+            <div class="app-title">Rozliczenie Pizzerii</div>
+            <div class="app-subtitle">Kwoty narastająco od {cumulative_date_from.strftime('%d.%m.%Y')} do {cumulative_date_to.strftime('%d.%m.%Y')}</div>
+        </div>
     </div>
     """,
     unsafe_allow_html=True
