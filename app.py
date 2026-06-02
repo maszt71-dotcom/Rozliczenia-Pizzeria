@@ -35,7 +35,6 @@ def get_secret(name, default=None):
     except Exception:
         return DEFAULT_SECRETS.get(name, default)
 
-# Funkcja czasu dla Polski
 def get_now():
     return datetime.now(pytz.timezone("Europe/Warsaw"))
 
@@ -132,7 +131,6 @@ def clean_app_password(value):
 
 def get_email_configs():
     configs = []
-
     try:
         secrets_receiver = st.secrets.get("REPORT_RECEIVER_EMAIL")
         secrets_sender = st.secrets.get("REPORT_SENDER_EMAIL")
@@ -153,14 +151,6 @@ def get_email_configs():
         "password": clean_app_password(DEFAULT_SECRETS["REPORT_EMAIL_PASSWORD"]),
         "source": "kod aplikacji",
     })
-
-    for sender in ("mange989592@gmail.com", "mange929598@gmail.com"):
-        configs.append({
-            "receiver": DEFAULT_SECRETS["REPORT_RECEIVER_EMAIL"],
-            "sender": sender,
-            "password": clean_app_password(DEFAULT_SECRETS["REPORT_EMAIL_PASSWORD"]),
-            "source": "awaryjny nadawca",
-        })
 
     unique = []
     seen = set()
@@ -211,7 +201,7 @@ def send_email_with_reports(pdf_data, csv_data):
     if auth_failed:
         st.error(
             "Nie udało się wysłać maila: Gmail odrzucił hasło aplikacji dla konta nadawcy. "
-            "Wygeneruj nowe hasło aplikacji Gmail dla konta: " + ", ".join(sorted(set(auth_failed)))
+            "Wygeneruj nowe hasło aplikacji Gmail (Hasła aplikacji) dla konta: " + ", ".join(sorted(set(auth_failed)))
         )
     else:
         st.error("Nie udało się wysłać maila. Sprawdź konfigurację Gmail i spróbuj ponownie.")
@@ -290,18 +280,6 @@ def load_archived_reports():
         
     return pd.DataFrame(columns=expected_cols)
 
-def parse_entry_ids(value):
-    if isinstance(value, list):
-        return [int(x) for x in value if str(x).strip()]
-    if isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-            if isinstance(parsed, list):
-                return [int(x) for x in parsed if str(x).strip()]
-        except Exception:
-            return []
-    return []
-
 def filter_data_by_date_range(df, date_from, date_to):
     if df.empty:
         return df.copy()
@@ -349,7 +327,6 @@ def calculate_range_sums(df):
 
     return przychod, gotowka, wydatki
 
-# --- POMOCNICZA FUNKCJA DO SORTOWANIA PO DACIE ZDARZENIA ---
 def sort_df_by_data_zdarzenia(df):
     if df.empty:
         return df
@@ -366,7 +343,7 @@ def sort_df_by_data_zdarzenia(df):
     return temp.drop(columns=["_sort_date"], errors="ignore")
 
 
-# Ładowanie pełnych danych z bazy
+# Ładowanie danych
 data = load_data()
 
 def get_default_date_range(df):
@@ -393,14 +370,12 @@ def get_latest_event_date(df):
 
 
 default_date_from, default_date_to = get_default_date_range(data)
-
 df_current_all = data.copy()
 current_month_start = get_now().date().replace(day=1)
 
 # --- PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
-    pokaz_rozliczone = False
     st.markdown("**Kwoty narastająco:**")
     cumulative_date_from = st.date_input("Pokaż od", value=current_month_start, key="cumulative_date_from")
     st.divider()
@@ -414,10 +389,8 @@ else:
 df_active_calc = df_current.copy()
 df_history = df_current.copy()
 
-# Przeliczanie głównych kafelków finansowych
 if not df_active_calc.empty:
     df_active_calc["kwota"] = pd.to_numeric(df_active_calc["kwota"], errors="coerce").fillna(0)
-    st.session_state.all_finance_data = df_active_calc
     s_og = df_active_calc[df_active_calc["typ"] == "Przychód ogólny"]["kwota"].sum()
     s_wyd = df_active_calc[df_active_calc["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
     s_przeniesienie = df_active_calc[df_active_calc["typ"] == CARRYOVER_TYPE]["kwota"].sum()
@@ -508,19 +481,6 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
         return bytes(pdf_output)
     return pdf_output.encode("latin-1")
 
-# --- FUNKCJA STYLIZOWANIA KOLORÓW W HISTORII ---
-def style_row_by_type(row):
-    typ = str(row["typ"])
-    if typ == CARRYOVER_TYPE:
-        return ["background-color: #dbeafe; color: black;"] * len(row)
-    elif typ == "Przychód ogólny":
-        return ["background-color: #d4edda; color: black;"] * len(row)
-    elif "Gotówka" in typ:
-        return ["background-color: #fff3cd; color: black;"] * len(row)
-    elif typ == "Wydatki gotówkowe":
-        return ["background-color: #f8d7da; color: black;"] * len(row)
-    return [""] * len(row)
-
 # --- 4. STANY SESJI ---
 if "s" not in st.session_state:
     st.session_state.s = ""
@@ -541,8 +501,6 @@ if "show_archive_picker" not in st.session_state:
 
 if "lock_confirm_1" not in st.session_state:
     st.session_state.lock_confirm_1 = False
-if "lock_confirm_2" not in st.session_state:
-    st.session_state.lock_confirm_2 = False
 
 # --- 5. WIDOK GŁÓWNY ---
 st.title("🍕 Rozliczenie Pizzerii")
@@ -704,7 +662,6 @@ with st.sidebar:
     if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
         st.session_state.lock_step = 1
         st.session_state.lock_confirm_1 = False
-        st.session_state.lock_confirm_2 = False
         st.rerun()
 
     if st.session_state.get("lock_step", 0) >= 1:
@@ -716,13 +673,13 @@ with st.sidebar:
                 st.error("Data od nie może być większa niż data do")
             else:
                 if not st.session_state.lock_confirm_1:
-                    if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_sidebar"):
+                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_1_sidebar"):
                         st.session_state.lock_confirm_1 = True
                         st.rerun()
                 
-                elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
+                elif st.session_state.lock_confirm_1:
                     st.warning("⚠️ Tej czynności nie można cofnąć!")
-                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_2_sidebar"):
+                    if st.button("💥 POTWIERDZAM NA PEWNO", use_container_width=True, type="primary", key="confirm_2_sidebar"):
                         df_all_raw_data = load_data()
                         df_lock_range = filter_data_by_date_range(df_all_raw_data, lock_date_from, lock_date_to).copy()
                         df_lock_range = sort_df_by_data_zdarzenia(df_lock_range)
@@ -741,17 +698,15 @@ with st.sidebar:
 
                             lock_ids = df_lock_range["id"].tolist()
                             insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                            st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy pozostają aktywne.")
+                            st.success("✅ Raport wysłany e-mailem i zapisany.")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
-                        st.session_state.lock_confirm_2 = False
                         st.rerun()
 
             if st.button("Anuluj", use_container_width=True, key="cancel_close_sidebar"):
                 st.session_state.lock_step = 0
                 st.session_state.lock_confirm_1 = False
-                st.session_state.lock_confirm_2 = False
                 st.rerun()
 
     st.divider()
@@ -869,40 +824,55 @@ with st.sidebar:
         cookies.save()
         st.rerun()
 
-# --- 7. HISTORIA WPISÓW Z KOLOROWANIEM ---
+# --- 7. HISTORIA WPISÓW Z WYGODNYM SELEKTOREM ---
 st.divider()
 st.subheader("Historia wpisów")
 
 if not df_history.empty:
-    df_display = sort_df_by_data_zdarzenia(df_history)
-    df_display = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
-    
-    # Formatowanie wyświetlania kwot w tabeli głównej (z separatorami tysięcznymi)
-    df_display["kwota"] = df_display["kwota"].map(lambda x: f"{x:,.2f} zł")
+    df_editor_input = sort_df_by_data_zdarzenia(df_history)
+    df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
+    df_editor_input.insert(0, "Wybierz", False)
 
-    # Tworzenie selektora usuwania jako wielokrotnego wyboru
-    options_dict = {row["id"]: f"📅 {row['data_zdarzenia']} | {row['typ']} | {row['kwota']} | {row['opis']}" for _, row in df_display.iterrows()}
-    
-    selected_ids = st.multiselect(
-        "Zaznacz wpisy do usunięcia:", 
-        options=list(options_dict.keys()), 
-        format_func=lambda x: options_dict[x],
-        key="delete_multiselect"
+    # Przygotowanie konfiguracji kolumn z mapowaniem emotek-kolorów dla typu transakcji
+    res = st.data_editor(
+        df_editor_input,
+        column_config={
+            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
+            "id": None,
+            "kwota": st.column_config.NumberColumn("Kwota", format="%,.2f zł"),
+            "typ": st.column_config.SelectColumn(
+                "Typ transakcji",
+                options=[
+                    "🟢 Przychód ogólny", 
+                    "🔵 Gotówka z przeniesienia", 
+                    "🟡 Gotówka - 🏢 Bufet", 
+                    "🟡 Gotówka - 🚗 Kierowca 1", 
+                    "🟡 Gotówka - 🚗 Kierowca 2", 
+                    "🟡 Gotówka - 🚗 Kierowca 3", 
+                    "🟡 Gotówka - 🚗 Kierowca 4", 
+                    "🔴 Wydatki gotówkowe"
+                ]
+            )
+        },
+        # Mapowanie surowych nazw na czytelne, kolorowe etykiety wizualne w tabeli
+        format_func=lambda x: (
+            "🔵 Gotówka z przeniesienia" if x == CARRYOVER_TYPE else
+            "🟢 Przychód ogólny" if x == "Przychód ogólny" else
+            "🔴 Wydatki gotówkowe" if x == "Wydatki gotówkowe" else
+            f"🟡 {x}" if "Gotówka" in str(x) else x
+        ),
+        disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"],
+        hide_index=True,
+        use_container_width=True,
+        key="pizza_editor"
     )
-    
+
+    selected_ids = res[res["Wybierz"] == True]["id"].tolist()
+
     if st.session_state.selected_ids != selected_ids:
         st.session_state.selected_ids = selected_ids
         st.session_state.show_delete_confirm = False
         st.rerun()
-
-    # Nakładanie stylów kolorystycznych na wiersze
-    styled_df = df_display.style.apply(style_row_by_type, axis=1)
-
-    st.dataframe(
-        styled_df,
-        hide_index=True,
-        use_container_width=True
-    )
 else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
 
@@ -926,7 +896,6 @@ with m2:
     if st.button("🔒 Zamknij", use_container_width=True, key="mobile_lock"):
         st.session_state.lock_step = 1
         st.session_state.lock_confirm_1 = False
-        st.session_state.lock_confirm_2 = False
         st.rerun()
 
 with m3:
@@ -945,15 +914,15 @@ if st.session_state.get("lock_step", 0) >= 1:
             st.error("Data od nie może być większa niż data do")
         else:
             if not st.session_state.lock_confirm_1:
-                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
+                if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_1_mobile"):
                     st.session_state.lock_confirm_1 = True
                     st.rerun()
             
-            elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
+            elif st.session_state.lock_confirm_1:
                 st.warning("⚠️ Tej czynności nie można cofnąć!")
                 c_a, c_b = st.columns(2)
                 with c_a:
-                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, key="confirm_2_mobile", type="primary"):
+                    if st.button("💥 POTWIERDZAM", use_container_width=True, key="confirm_2_mobile", type="primary"):
                         df_all_raw_data_m = load_data()
                         df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m, lock_date_from_m, lock_date_to_m).copy()
                         df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
@@ -972,22 +941,19 @@ if st.session_state.get("lock_step", 0) >= 1:
 
                             lock_ids = df_lock_range_m["id"].tolist()
                             insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
-                            st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy zostają aktywne.")
+                            st.success("✅ Raport wysłany e-mailem i zapisany.")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
-                        st.session_state.lock_confirm_2 = False
                         st.rerun()
                 with c_b:
                     if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile_inner"):
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
-                        st.session_state.lock_confirm_2 = False
                         st.rerun()
 
         if not st.session_state.lock_confirm_1:
             if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
                 st.session_state.lock_step = 0
                 st.session_state.lock_confirm_1 = False
-                st.session_state.lock_confirm_2 = False
                 st.rerun()
