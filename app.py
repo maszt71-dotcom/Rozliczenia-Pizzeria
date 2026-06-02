@@ -160,7 +160,6 @@ def get_email_configs():
         "source": "kod aplikacji",
     })
 
-    # Awaryjnie sprawdź oba adresy, bo w rozmowie pojawiły się dwie bardzo podobne nazwy konta.
     for sender in ("mange989592@gmail.com", "mange929598@gmail.com"):
         configs.append({
             "receiver": DEFAULT_SECRETS["REPORT_RECEIVER_EMAIL"],
@@ -273,7 +272,9 @@ def load_data():
     for col in expected_cols:
         if col not in df.columns:
             df[col] = defaults[col]
-    df["status"] = "Aktywny"
+            
+    if not df.empty and "status" in df.columns:
+        df["status"] = df["status"].fillna("Aktywny")
     return df
 
 def load_archived_reports():
@@ -306,54 +307,6 @@ def parse_entry_ids(value):
         except Exception:
             return []
     return []
-
-def get_archived_markers():
-    df_reports = load_archived_reports()
-    archived_ids = set()
-    archived_ranges = []
-    if df_reports.empty:
-        return archived_ids, archived_ranges
-
-    for _, report in df_reports.iterrows():
-        ids = parse_entry_ids(report.get("entry_ids"))
-        archived_ids.update(ids)
-
-        if not ids:
-            try:
-                date_from = datetime.strptime(str(report.get("okres_od")), "%d.%m.%Y").date()
-                date_to = datetime.strptime(str(report.get("okres_do")), "%d.%m.%Y").date()
-                archived_ranges.append((date_from, date_to))
-            except Exception:
-                pass
-
-    return archived_ids, archived_ranges
-
-def exclude_archived_entries(df):
-    if df.empty:
-        return df.copy()
-
-    archived_ids, archived_ranges = get_archived_markers()
-    if not archived_ids and not archived_ranges:
-        return df.copy()
-
-    result = df.copy()
-
-    if archived_ids and "id" in result.columns:
-        ids = pd.to_numeric(result["id"], errors="coerce")
-        result = result[~ids.isin(archived_ids)].copy()
-
-    if archived_ranges and "data_zdarzenia" in result.columns:
-        keep_mask = []
-        for value in result["data_zdarzenia"].astype(str).str.strip():
-            parsed = parse_event_date(value)
-            if not parsed:
-                keep_mask.append(True)
-                continue
-            in_archived_range = any(start <= parsed <= end for start, end in archived_ranges)
-            keep_mask.append(not in_archived_range)
-        result = result[keep_mask].copy()
-
-    return result
 
 def filter_data_by_date_range(df, date_from, date_to):
     if df.empty:
@@ -419,7 +372,7 @@ def sort_df_by_data_zdarzenia(df):
     return temp.drop(columns=["_sort_date"], errors="ignore")
 
 
-# Ładowanie danych z bazy
+# Ładowanie pełnych danych z bazy
 data = load_data()
 
 def get_default_date_range(df):
@@ -435,12 +388,6 @@ def get_default_date_range(df):
     today = get_now().date()
     return today.replace(day=1), today
 
-def apply_main_filters(df, date_from, date_to):
-    return filter_data_by_date_range(df.copy(), date_from, date_to).copy()
-
-def apply_history_filters(df, date_from, date_to):
-    return filter_data_by_date_range(df.copy(), date_from, date_to).copy()
-
 def get_latest_event_date(df):
     dates = []
     if not df.empty and "data_zdarzenia" in df.columns:
@@ -453,16 +400,16 @@ def get_latest_event_date(df):
 
 default_date_from, default_date_to = get_default_date_range(data)
 
-# Główne kafelki i historia pokazują tylko wpisy niewłączone jeszcze do zapisanego raportu.
-df_current_all = exclude_archived_entries(data)
-default_cumulative_from, _ = get_default_date_range(df_current_all)
+# Pozwalamy wyciągać raporty z dowolnych dat – cała baza jest dostępna
+df_current_all = data.copy()
+current_month_start = get_now().date().replace(day=1)
 
 # --- PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     pokaz_rozliczone = False
     st.markdown("**Kwoty narastająco:**")
-    cumulative_date_from = st.date_input("Pokaż od", value=default_cumulative_from, key="cumulative_date_from")
+    cumulative_date_from = st.date_input("Pokaż od", value=current_month_start, key="cumulative_date_from")
     st.divider()
 
 cumulative_date_to = get_latest_event_date(df_current_all)
@@ -789,7 +736,7 @@ with st.sidebar:
 
                             lock_ids = df_lock_range["id"].tolist()
                             insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                            st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy zostają aktywne.")
+                            st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy pozostają aktywne.")
 
                         st.session_state.lock_step = 0
                         st.session_state.lock_confirm_1 = False
@@ -839,7 +786,7 @@ with st.sidebar:
             if report_date_from > report_date_to:
                 st.error("Data od nie może być większa niż data do")
             else:
-                st.info(f"Raport zostanie pobrany z aktywnych wpisów: {report_date_from.strftime('%d.%m.%Y')} - {report_date_to.strftime('%d.%m.%Y')}.")
+                st.info(f"Raport zostanie pobrany z wpisów: {report_date_from.strftime('%d.%m.%Y')} - {report_date_to.strftime('%d.%m.%Y')}.")
                 df_report_range = filter_data_by_date_range(df_active_calc, report_date_from, report_date_to).copy()
                 df_report_range = sort_df_by_data_zdarzenia(df_report_range)
                 report_p, report_g, report_w = calculate_range_sums(df_report_range)
