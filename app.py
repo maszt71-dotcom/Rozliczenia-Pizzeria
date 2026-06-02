@@ -67,6 +67,20 @@ def short_pdf_text(value, max_len=58):
     text = pdf_safe(value).replace("\n", " ").strip()
     return text if len(text) <= max_len else text[: max_len - 3] + "..."
 
+def money_text(value):
+    return f"{float(value):,.2f} zł"
+
+def metric_card(label, value, color_class):
+    st.markdown(
+        f"""
+        <div class="metric-card {color_class}">
+            <div class="label">{label}</div>
+            <div class="value">{money_text(value)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
 def make_auth_token(ttl_seconds=60 * 60 * 12):
     secret = str(get_secret("AUTH_COOKIE_SECRET") or get_secret("APP_PASSWORD") or "")
     if not secret:
@@ -257,7 +271,130 @@ def send_email_with_reports(pdf_data, csv_data):
 st.set_page_config(
     page_title="Pizzeria",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
+)
+
+st.markdown(
+    """
+    <style>
+        #MainMenu, footer {display: none;}
+        header {visibility: hidden;}
+        .stApp {
+            background: #f6f7f9;
+            color: #1f2937;
+        }
+        .block-container {
+            max-width: 1180px;
+            padding-top: 1.2rem;
+            padding-bottom: 5.5rem;
+        }
+        [data-testid="stSidebar"] {
+            background: #eef2f7;
+            border-right: 1px solid #d9dee8;
+            box-shadow: 10px 0 28px rgba(31, 41, 55, 0.08);
+        }
+        [data-testid="stSidebar"] .block-container {
+            padding-top: 1.2rem;
+        }
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3 {
+            color: #252a38;
+        }
+        [data-testid="stSidebar"] .stButton > button {
+            width: 100%;
+            min-height: 2.75rem;
+            border-radius: 8px;
+        }
+        [data-testid="stSidebar"] input {
+            border-radius: 8px;
+        }
+        h1, h2, h3 {
+            letter-spacing: 0;
+            color: #242938;
+        }
+        .app-header {
+            margin: 0 0 1rem 0;
+        }
+        .app-title {
+            font-size: 2.05rem;
+            line-height: 1.08;
+            font-weight: 800;
+            color: #252a38;
+            margin: 0;
+        }
+        .app-subtitle {
+            font-size: 0.88rem;
+            color: #7a8190;
+            margin-top: 0.45rem;
+        }
+        .metric-card {
+            border: 1px solid rgba(31, 41, 55, 0.08);
+            border-radius: 8px;
+            padding: 1rem 1.05rem;
+            margin-bottom: 0.7rem;
+            box-shadow: 0 6px 18px rgba(31, 41, 55, 0.06);
+        }
+        .metric-card .label {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #4b5563;
+            text-transform: uppercase;
+        }
+        .metric-card .value {
+            margin-top: 0.35rem;
+            font-size: 1.35rem;
+            line-height: 1.15;
+            font-weight: 800;
+            color: #111827;
+        }
+        .metric-card.blue {background: #dbeafe;}
+        .metric-card.green {background: #d4edda;}
+        .metric-card.yellow {background: #fff3cd;}
+        .metric-card.red {background: #f8d7da;}
+        .metric-card.negative {
+            background: #dc2626;
+        }
+        .metric-card.negative .label,
+        .metric-card.negative .value {
+            color: #ffffff;
+        }
+        div.stButton > button {
+            border-radius: 8px;
+            min-height: 2.45rem;
+            font-weight: 700;
+            border-color: #d7dce5;
+            box-shadow: none;
+        }
+        div.stButton > button[kind="primary"] {
+            background: #ef4444;
+            border-color: #ef4444;
+        }
+        div[data-testid="stDataFrame"] {
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+        @media (max-width: 720px) {
+            .block-container {
+                padding: 0.9rem 0.85rem 5.5rem 0.85rem;
+            }
+            [data-testid="stSidebar"] {
+                box-shadow: 20px 0 38px rgba(17, 24, 39, 0.22);
+            }
+            .app-title {
+                font-size: 1.85rem;
+            }
+            .metric-card {
+                padding: 0.95rem;
+                margin-bottom: 0.55rem;
+            }
+            .metric-card .value {
+                font-size: 1.18rem;
+            }
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
 cookies = CookieManager()
@@ -615,13 +752,16 @@ if "lock_confirm_2" not in st.session_state:
     st.session_state.lock_confirm_2 = False
 
 # --- 5. WIDOK GŁÓWNY ---
-st.title("🍕 Rozliczenie Pizzerii")
-st.caption(f"Kwoty narastająco od {cumulative_date_from.strftime('%d.%m.%Y')} do {cumulative_date_to.strftime('%d.%m.%Y')}")
-
 st.markdown(
-    f'<div style="background-color:#dbeafe; padding:15px; border-radius:10px; text-align:center; margin-bottom:12px;">Gotówka z przeniesienia: <b>{s_przeniesienie:,.2f} zł</b></div>',
+    f"""
+    <div class="app-header">
+        <div class="app-title">Rozliczenie Pizzerii</div>
+        <div class="app-subtitle">Kwoty narastająco od {cumulative_date_from.strftime('%d.%m.%Y')} do {cumulative_date_to.strftime('%d.%m.%Y')}</div>
+    </div>
+    """,
     unsafe_allow_html=True
 )
+metric_card("Gotówka z przeniesienia", s_przeniesienie, "blue")
 if st.button("➕ DODAJ", key="zp"):
     st.session_state.s = "ZP" if st.session_state.s != "ZP" else ""
     st.rerun()
@@ -647,10 +787,7 @@ if st.session_state.s == "ZP":
 c1, c2, c3 = st.columns(3)
 
 with c1:
-    st.markdown(
-        f'<div style="background-color:#d4edda; padding:15px; border-radius:10px; text-align:center;">Przychód: <b>{s_og:,.2f} zł</b></div>',
-        unsafe_allow_html=True
-    )
+    metric_card("Przychód", s_og, "green")
     if st.button("➕ DODAJ", key="p"):
         st.session_state.s = "P" if st.session_state.s != "P" else ""
         st.rerun()
@@ -673,12 +810,7 @@ with c1:
                     st.rerun()
 
 with c2:
-    got_bg = "#FF0000" if s_got < 0 else "#fff3cd"
-    got_txt = "white" if s_got < 0 else "black"
-    st.markdown(
-        f'<div style="background-color:{got_bg}; color:{got_txt}; padding:15px; border-radius:10px; text-align:center;">Gotówka: <b>{s_got:,.2f} zł</b></div>',
-        unsafe_allow_html=True
-    )
+    metric_card("Gotówka", s_got, "negative" if s_got < 0 else "yellow")
     if st.button("➕ DODAJ", key="g"):
         st.session_state.s = "G" if st.session_state.s != "G" else ""
         st.session_state.os = None
@@ -712,10 +844,7 @@ with c2:
                                 st.rerun()
 
 with c3:
-    st.markdown(
-        f'<div style="background-color:#f8d7da; padding:15px; border-radius:10px; text-align:center;">Wydatki: <b>{s_wyd:,.2f} zł</b></div>',
-        unsafe_allow_html=True
-    )
+    metric_card("Wydatki", s_wyd, "red")
     if st.button("➕ DODAJ", key="w"):
         st.session_state.s = "W" if st.session_state.s != "W" else ""
         st.rerun()
