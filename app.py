@@ -450,10 +450,7 @@ df_current_all = data.copy()
 latest_reset_date = get_next_date_after_latest_closed_report()
 current_month_start = latest_reset_date or get_now().date().replace(day=1)
 
-if (
-    "cumulative_date_from" not in st.session_state
-    or st.session_state.cumulative_date_from < current_month_start
-):
+if "cumulative_date_from" not in st.session_state:
     st.session_state.cumulative_date_from = current_month_start
 
 # --- PASEK BOCZNY ---
