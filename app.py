@@ -96,19 +96,56 @@ def check_secret_password(value, secret_name):
     return bool(expected) and hmac.compare_digest(str(value or ""), expected)
 
 def insert_report_with_ids(date_from, date_to, total_income, entry_ids):
-    payload = {
-        "data_wygenerowania": get_now().isoformat(),
-        "okres_od": date_from.strftime("%d.%m.%Y"),
-        "okres_do": date_to.strftime("%d.%m.%Y"),
-        "suma_przychodow": float(total_income),
-        "entry_ids": [int(x) for x in entry_ids],
-    }
-    try:
-        return supabase.table("raporty").insert(payload).execute()
-    except Exception:
-        payload.pop("entry_ids", None)
-        st.warning("Tabela raporty nie ma kolumny entry_ids. Raport zapisano, ale archiwum będzie odtwarzane po datach.")
-        return supabase.table("raporty").insert(payload).execute()
+    generated_iso = get_now().isoformat()
+    generated_label = get_now().strftime("%d.%m.%Y %H:%M")
+    period_from = date_from.strftime("%d.%m.%Y")
+    period_to = date_to.strftime("%d.%m.%Y")
+    ids = [int(x) for x in entry_ids]
+
+    payloads = [
+        {
+            "data_wygenerowania": generated_iso,
+            "okres_od": period_from,
+            "okres_do": period_to,
+            "suma_przychodow": float(total_income),
+            "entry_ids": ids,
+        },
+        {
+            "data_wygenerowania": generated_iso,
+            "okres_od": period_from,
+            "okres_do": period_to,
+            "suma_przychodow": float(total_income),
+        },
+        {
+            "data": generated_label,
+            "okres_od": period_from,
+            "okres_do": period_to,
+            "suma_przychodow": float(total_income),
+            "entry_ids": ids,
+        },
+        {
+            "data": generated_label,
+            "okres_od": period_from,
+            "okres_do": period_to,
+            "suma_przychodow": float(total_income),
+        },
+    ]
+
+    for payload in payloads:
+        try:
+            result = supabase.table("raporty").insert(payload).execute()
+            if "entry_ids" not in payload:
+                st.warning("Raport zapisano w archiwum po datach. Wpisy finansowe pozostały aktywne.")
+            return result
+        except Exception:
+            pass
+
+    st.warning(
+        "Raport wysłano e-mailem, a wpisy finansowe pozostały aktywne, "
+        "ale nie udało się zapisać pozycji w Archiwum raportów. "
+        "Sprawdź w Supabase, czy tabela raporty ma kolumny: okres_od, okres_do i suma_przychodow."
+    )
+    return None
 
 def load_report_rows(report_row):
     entry_ids = report_row.get("entry_ids", None)
@@ -276,6 +313,8 @@ def load_archived_reports():
     
     if res.data:
         df = pd.DataFrame(res.data)
+        if "data_wygenerowania" not in df.columns and "data" in df.columns:
+            df["data_wygenerowania"] = df["data"]
         for col in expected_cols:
             if col not in df.columns:
                 if col == "suma_przychodow":
