@@ -26,7 +26,7 @@ DEFAULT_SECRETS = {
     "AUTH_COOKIE_SECRET": "dup@_sekret_cookie_2026",
     "REPORT_RECEIVER_EMAIL": "maszt71@gmail.com",
     "REPORT_SENDER_EMAIL": "mange929598@gmail.com",
-    "REPORT_EMAIL_PASSWORD": "zfuodazqsegtekel",
+    "REPORT_EMAIL_PASSWORD": "kwoaohaszcshiggg",
 }
 
 def get_secret(name, default=None):
