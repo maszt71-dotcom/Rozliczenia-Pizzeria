@@ -342,7 +342,6 @@ def sort_df_by_data_zdarzenia(df):
     temp = temp.sort_values(by=["_sort_date", "id"], ascending=[False, False])
     return temp.drop(columns=["_sort_date"], errors="ignore")
 
-
 # Ładowanie danych
 data = load_data()
 
@@ -367,7 +366,6 @@ def get_latest_event_date(df):
             if parsed:
                 dates.append(parsed)
     return max(dates) if dates else get_now().date()
-
 
 default_date_from, default_date_to = get_default_date_range(data)
 df_current_all = data.copy()
@@ -480,6 +478,19 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
     if isinstance(pdf_output, (bytes, bytearray)):
         return bytes(pdf_output)
     return pdf_output.encode("latin-1")
+
+# --- FUNKCJA STYLIZOWANIA KOLORÓW DLA WIERSZY W HISTORII ---
+def style_row_by_type(row):
+    typ = str(row["typ"])
+    if CARRYOVER_TYPE in typ or "🔵" in typ:
+        return ["background-color: #dbeafe; color: black;"] * len(row)
+    elif "Przychód ogólny" in typ or "🟢" in typ:
+        return ["background-color: #d4edda; color: black;"] * len(row)
+    elif "Gotówka" in typ or "🟡" in typ:
+        return ["background-color: #fff3cd; color: black;"] * len(row)
+    elif "Wydatki" in typ or "🔴" in typ:
+        return ["background-color: #f8d7da; color: black;"] * len(row)
+    return [""] * len(row)
 
 # --- 4. STANY SESJI ---
 if "s" not in st.session_state:
@@ -824,49 +835,47 @@ with st.sidebar:
         cookies.save()
         st.rerun()
 
-# --- 7. HISTORIA WPISÓW Z WYGODNYM SELEKTOREM ---
+# --- 7. HISTORIA WPISÓW Z POPRAWNYM FORMATOWANIEM I SELEKTOREM ---
 st.divider()
 st.subheader("Historia wpisów")
 
 if not df_history.empty:
     df_editor_input = sort_df_by_data_zdarzenia(df_history)
     df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
+    
+    # Dodanie wizualnych ikon do typów dla zachowania czytelności przy klikaniu
+    df_editor_input["typ"] = df_editor_input["typ"].map(
+        lambda x: "🔵 Gotówka z przeniesienia" if x == CARRYOVER_TYPE else
+                  "🟢 Przychód ogólny" if x == "Przychód ogólny" else
+                  "🔴 Wydatki gotówkowe" if x == "Wydatki gotówkowe" else
+                  f"🟡 {x}" if "Gotówka" in str(x) else x
+    )
+
+    # Wstrzyknięcie kolumny wyboru na początek tabeli
     df_editor_input.insert(0, "Wybierz", False)
 
-    # Przygotowanie konfiguracji kolumn z mapowaniem emotek-kolorów dla typu transakcji
+    # Stylowanie wierszy (kolory tła z głównych kafelków)
+    styled_df = df_editor_input.style.apply(style_row_by_type, axis=1)
+
+    # Uruchomienie bezpiecznego edytora (edytowalna tylko kolumna Checkbox)
     res = st.data_editor(
-        df_editor_input,
+        styled_df,
         column_config={
             "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
             "id": None,
             "kwota": st.column_config.NumberColumn("Kwota", format="%,.2f zł"),
-            "typ": st.column_config.SelectColumn(
-                "Typ transakcji",
-                options=[
-                    "🟢 Przychód ogólny", 
-                    "🔵 Gotówka z przeniesienia", 
-                    "🟡 Gotówka - 🏢 Bufet", 
-                    "🟡 Gotówka - 🚗 Kierowca 1", 
-                    "🟡 Gotówka - 🚗 Kierowca 2", 
-                    "🟡 Gotówka - 🚗 Kierowca 3", 
-                    "🟡 Gotówka - 🚗 Kierowca 4", 
-                    "🔴 Wydatki gotówkowe"
-                ]
-            )
+            "data": st.column_config.TextColumn("Data wpisu"),
+            "data_zdarzenia": st.column_config.TextColumn("Data transakcji"),
+            "typ": st.column_config.TextColumn("Typ"),
+            "opis": st.column_config.TextColumn("Opis")
         },
-        # Mapowanie surowych nazw na czytelne, kolorowe etykiety wizualne w tabeli
-        format_func=lambda x: (
-            "🔵 Gotówka z przeniesienia" if x == CARRYOVER_TYPE else
-            "🟢 Przychód ogólny" if x == "Przychód ogólny" else
-            "🔴 Wydatki gotówkowe" if x == "Wydatki gotówkowe" else
-            f"🟡 {x}" if "Gotówka" in str(x) else x
-        ),
         disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"],
         hide_index=True,
         use_container_width=True,
         key="pizza_editor"
     )
 
+    # Odczytywanie zaznaczonych ID do usunięcia
     selected_ids = res[res["Wybierz"] == True]["id"].tolist()
 
     if st.session_state.selected_ids != selected_ids:
@@ -875,7 +884,6 @@ if not df_history.empty:
         st.rerun()
 else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
-
 
 # --- 8. AKCJE MOBILNE ---
 st.divider()
