@@ -110,12 +110,6 @@ def insert_report_with_ids(date_from, date_to, total_income, entry_ids):
         st.warning("Tabela raporty nie ma kolumny entry_ids. Raport zapisano, ale archiwum będzie odtwarzane po datach.")
         return supabase.table("raporty").insert(payload).execute()
 
-def update_finance_status(ids, status):
-    ids = [int(x) for x in ids]
-    if ids:
-        return supabase.table("finanse").update({"status": status}).in_("id", ids).execute()
-    return None
-
 def load_report_rows(report_row):
     entry_ids = report_row.get("entry_ids", None)
     if isinstance(entry_ids, str):
@@ -400,7 +394,6 @@ def get_latest_event_date(df):
 
 default_date_from, default_date_to = get_default_date_range(data)
 
-# Pozwalamy wyciągać raporty z dowolnych dat – cała baza jest dostępna
 df_current_all = data.copy()
 current_month_start = get_now().date().replace(day=1)
 
@@ -462,7 +455,7 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
 
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_fill_color(212, 237, 218)
-    pdf.cell(63, 10, pdf_safe(f"Przychod: {p:.2f} zl"), border=1, fill=True, align="C")
+    pdf.cell(63, 10, pdf_safe(f"Przychod: {p:,.2f} zl"), border=1, fill=True, align="C")
 
     if g < 0:
         pdf.set_fill_color(255, 0, 0)
@@ -471,10 +464,10 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
         pdf.set_fill_color(255, 243, 205)
         pdf.set_text_color(0, 0, 0)
 
-    pdf.cell(64, 10, pdf_safe(f"Gotowka: {g:.2f} zl"), border=1, fill=True, align="C")
+    pdf.cell(64, 10, pdf_safe(f"Gotowka: {g:,.2f} zl"), border=1, fill=True, align="C")
     pdf.set_text_color(0, 0, 0)
     pdf.set_fill_color(248, 215, 218)
-    pdf.cell(63, 10, pdf_safe(f"Wydatki: {w:.2f} zl"), border=1, ln=1, fill=True, align="C")
+    pdf.cell(63, 10, pdf_safe(f"Wydatki: {w:,.2f} zl"), border=1, ln=1, fill=True, align="C")
     pdf.ln(10)
 
     pdf.set_font("Helvetica", "B", 10)
@@ -499,7 +492,7 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
 
         data_txt = str(row.get("data_zdarzenia", ""))
         typ_txt = str(row.get("typ", ""))
-        kwota_txt = f"{float(row.get('kwota', 0)):.2f} zl"
+        kwota_txt = f"{float(row.get('kwota', 0)):,.2f} zl"
         opis_txt = short_pdf_text(row.get("opis", ""))
 
         pdf.cell(28, 8, pdf_safe(data_txt), border=1, fill=True, align="C")
@@ -513,6 +506,17 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
     if isinstance(pdf_output, (bytes, bytearray)):
         return bytes(pdf_output)
     return pdf_output.encode("latin-1")
+
+# --- FUNKCJA STYLIZOWANIA KOLORÓW W HISTORII ---
+def style_row_by_type(row):
+    typ = str(row["typ"])
+    if typ == "Przychód ogólny" or typ == CARRYOVER_TYPE:
+        return ["background-color: #d4edda; color: black;"] * len(row)
+    elif "Gotówka" in typ:
+        return ["background-color: #fff3cd; color: black;"] * len(row)
+    elif typ == "Wydatki gotówkowe":
+        return ["background-color: #f8d7da; color: black;"] * len(row)
+    return [""] * len(row)
 
 # --- 4. STANY SESJI ---
 if "s" not in st.session_state:
@@ -705,11 +709,9 @@ with st.sidebar:
             lock_date_from = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_sidebar")
             lock_date_to = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_sidebar")
             
-            h = st.text_input("Hasło Szefa:", type="password", key="boss_pass_sidebar")
-            
             if lock_date_from > lock_date_to:
                 st.error("Data od nie może być większa niż data do")
-            elif check_secret_password(h, "BOSS_PASSWORD"):
+            else:
                 if not st.session_state.lock_confirm_1:
                     if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_sidebar"):
                         st.session_state.lock_confirm_1 = True
@@ -717,7 +719,7 @@ with st.sidebar:
                 
                 elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
                     st.warning("⚠️ Tej czynności nie można cofnąć!")
-                    if st.button("💥 POTWIERDZAM I ROZLICZAM", use_container_width=True, type="primary", key="confirm_2_sidebar"):
+                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_2_sidebar"):
                         df_all_raw_data = load_data()
                         df_lock_range = filter_data_by_date_range(df_all_raw_data, lock_date_from, lock_date_to).copy()
                         df_lock_range = sort_df_by_data_zdarzenia(df_lock_range)
@@ -864,35 +866,40 @@ with st.sidebar:
         cookies.save()
         st.rerun()
 
-# --- 7. HISTORIA WPISÓW ---
+# --- 7. HISTORIA WPISÓW Z KOLOROWANIEM ---
 st.divider()
-
 st.subheader("Historia wpisów")
 
 if not df_history.empty:
-    df_editor_input = sort_df_by_data_zdarzenia(df_history)
-    df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
-    df_editor_input.insert(0, "Wybierz", False)
+    df_display = sort_df_by_data_zdarzenia(df_history)
+    df_display = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
+    
+    # Formatowanie wyświetlania kwot w tabeli głównej
+    df_display["kwota"] = df_display["kwota"].map(lambda x: f"{x:,.2f} zł")
 
-    res = st.data_editor(
-        df_editor_input,
-        column_config={
-            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": None,
-            "kwota": st.column_config.NumberColumn("Kwota", format="%.2f zł"),
-        },
-        disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"],
-        hide_index=True,
-        use_container_width=True,
-        key="pizza_editor"
+    # Tworzenie selektora usuwania jako wielokrotnego wyboru (zamiast checkboxa w każdym wierszu dla zachowania kolorów)
+    options_dict = {row["id"]: f"📅 {row['data_zdarzenia']} | {row['typ']} | {row['kwota']} | {row['opis']}" for _, row in df_display.iterrows()}
+    
+    selected_ids = st.multiselect(
+        "Zaznacz wpisy do usunięcia:", 
+        options=list(options_dict.keys()), 
+        format_func=lambda x: options_dict[x],
+        key="delete_multiselect"
     )
-
-    selected_ids = res[res["Wybierz"] == True]["id"].tolist()
-
+    
     if st.session_state.selected_ids != selected_ids:
         st.session_state.selected_ids = selected_ids
         st.session_state.show_delete_confirm = False
         st.rerun()
+
+    # Nakładanie stylów kolorystycznych na wiersze
+    styled_df = df_display.style.apply(style_row_by_type, axis=1)
+
+    st.dataframe(
+        styled_df,
+        hide_index=True,
+        use_container_width=True
+    )
 else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
 
@@ -931,10 +938,9 @@ if st.session_state.get("lock_step", 0) >= 1:
         lock_date_from_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
         lock_date_to_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
         
-        h_mobile = st.text_input("Hasło Szefa:", type="password", key="boss_pass_mobile")
         if lock_date_from_m > lock_date_to_m:
             st.error("Data od nie może być większa niż data do")
-        elif check_secret_password(h_mobile, "BOSS_PASSWORD"):
+        else:
             if not st.session_state.lock_confirm_1:
                 if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
                     st.session_state.lock_confirm_1 = True
@@ -944,7 +950,7 @@ if st.session_state.get("lock_step", 0) >= 1:
                 st.warning("⚠️ Tej czynności nie można cofnąć!")
                 c_a, c_b = st.columns(2)
                 with c_a:
-                    if st.button("✅ Potwierdzam", use_container_width=True, key="confirm_2_mobile", type="primary"):
+                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, key="confirm_2_mobile", type="primary"):
                         df_all_raw_data_m = load_data()
                         df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m, lock_date_from_m, lock_date_to_m).copy()
                         df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
