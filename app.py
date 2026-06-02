@@ -125,31 +125,32 @@ def load_report_rows(report_row):
     d_to_parsed = datetime.strptime(report_row["okres_do"], "%d.%m.%Y").date()
     return sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), d_from_parsed, d_to_parsed))
 
-# --- FUNKCJA WYSYŁKI E-MAIL ---
+# --- POPRAWIONA I UPORZĄDKOWANA FUNKCJA WYSYŁKI E-MAIL ---
 def clean_app_password(value):
     return str(value or "").replace(" ", "").strip()
 
 def get_email_configs():
     configs = []
-    try:
-        secrets_receiver = st.secrets.get("REPORT_RECEIVER_EMAIL")
-        secrets_sender = st.secrets.get("REPORT_SENDER_EMAIL")
-        secrets_password = st.secrets.get("REPORT_EMAIL_PASSWORD")
-        if secrets_receiver and secrets_sender and secrets_password:
-            configs.append({
-                "receiver": str(secrets_receiver).strip(),
-                "sender": str(secrets_sender).strip(),
-                "password": clean_app_password(secrets_password),
-                "source": "Streamlit secrets",
-            })
-    except Exception:
-        pass
-
+    
+    # 1. Sprawdź najpierw ustawienia użytkownika w st.secrets
+    secrets_receiver = st.secrets.get("REPORT_RECEIVER_EMAIL")
+    secrets_sender = st.secrets.get("REPORT_SENDER_EMAIL")
+    secrets_password = st.secrets.get("REPORT_EMAIL_PASSWORD")
+    
+    if secrets_receiver and secrets_sender and secrets_password:
+        configs.append({
+            "receiver": str(secrets_receiver).strip(),
+            "sender": str(secrets_sender).strip(),
+            "password": clean_app_password(secrets_password),
+            "source": "Streamlit secrets"
+        })
+        
+    # 2. Zawsze dodaj wartości domyślne jako rezerwę awaryjną
     configs.append({
         "receiver": DEFAULT_SECRETS["REPORT_RECEIVER_EMAIL"],
         "sender": DEFAULT_SECRETS["REPORT_SENDER_EMAIL"],
         "password": clean_app_password(DEFAULT_SECRETS["REPORT_EMAIL_PASSWORD"]),
-        "source": "kod aplikacji",
+        "source": "Kod aplikacji"
     })
 
     unique = []
@@ -182,10 +183,11 @@ def build_email_message(sender_email, receiver_email, pdf_data, csv_data):
 def send_email_with_reports(pdf_data, csv_data):
     configs = get_email_configs()
     if not configs:
-        st.error("Brakuje konfiguracji e-mail.")
+        st.error("Błąd: Kompletnie brakuje konfiguracji serwera pocztowego.")
         return False
 
-    auth_failed = []
+    auth_failed_senders = set()
+    
     for cfg in configs:
         try:
             msg = build_email_message(cfg["sender"], cfg["receiver"], pdf_data, csv_data)
@@ -194,17 +196,18 @@ def send_email_with_reports(pdf_data, csv_data):
                 server.send_message(msg)
             return True
         except smtplib.SMTPAuthenticationError:
-            auth_failed.append(cfg["sender"])
+            auth_failed_senders.add(cfg["sender"])
         except Exception:
             continue
 
-    if auth_failed:
+    if auth_failed_senders:
         st.error(
-            "Nie udało się wysłać maila: Gmail odrzucił hasło aplikacji dla konta nadawcy. "
-            "Wygeneruj nowe hasło aplikacji Gmail (Hasła aplikacji) dla konta: " + ", ".join(sorted(set(auth_failed)))
+            "Nie udało się wysłać maila: Gmail odrzucił hasło logowania konta nadawcy. "
+            "Upewnij się, że wygenerowałeś 16-znakowe 'Hasło aplikacji' w ustawieniach konta Google dla konta: " 
+            + ", ".join(sorted(auth_failed_senders))
         )
     else:
-        st.error("Nie udało się wysłać maila. Sprawdź konfigurację Gmail i spróbuj ponownie.")
+        st.error("Nie udało się połączyć z serwerem pocztowym SMTP. Sprawdź połączenie sieciowe lub konfigurację Gmail.")
     return False
 
 # --- 1. KONFIGURACJA I LOGOWANIE ---
@@ -342,6 +345,7 @@ def sort_df_by_data_zdarzenia(df):
     temp = temp.sort_values(by=["_sort_date", "id"], ascending=[False, False])
     return temp.drop(columns=["_sort_date"], errors="ignore")
 
+
 # Ładowanie danych
 data = load_data()
 
@@ -366,6 +370,7 @@ def get_latest_event_date(df):
             if parsed:
                 dates.append(parsed)
     return max(dates) if dates else get_now().date()
+
 
 default_date_from, default_date_to = get_default_date_range(data)
 df_current_all = data.copy()
@@ -399,7 +404,7 @@ else:
 # --- 3. GENERATOR PDF ---
 def infer_report_range(df):
     dates = []
-    if not df.empty and "data_zdarzenia" in df.columns:
+    if not df.empty && "data_zdarzenia" in df.columns:
         for val in df["data_zdarzenia"].astype(str).str.strip():
             parsed = parse_event_date(val)
             if parsed:
@@ -482,13 +487,13 @@ def create_pdf(df, p, g, w, date_from=None, date_to=None):
 # --- FUNKCJA STYLIZOWANIA KOLORÓW DLA WIERSZY W HISTORII ---
 def style_row_by_type(row):
     typ = str(row["typ"])
-    if CARRYOVER_TYPE in typ or "🔵" in typ:
+    if CARRYOVER_TYPE in typ:
         return ["background-color: #dbeafe; color: black;"] * len(row)
-    elif "Przychód ogólny" in typ or "🟢" in typ:
+    elif "Przychód ogólny" in typ:
         return ["background-color: #d4edda; color: black;"] * len(row)
-    elif "Gotówka" in typ or "🟡" in typ:
+    elif "Gotówka" in typ:
         return ["background-color: #fff3cd; color: black;"] * len(row)
-    elif "Wydatki" in typ or "🔴" in typ:
+    elif "Wydatki" in typ:
         return ["background-color: #f8d7da; color: black;"] * len(row)
     return [""] * len(row)
 
@@ -624,344 +629,4 @@ with c3:
             d_w = st.date_input("Data zdarzenia", get_now().date(), key="date_w")
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v", placeholder="Wpisz kwotę")
             op_w = st.text_input("Opis", key="desc_w")
-            if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
-                if kw_w is not None and kw_w > 0:
-                    supabase.table("finanse").insert({
-                        "data": get_now().strftime("%d.%m %H:%M"),
-                        "typ": "Wydatki gotówkowe",
-                        "kwota": float(kw_w),
-                        "opis": op_w,
-                        "status": "Aktywny",
-                        "data_zdarzenia": d_w.strftime("%d.%m.%Y")
-                    }).execute()
-                    st.session_state.s = ""
-                    st.rerun()
-
-# --- 6. PASEK BOCZNY (AKCJE) ---
-with st.sidebar:
-    if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="open_send_picker"):
-        st.session_state.show_send_picker = not st.session_state.show_send_picker
-        if st.session_state.show_send_picker:
-            st.session_state.show_report_picker = False
-            st.session_state.show_archive_picker = False
-        st.rerun()
-
-    if st.session_state.show_send_picker:
-        with st.container(border=True):
-            send_date_from = st.date_input("Data od", value=get_now().date(), key="send_date_from")
-            send_date_to = st.date_input("Data do", value=get_now().date(), key="send_date_to")
-
-            if send_date_from > send_date_to:
-                st.error("Data od nie może być większa niż data do")
-            else:
-                df_send_range = filter_data_by_date_range(df_active_calc, send_date_from, send_date_to).copy()
-                df_send_range = sort_df_by_data_zdarzenia(df_send_range)
-                send_p, send_g, send_w = calculate_range_sums(df_send_range)
-
-                if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
-                    pdf_f = create_pdf(df_send_range, send_p, send_g, send_w, send_date_from, send_date_to)
-                    csv_f = public_csv_data(df_send_range)
-                    if send_email_with_reports(pdf_f, csv_f):
-                        st.success("✅ Wysłano raport!")
-
-                if st.button("↩️ Powrót", use_container_width=True, key="send_back_btn"):
-                    st.session_state.show_send_picker = False
-                    st.rerun()
-
-    st.divider()
-
-    if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
-        st.session_state.lock_step = 1
-        st.session_state.lock_confirm_1 = False
-        st.rerun()
-
-    if st.session_state.get("lock_step", 0) >= 1:
-        with st.container(border=True):
-            lock_date_from = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_sidebar")
-            lock_date_to = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_sidebar")
-            
-            if lock_date_from > lock_date_to:
-                st.error("Data od nie może być większa niż data do")
-            else:
-                if not st.session_state.lock_confirm_1:
-                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_1_sidebar"):
-                        st.session_state.lock_confirm_1 = True
-                        st.rerun()
-                
-                elif st.session_state.lock_confirm_1:
-                    st.warning("⚠️ Tej czynności nie można cofnąć!")
-                    if st.button("💥 POTWIERDZAM NA PEWNO", use_container_width=True, type="primary", key="confirm_2_sidebar"):
-                        df_all_raw_data = load_data()
-                        df_lock_range = filter_data_by_date_range(df_all_raw_data, lock_date_from, lock_date_to).copy()
-                        df_lock_range = sort_df_by_data_zdarzenia(df_lock_range)
-
-                        if not df_lock_range.empty:
-                            lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range)
-                            p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w, lock_date_from, lock_date_to)
-                            c_r = public_csv_data(df_lock_range)
-                            if not has_email_config():
-                                st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
-                                st.stop()
-
-                            if not send_email_with_reports(p_r, c_r):
-                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu e-mailem.")
-                                st.stop()
-
-                            lock_ids = df_lock_range["id"].tolist()
-                            insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                            st.success("✅ Raport wysłany e-mailem i zapisany.")
-
-                        st.session_state.lock_step = 0
-                        st.session_state.lock_confirm_1 = False
-                        st.rerun()
-
-            if st.button("Anuluj", use_container_width=True, key="cancel_close_sidebar"):
-                st.session_state.lock_step = 0
-                st.session_state.lock_confirm_1 = False
-                st.rerun()
-
-    st.divider()
-
-    if len(st.session_state.selected_ids) > 0:
-        if st.button(f"🗑️ USUŃ LINIĘ ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary", key="delete_sidebar_btn"):
-            st.session_state.show_delete_confirm = True
-
-        if st.session_state.get("show_delete_confirm", False):
-            st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
-            if st.button("✅ POTWIERDŹ USUNIĘCIE", use_container_width=True, type="primary", key="delete_sidebar_confirm"):
-                for rid in st.session_state.selected_ids:
-                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
-                st.session_state.selected_ids = []
-                st.session_state.show_delete_confirm = False
-                st.rerun()
-            if st.button("Anuluj", use_container_width=True, key="delete_sidebar_cancel"):
-                st.session_state.show_delete_confirm = False
-                st.rerun()
-    else:
-        st.session_state.show_delete_confirm = False
-
-    st.divider()
-
-    if st.button("📥 Pobierz raport", use_container_width=True, key="open_report_picker"):
-        st.session_state.show_report_picker = not st.session_state.show_report_picker
-        if st.session_state.show_report_picker:
-            st.session_state.show_send_picker = False
-            st.session_state.show_archive_picker = False
-        st.rerun()
-
-    if st.session_state.show_report_picker:
-        with st.container(border=True):
-            report_date_from = st.date_input("Data od", value=default_date_from, key="report_date_from_picker")
-            report_date_to = st.date_input("Data do", value=default_date_to, key="report_date_to_picker")
-
-            if report_date_from > report_date_to:
-                st.error("Data od nie może być większa niż data do")
-            else:
-                st.info(f"Raport zostanie pobrany z wpisów: {report_date_from.strftime('%d.%m.%Y')} - {report_date_to.strftime('%d.%m.%Y')}.")
-                df_report_range = filter_data_by_date_range(df_active_calc, report_date_from, report_date_to).copy()
-                df_report_range = sort_df_by_data_zdarzenia(df_report_range)
-                report_p, report_g, report_w = calculate_range_sums(df_report_range)
-                st.write(f"Przychód: **{report_p:,.2f} zł**")
-                st.write(f"Gotówka: **{report_g:,.2f} zł**")
-                st.write(f"Wydatki: **{report_w:,.2f} zł**")
-
-                _ = st.download_button(
-                    "📥 Pobierz PDF (Szczegółowy)",
-                    data=create_pdf(df_report_range, report_p, report_g, report_w, report_date_from, report_date_to),
-                    file_name=f"raport_{report_date_from}_{report_date_to}.pdf",
-                    use_container_width=True,
-                    key="download_pdf_range"
-                )
-
-                _ = st.download_button(
-                    "📥 Pobierz CSV (Szczegółowy)",
-                    data=public_csv_data(df_report_range),
-                    file_name=f"raport_{report_date_from}_{report_date_to}.csv",
-                    use_container_width=True,
-                    key="download_csv_range"
-                )
-
-            if st.button("↩️ Powrót", use_container_width=True, key="report_back_btn"):
-                st.session_state.show_report_picker = False
-                st.rerun()
-
-    st.divider()
-
-    if st.button("📜 Archiwum raportów", use_container_width=True, key="open_archive_picker"):
-        st.session_state.show_archive_picker = not st.session_state.show_archive_picker
-        if st.session_state.show_archive_picker:
-            st.session_state.show_send_picker = False
-            st.session_state.show_report_picker = False
-        st.rerun()
-
-    if st.session_state.show_archive_picker:
-        with st.container(border=True):
-            st.markdown("**Zapisane zamknięcia z bazy:**")
-            df_arch = load_archived_reports()
-            
-            if df_arch.empty:
-                st.info("Brak zapisanych raportów w bazie.")
-            else:
-                for _, r_row in df_arch.iterrows():
-                    lbl = f"📅 {r_row['okres_od']} - {r_row['okres_do']}"
-                    with st.expander(lbl):
-                        st.write(f"**Wygenerowano:** {r_row.get('data_wygenerowania', r_row.get('data', ''))}")
-                        st.write(f"💰 Suma Przychodów: {r_row['suma_przychodow']:.2f} zł")
-                        
-                        try:
-                            if r_row['okres_od'] == "Brak daty" or r_row['okres_do'] == "Brak daty":
-                                st.warning("Ten wpis jest zbyt stary, aby odtworzyć pełne dane źródłowe.")
-                            else:
-                                df_filtered_arch = load_report_rows(r_row)
-                                
-                                st.download_button(
-                                    "📥 Pobierz CSV (Dane)",
-                                    data=public_csv_data(df_filtered_arch),
-                                    file_name=f"archiwum_{r_row['okres_od']}_{r_row['okres_do']}.csv",
-                                    key=f"dl_arch_{r_row['id']}",
-                                    use_container_width=True
-                                )
-                        except Exception:
-                            st.error("Nie udało się odtworzyć pełnych danych.")
-
-                if st.button("↩️ Powrót", use_container_width=True, key="archive_back_btn"):
-                    st.session_state.show_archive_picker = False
-                    st.rerun()
-
-    st.divider()
-
-    if st.button("🔓 Wyloguj", use_container_width=True):
-        cookies["auth_token"] = ""
-        cookies.save()
-        st.rerun()
-
-# --- 7. HISTORIA WPISÓW Z POPRAWNYM FORMATOWANIEM I SELEKTOREM ---
-st.divider()
-st.subheader("Historia wpisów")
-
-if not df_history.empty:
-    df_editor_input = sort_df_by_data_zdarzenia(df_history)
-    df_editor_input = df_editor_input[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
-    
-    # Dodanie wizualnych ikon do typów dla zachowania czytelności przy klikaniu
-    df_editor_input["typ"] = df_editor_input["typ"].map(
-        lambda x: "🔵 Gotówka z przeniesienia" if x == CARRYOVER_TYPE else
-                  "🟢 Przychód ogólny" if x == "Przychód ogólny" else
-                  "🔴 Wydatki gotówkowe" if x == "Wydatki gotówkowe" else
-                  f"🟡 {x}" if "Gotówka" in str(x) else x
-    )
-
-    # Wstrzyknięcie kolumny wyboru na początek tabeli
-    df_editor_input.insert(0, "Wybierz", False)
-
-    # Stylowanie wierszy (kolory tła z głównych kafelków)
-    styled_df = df_editor_input.style.apply(style_row_by_type, axis=1)
-
-    # Uruchomienie bezpiecznego edytora (edytowalna tylko kolumna Checkbox)
-    res = st.data_editor(
-        styled_df,
-        column_config={
-            "Wybierz": st.column_config.CheckboxColumn("Wybierz", width="small"),
-            "id": None,
-            "kwota": st.column_config.NumberColumn("Kwota", format="%,.2f zł"),
-            "data": st.column_config.TextColumn("Data wpisu"),
-            "data_zdarzenia": st.column_config.TextColumn("Data transakcji"),
-            "typ": st.column_config.TextColumn("Typ"),
-            "opis": st.column_config.TextColumn("Opis")
-        },
-        disabled=["id", "data", "data_zdarzenia", "typ", "kwota", "opis"],
-        hide_index=True,
-        use_container_width=True,
-        key="pizza_editor"
-    )
-
-    # Odczytywanie zaznaczonych ID do usunięcia
-    selected_ids = res[res["Wybierz"] == True]["id"].tolist()
-
-    if st.session_state.selected_ids != selected_ids:
-        st.session_state.selected_ids = selected_ids
-        st.session_state.show_delete_confirm = False
-        st.rerun()
-else:
-    st.info("Brak wpisów w historii dla wybranego okresu.")
-
-# --- 8. AKCJE MOBILNE ---
-st.divider()
-st.subheader("⚡ Szybkie akcje")
-
-m1, m2, m3 = st.columns(3)
-
-with m1:
-    if st.button("📧 Raport", use_container_width=True, key="mobile_report"):
-        df_sorted_mobile = sort_df_by_data_zdarzenia(df_active_calc)
-        mobile_p, mobile_g, mobile_w = calculate_range_sums(df_sorted_mobile)
-        pdf_f = create_pdf(df_sorted_mobile, mobile_p, mobile_g, mobile_w)
-        csv_f = public_csv_data(df_sorted_mobile)
-        if send_email_with_reports(pdf_f, csv_f):
-            st.success("✅ Wysłano raport!")
-
-with m2:
-    if st.button("🔒 Zamknij", use_container_width=True, key="mobile_lock"):
-        st.session_state.lock_step = 1
-        st.session_state.lock_confirm_1 = False
-        st.rerun()
-
-with m3:
-    if len(st.session_state.selected_ids) > 0:
-        if st.button(f"🗑️ Usuń ({len(st.session_state.selected_ids)})", use_container_width=True, key="mobile_delete"):
-            st.session_state.show_delete_confirm = True
-            st.rerun()
-
-if st.session_state.get("lock_step", 0) >= 1:
-    with st.container(border=True):
-        st.markdown("**Zamknij i rozlicz okres**")
-        lock_date_from_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
-        lock_date_to_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
-        
-        if lock_date_from_m > lock_date_to_m:
-            st.error("Data od nie może być większa niż data do")
-        else:
-            if not st.session_state.lock_confirm_1:
-                if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_1_mobile"):
-                    st.session_state.lock_confirm_1 = True
-                    st.rerun()
-            
-            elif st.session_state.lock_confirm_1:
-                st.warning("⚠️ Tej czynności nie można cofnąć!")
-                c_a, c_b = st.columns(2)
-                with c_a:
-                    if st.button("💥 POTWIERDZAM", use_container_width=True, key="confirm_2_mobile", type="primary"):
-                        df_all_raw_data_m = load_data()
-                        df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m, lock_date_from_m, lock_date_to_m).copy()
-                        df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
-                        
-                        if not df_lock_range_m.empty:
-                            lock_p, lock_g, lock_w = calculate_range_sums(df_lock_range_m)
-                            p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w, lock_date_from_m, lock_date_to_m)
-                            c_r = public_csv_data(df_lock_range_m)
-                            if not has_email_config():
-                                st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
-                                st.stop()
-
-                            if not send_email_with_reports(p_r, c_r):
-                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu e-mailem.")
-                                st.stop()
-
-                            lock_ids = df_lock_range_m["id"].tolist()
-                            insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
-                            st.success("✅ Raport wysłany e-mailem i zapisany.")
-
-                        st.session_state.lock_step = 0
-                        st.session_state.lock_confirm_1 = False
-                        st.rerun()
-                with c_b:
-                    if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile_inner"):
-                        st.session_state.lock_step = 0
-                        st.session_state.lock_confirm_1 = False
-                        st.rerun()
-
-        if not st.session_state.lock_confirm_1:
-            if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
-                st.session_state.lock_step = 0
-                st.session_state.lock_confirm_1 = False
-                st.rerun()
+            if st.button("DODAJ", key="save_w
