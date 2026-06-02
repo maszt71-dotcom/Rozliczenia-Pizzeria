@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from fpdf import FPDF
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from streamlit_cookies_manager import CookieManager
 from supabase import create_client, Client
@@ -325,8 +325,22 @@ def load_archived_reports():
                     df[col] = "Brak daty"
         df["suma_przychodow"] = pd.to_numeric(df["suma_przychodow"], errors="coerce").fillna(0.0)
         return df
-        
+
     return pd.DataFrame(columns=expected_cols)
+
+def get_next_date_after_latest_closed_report():
+    df_reports = load_archived_reports()
+    closed_to_dates = []
+    if not df_reports.empty and "okres_do" in df_reports.columns:
+        for val in df_reports["okres_do"].astype(str).str.strip():
+            parsed = parse_event_date(val)
+            if parsed:
+                closed_to_dates.append(parsed)
+
+    if not closed_to_dates:
+        return None
+
+    return max(closed_to_dates) + timedelta(days=1)
 
 def parse_entry_ids(value):
     if isinstance(value, list):
@@ -433,7 +447,14 @@ def get_latest_event_date(df):
 default_date_from, default_date_to = get_default_date_range(data)
 
 df_current_all = data.copy()
-current_month_start = get_now().date().replace(day=1)
+latest_reset_date = get_next_date_after_latest_closed_report()
+current_month_start = latest_reset_date or get_now().date().replace(day=1)
+
+if (
+    "cumulative_date_from" not in st.session_state
+    or st.session_state.cumulative_date_from < current_month_start
+):
+    st.session_state.cumulative_date_from = current_month_start
 
 # --- PASEK BOCZNY ---
 with st.sidebar:
@@ -443,11 +464,12 @@ with st.sidebar:
     cumulative_date_from = st.date_input("Pokaż od", value=current_month_start, key="cumulative_date_from")
     st.divider()
 
-cumulative_date_to = get_latest_event_date(df_current_all)
-if cumulative_date_from > cumulative_date_to:
+latest_data_date = get_latest_event_date(df_current_all)
+cumulative_date_to = max(latest_data_date, cumulative_date_from)
+if cumulative_date_from > latest_data_date:
     df_current = pd.DataFrame(columns=data.columns)
 else:
-    df_current = filter_data_by_date_range(df_current_all, cumulative_date_from, cumulative_date_to).copy()
+    df_current = filter_data_by_date_range(df_current_all, cumulative_date_from, latest_data_date).copy()
 
 df_active_calc = df_current.copy()
 df_history = df_current.copy()
@@ -779,6 +801,7 @@ with st.sidebar:
 
                             lock_ids = df_lock_range["id"].tolist()
                             insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
+                            st.session_state.cumulative_date_from = lock_date_to + timedelta(days=1)
                             st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy pozostają aktywne.")
 
                         st.session_state.lock_step = 0
@@ -1010,6 +1033,7 @@ if st.session_state.get("lock_step", 0) >= 1:
 
                             lock_ids = df_lock_range_m["id"].tolist()
                             insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
+                            st.session_state.cumulative_date_from = lock_date_to_m + timedelta(days=1)
                             st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy zostają aktywne.")
 
                         st.session_state.lock_step = 0
