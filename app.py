@@ -448,17 +448,19 @@ default_date_from, default_date_to = get_default_date_range(data)
 
 df_current_all = data.copy()
 latest_reset_date = get_next_date_after_latest_closed_report()
-current_month_start = latest_reset_date or get_now().date().replace(day=1)
+next_cumulative_date_from = st.session_state.pop("next_cumulative_date_from", None)
+if next_cumulative_date_from is not None:
+    st.session_state.cumulative_date_widget_version = st.session_state.get("cumulative_date_widget_version", 0) + 1
 
-if "cumulative_date_from" not in st.session_state:
-    st.session_state.cumulative_date_from = current_month_start
+current_month_start = next_cumulative_date_from or latest_reset_date or get_now().date().replace(day=1)
 
 # --- PASEK BOCZNY ---
 with st.sidebar:
     st.header("⚙️ Menu")
     pokaz_rozliczone = False
     st.markdown("**Kwoty narastająco:**")
-    cumulative_date_from = st.date_input("Pokaż od", value=current_month_start, key="cumulative_date_from")
+    cumulative_date_key = f"cumulative_date_from_{st.session_state.get('cumulative_date_widget_version', 0)}"
+    cumulative_date_from = st.date_input("Pokaż od", value=current_month_start, key=cumulative_date_key)
     st.divider()
 
 latest_data_date = get_latest_event_date(df_current_all)
@@ -798,7 +800,7 @@ with st.sidebar:
 
                             lock_ids = df_lock_range["id"].tolist()
                             insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                            st.session_state.cumulative_date_from = lock_date_to + timedelta(days=1)
+                            st.session_state.next_cumulative_date_from = lock_date_to + timedelta(days=1)
                             st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy pozostają aktywne.")
 
                         st.session_state.lock_step = 0
@@ -1030,7 +1032,7 @@ if st.session_state.get("lock_step", 0) >= 1:
 
                             lock_ids = df_lock_range_m["id"].tolist()
                             insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
-                            st.session_state.cumulative_date_from = lock_date_to_m + timedelta(days=1)
+                            st.session_state.next_cumulative_date_from = lock_date_to_m + timedelta(days=1)
                             st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy zostają aktywne.")
 
                         st.session_state.lock_step = 0
