@@ -16,45 +16,61 @@ import pytz
 from streamlit_cookies_manager import CookieManager
 from supabase import create_client, Client
 
-# --- 0. POŁĄCZENIE Z SUPABASE ---
-url = st.secrets["SUPABASE_URL"]
-key = st.secrets["SUPABASE_KEY"]
-supabase: Client = create_client(url, key)
+# =============================================================================
+# 0. POŁĄCZENIE Z SUPABASE
+# Wszystkie dane wrażliwe WYŁĄCZNIE z st.secrets — nigdy w kodzie źródłowym!
+# Wymagane klucze w secrets.toml:
+#   SUPABASE_URL, SUPABASE_KEY,
+#   APP_PASSWORD, AUTH_COOKIE_SECRET,
+#   REPORT_RECEIVER_EMAIL, REPORT_SENDER_EMAIL, REPORT_EMAIL_PASSWORD
+# =============================================================================
 
-DEFAULT_SECRETS = {
-    "APP_PASSWORD": "dup@",
-    "AUTH_COOKIE_SECRET": "dup@_sekret_cookie_2026",
-    "REPORT_RECEIVER_EMAIL": "maszt71@gmail.com",
-    "REPORT_SENDER_EMAIL": "mange929598@gmail.com",
-    "REPORT_EMAIL_PASSWORD": "kwoaohaszcshiggg",
-}
+@st.cache_resource
+def get_supabase_client() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-def get_secret(name, default=None):
+supabase = get_supabase_client()
+
+
+def get_secret(name: str, default=None):
+    """Bezpiecznie pobiera sekret z st.secrets."""
     try:
-        return st.secrets.get(name, DEFAULT_SECRETS.get(name, default))
-    except Exception:
-        return DEFAULT_SECRETS.get(name, default)
+        return st.secrets[name]
+    except (KeyError, FileNotFoundError):
+        return default
 
-# Funkcja czasu dla Polski
-def get_now():
+
+# =============================================================================
+# 1. NARZĘDZIA POMOCNICZE
+# =============================================================================
+
+def get_now() -> datetime:
+    """Zwraca aktualny czas w strefie czasowej Polski."""
     return datetime.now(pytz.timezone("Europe/Warsaw"))
 
-# --- FUNKCJA BEZPIECZEŃSTWA DLA PDF ---
-def pdf_safe(txt):
+
+def pdf_safe(txt: str) -> str:
+    """Zamienia polskie znaki na ASCII-bezpieczne odpowiedniki dla biblioteki FPDF."""
     if not txt:
         return ""
-    rep = {
-        "ą": "a", "ć": "c", "ę": "e", "ł": "l", "ń": "n", "ó": "o", "ś": "s", "ź": "z", "ż": "z",
-        "Ą": "A", "Ć": "C", "Ę": "E", "Ł": "L", "Ń": "N", "Ó": "O", "Ś": "S", "Ź": "Z", "Ż": "Z"
+    replacements = {
+        "ą": "a", "ć": "c", "ę": "e", "ł": "l", "ń": "n",
+        "ó": "o", "ś": "s", "ź": "z", "ż": "z",
+        "Ą": "A", "Ć": "C", "Ę": "E", "Ł": "L", "Ń": "N",
+        "Ó": "O", "Ś": "S", "Ź": "Z", "Ż": "Z",
     }
-    t = str(txt)
-    for k, v in rep.items():
-        t = t.replace(k, v)
-    return t.encode("ascii", "ignore").decode("ascii")
+    result = str(txt)
+    for k, v in replacements.items():
+        result = result.replace(k, v)
+    return result.encode("ascii", "ignore").decode("ascii")
+
 
 def parse_event_date(value):
+    """Parsuje datę z formatu DD.MM.YYYY lub YYYY-MM-DD. Zwraca date lub None."""
     txt = str(value).strip()
-    if not txt or txt.lower() in ("none", "nan", "nat"):
+    if not txt or txt.lower() in ("none", "nan", "nat", ""):
         return None
     for fmt in ("%d.%m.%Y", "%Y-%m-%d"):
         try:
@@ -63,427 +79,19 @@ def parse_event_date(value):
             pass
     return None
 
-def short_pdf_text(value, max_len=58):
-    text = pdf_safe(value).replace("\n", " ").strip()
+
+def short_pdf_text(value, max_len: int = 58) -> str:
+    """Skraca tekst do max_len znaków (limit szerokości kolumny PDF ~80px)."""
+    text = pdf_safe(str(value)).replace("\n", " ").strip()
     return text if len(text) <= max_len else text[: max_len - 3] + "..."
 
-def money_text(value):
+
+def money_text(value) -> str:
     return f"{float(value):,.2f} zł"
 
-def metric_card(label, value, color_class):
-    st.markdown(
-        f"""
-        <div class="metric-card {color_class}">
-            <div class="label">{label}</div>
-            <div class="value">{money_text(value)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-def make_auth_token(ttl_seconds=60 * 60 * 12):
-    secret = str(get_secret("AUTH_COOKIE_SECRET") or get_secret("APP_PASSWORD") or "")
-    if not secret:
-        return ""
-    payload = {"logged": True, "exp": int(time.time()) + ttl_seconds}
-    payload_raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-    payload_b64 = base64.urlsafe_b64encode(payload_raw).decode("ascii")
-    signature = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
-    return f"{payload_b64}.{signature}"
-
-def is_valid_auth_token(token):
-    secret = str(get_secret("AUTH_COOKIE_SECRET") or get_secret("APP_PASSWORD") or "")
-    if not token or not secret or "." not in str(token):
-        return False
-    payload_b64, signature = str(token).rsplit(".", 1)
-    expected = hmac.new(secret.encode("utf-8"), payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(signature, expected):
-        return False
-    try:
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode("ascii")))
-    except Exception:
-        return False
-    return bool(payload.get("logged")) and int(payload.get("exp", 0)) > int(time.time())
-
-def check_secret_password(value, secret_name):
-    expected = str(get_secret(secret_name) or "")
-    return bool(expected) and hmac.compare_digest(str(value or ""), expected)
-
-def insert_report_with_ids(date_from, date_to, total_income, entry_ids):
-    generated_iso = get_now().isoformat()
-    generated_label = get_now().strftime("%d.%m.%Y %H:%M")
-    period_from = date_from.strftime("%d.%m.%Y")
-    period_to = date_to.strftime("%d.%m.%Y")
-    ids = [int(x) for x in entry_ids]
-
-    payloads = [
-        {
-            "data_wygenerowania": generated_iso,
-            "okres_od": period_from,
-            "okres_do": period_to,
-            "suma_przychodow": float(total_income),
-            "entry_ids": ids,
-        },
-        {
-            "data_wygenerowania": generated_iso,
-            "okres_od": period_from,
-            "okres_do": period_to,
-            "suma_przychodow": float(total_income),
-        },
-        {
-            "data": generated_label,
-            "okres_od": period_from,
-            "okres_do": period_to,
-            "suma_przychodow": float(total_income),
-            "entry_ids": ids,
-        },
-        {
-            "data": generated_label,
-            "okres_od": period_from,
-            "okres_do": period_to,
-            "suma_przychodow": float(total_income),
-        },
-    ]
-
-    for payload in payloads:
-        try:
-            result = supabase.table("raporty").insert(payload).execute()
-            if "entry_ids" not in payload:
-                st.warning("Raport zapisano w archiwum po datach. Wpisy finansowe pozostały aktywne.")
-            return result
-        except Exception:
-            pass
-
-    st.warning(
-        "Raport wysłano e-mailem, a wpisy finansowe pozostały aktywne, "
-        "ale nie udało się zapisać pozycji w Archiwum raportów. "
-        "Sprawdź w Supabase, czy tabela raporty ma kolumny: okres_od, okres_do i suma_przychodow."
-    )
-    return None
-
-def load_report_rows(report_row):
-    entry_ids = report_row.get("entry_ids", None)
-    if isinstance(entry_ids, str):
-        try:
-            entry_ids = json.loads(entry_ids)
-        except Exception:
-            entry_ids = None
-
-    if isinstance(entry_ids, list) and entry_ids:
-        res = supabase.table("finanse").select("*").in_("id", [int(x) for x in entry_ids]).execute()
-        return sort_df_by_data_zdarzenia(pd.DataFrame(res.data)) if res.data else pd.DataFrame()
-
-    d_from_parsed = datetime.strptime(report_row["okres_od"], "%d.%m.%Y").date()
-    d_to_parsed = datetime.strptime(report_row["okres_do"], "%d.%m.%Y").date()
-    return sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), d_from_parsed, d_to_parsed))
-
-# --- FUNKCJA WYSYŁKI E-MAIL ---
-def clean_app_password(value):
-    return str(value or "").replace(" ", "").strip()
-
-def get_email_configs():
-    try:
-        secrets_receiver = st.secrets.get("REPORT_RECEIVER_EMAIL")
-        secrets_password = st.secrets.get("REPORT_EMAIL_PASSWORD")
-        if secrets_receiver and secrets_password:
-            return [{
-                "receiver": str(secrets_receiver).strip(),
-                "sender": DEFAULT_SECRETS["REPORT_SENDER_EMAIL"],
-                "password": clean_app_password(secrets_password),
-                "source": "Streamlit secrets",
-            }]
-    except Exception:
-        pass
-
-    return [{
-        "receiver": DEFAULT_SECRETS["REPORT_RECEIVER_EMAIL"],
-        "sender": DEFAULT_SECRETS["REPORT_SENDER_EMAIL"],
-        "password": clean_app_password(DEFAULT_SECRETS["REPORT_EMAIL_PASSWORD"]),
-        "source": "kod aplikacji",
-    }]
-
-def has_email_config():
-    return bool(get_email_configs())
-
-def build_email_message(sender_email, receiver_email, pdf_data, csv_data):
-    msg = MIMEMultipart()
-    msg["From"] = sender_email
-    msg["To"] = receiver_email
-    msg["Subject"] = f"Raport Pizzeria - {get_now().strftime('%d.%m.%Y %H:%M')}"
-    msg.attach(MIMEText("Automatyczny raport z systemu.", "plain"))
-
-    for content, ext in [(pdf_data, "pdf"), (csv_data, "csv")]:
-        part = MIMEBase("application", "octet-stream")
-        part.set_payload(content)
-        encoders.encode_base64(part)
-        part.add_header("Content-Disposition", f"attachment; filename=raport.{ext}")
-        msg.attach(part)
-    return msg
-
-def send_email_with_reports(pdf_data, csv_data):
-    configs = get_email_configs()
-    if not configs:
-        st.error("Brakuje konfiguracji e-mail.")
-        return False
-
-    for cfg in configs:
-        sender = cfg["sender"]
-        receiver = cfg["receiver"]
-        password = cfg["password"]
-
-        if not sender or not receiver or not password:
-            st.error("Brakuje adresu nadawcy, odbiorcy albo hasła aplikacji Gmail.")
-            return False
-
-        for mode in ("SSL 465", "STARTTLS 587"):
-            try:
-                msg = build_email_message(sender, receiver, pdf_data, csv_data)
-                if mode == "SSL 465":
-                    with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
-                        server.login(sender, password)
-                        server.send_message(msg)
-                else:
-                    with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
-                        server.ehlo()
-                        server.starttls()
-                        server.ehlo()
-                        server.login(sender, password)
-                        server.send_message(msg)
-                return True
-            except smtplib.SMTPAuthenticationError:
-                st.error(
-                    "Gmail odrzucił hasło aplikacji dla konta nadawcy "
-                    f"{sender}. Utwórz nowe hasło aplikacji dokładnie dla tego konta."
-                )
-                return False
-            except Exception as e:
-                last_error = str(e)
-
-        st.error(
-            "Nie udało się wysłać maila przez Gmail. "
-            f"Nadawca: {sender}. Ostatni błąd: {last_error}"
-        )
-        return False
-
-    return False
-
-# --- 1. KONFIGURACJA I LOGOWANIE ---
-st.set_page_config(
-    page_title="Pizzeria",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-st.markdown(
-    """
-    <style>
-        #MainMenu, footer {display: none;}
-        header {
-            background: rgba(246, 247, 249, 0.94) !important;
-            border-bottom: 1px solid #e5e7eb;
-            backdrop-filter: blur(14px);
-        }
-        .stApp {
-            background: #f6f7f9;
-            color: #1f2937;
-        }
-        .block-container {
-            max-width: 1180px;
-            padding-top: 1.2rem;
-            padding-bottom: 5.5rem;
-        }
-        [data-testid="stSidebar"] {
-            background: #eef2f7;
-            border-right: 1px solid #d9dee8;
-            box-shadow: 10px 0 28px rgba(31, 41, 55, 0.08);
-        }
-        [data-testid="stSidebar"] .block-container {
-            padding-top: 1.2rem;
-        }
-        [data-testid="stSidebar"] h2,
-        [data-testid="stSidebar"] h3 {
-            color: #252a38;
-        }
-        [data-testid="stSidebar"] .stButton > button {
-            width: 100%;
-            min-height: 2.75rem;
-            border-radius: 8px;
-        }
-        [data-testid="stSidebar"] input {
-            border-radius: 8px;
-        }
-        h1, h2, h3 {
-            letter-spacing: 0;
-            color: #242938;
-        }
-        .app-header {
-            margin: 0 0 1rem 0;
-        }
-        .app-title {
-            font-size: 2.05rem;
-            line-height: 1.08;
-            font-weight: 800;
-            color: #252a38;
-            margin: 0;
-        }
-        .app-subtitle {
-            font-size: 0.88rem;
-            color: #7a8190;
-            margin-top: 0.45rem;
-        }
-        .metric-card {
-            border: 1px solid rgba(31, 41, 55, 0.08);
-            border-radius: 8px;
-            padding: 1rem 1.05rem;
-            margin-bottom: 0.7rem;
-            box-shadow: 0 6px 18px rgba(31, 41, 55, 0.06);
-        }
-        .metric-card .label {
-            font-size: 0.82rem;
-            font-weight: 700;
-            color: #4b5563;
-            text-transform: uppercase;
-        }
-        .metric-card .value {
-            margin-top: 0.35rem;
-            font-size: 1.35rem;
-            line-height: 1.15;
-            font-weight: 800;
-            color: #111827;
-        }
-        .metric-card.blue {background: #dbeafe;}
-        .metric-card.green {background: #d4edda;}
-        .metric-card.yellow {background: #fff3cd;}
-        .metric-card.red {background: #f8d7da;}
-        .metric-card.negative {
-            background: #dc2626;
-        }
-        .metric-card.negative .label,
-        .metric-card.negative .value {
-            color: #ffffff;
-        }
-        div.stButton > button {
-            border-radius: 8px;
-            min-height: 2.45rem;
-            font-weight: 700;
-            border-color: #d7dce5;
-            box-shadow: none;
-        }
-        div.stButton > button[kind="primary"] {
-            background: #ef4444;
-            border-color: #ef4444;
-        }
-        div[data-testid="stDataFrame"] {
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid #e5e7eb;
-        }
-        @media (max-width: 720px) {
-            .block-container {
-                padding: 0.9rem 0.85rem 5.5rem 0.85rem;
-            }
-            [data-testid="stSidebar"] {
-                box-shadow: 20px 0 38px rgba(17, 24, 39, 0.22);
-            }
-            .app-title {
-                font-size: 1.85rem;
-            }
-            .metric-card {
-                padding: 0.95rem;
-                margin-bottom: 0.55rem;
-            }
-            .metric-card .value {
-                font-size: 1.18rem;
-            }
-        }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-cookies = CookieManager()
-if not cookies.ready():
-    st.stop()
-
-if not is_valid_auth_token(cookies.get("auth_token")):
-    st.title("🍕 Logowanie")
-    if not get_secret("APP_PASSWORD"):
-        st.error("Brakuje APP_PASSWORD w st.secrets.")
-        st.stop()
-
-    with st.container(border=True):
-        haslo = st.text_input("Hasło", type="password")
-        if st.button("Zaloguj", type="primary", use_container_width=True):
-            if check_secret_password(haslo, "APP_PASSWORD"):
-                cookies["auth_token"] = make_auth_token()
-                cookies.save()
-                st.rerun()
-            else:
-                st.error("Nieprawidłowe hasło.")
-    st.stop()
-
-# --- 2. DANE Z SUPABASE ---
-def load_data():
-    res = supabase.table("finanse").select("*").order("id").execute()
-    if res.data:
-        df = pd.DataFrame(res.data)
-    else:
-        df = pd.DataFrame()
-
-    expected_cols = ["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"]
-    defaults = {
-        "id": None,
-        "data": "",
-        "typ": "",
-        "kwota": 0.0,
-        "opis": "",
-        "status": "Aktywny",
-        "data_zdarzenia": "",
-    }
-    for col in expected_cols:
-        if col not in df.columns:
-            df[col] = defaults[col]
-            
-    if not df.empty and "status" in df.columns:
-        df["status"] = df["status"].fillna("Aktywny")
-    return df
-
-def load_archived_reports():
-    res = supabase.table("raporty").select("*").order("id", desc=True).execute()
-    expected_cols = ["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow", "entry_ids"]
-    
-    if res.data:
-        df = pd.DataFrame(res.data)
-        if "data_wygenerowania" not in df.columns and "data" in df.columns:
-            df["data_wygenerowania"] = df["data"]
-        for col in expected_cols:
-            if col not in df.columns:
-                if col == "suma_przychodow":
-                    df[col] = 0.0
-                elif col == "entry_ids":
-                    df[col] = None
-                else:
-                    df[col] = "Brak daty"
-        df["suma_przychodow"] = pd.to_numeric(df["suma_przychodow"], errors="coerce").fillna(0.0)
-        return df
-
-    return pd.DataFrame(columns=expected_cols)
-
-def get_next_date_after_latest_closed_report():
-    df_reports = load_archived_reports()
-    closed_to_dates = []
-    if not df_reports.empty and "okres_do" in df_reports.columns:
-        for val in df_reports["okres_do"].astype(str).str.strip():
-            parsed = parse_event_date(val)
-            if parsed:
-                closed_to_dates.append(parsed)
-
-    if not closed_to_dates:
-        return None
-
-    return max(closed_to_dates) + timedelta(days=1)
 
 def parse_entry_ids(value):
+    """Parsuje entry_ids z JSON-stringa lub listy."""
     if isinstance(value, list):
         return [int(x) for x in value if str(x).strip()]
     if isinstance(value, str):
@@ -495,56 +103,96 @@ def parse_entry_ids(value):
             return []
     return []
 
-def filter_data_by_date_range(df, date_from, date_to):
-    if df.empty:
-        return df.copy()
 
-    temp = df.copy()
-    if "data_zdarzenia" not in temp.columns:
-        temp["data_zdarzenia"] = ""
-    temp["date_str"] = temp["data_zdarzenia"].astype(str).str.strip()
+# =============================================================================
+# 2. AUTENTYKACJA — TOKEN HMAC Z TTL
+# =============================================================================
 
-    parsed_dates = []
-    for val in temp["date_str"]:
-        parsed_dates.append(parse_event_date(val))
+def make_auth_token(ttl_seconds: int = 60 * 60 * 12) -> str:
+    secret = str(get_secret("AUTH_COOKIE_SECRET") or "")
+    if not secret:
+        return ""
+    payload = {"logged": True, "exp": int(time.time()) + ttl_seconds}
+    payload_raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(payload_raw).decode("ascii")
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        payload_b64.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{payload_b64}.{signature}"
 
-    temp["parsed_date"] = parsed_dates
-    
-    filtered = temp[
-        (temp["parsed_date"].notna()) &
-        (temp["parsed_date"] >= date_from) &
-        (temp["parsed_date"] <= date_to)
-    ].copy()
 
-    return filtered.drop(columns=["parsed_date", "date_str"], errors="ignore")
+def is_valid_auth_token(token) -> bool:
+    secret = str(get_secret("AUTH_COOKIE_SECRET") or "")
+    if not token or not secret or "." not in str(token):
+        return False
+    payload_b64, signature = str(token).rsplit(".", 1)
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        payload_b64.encode("ascii"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        return False
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode("ascii")))
+    except Exception:
+        return False
+    return bool(payload.get("logged")) and int(payload.get("exp", 0)) > int(time.time())
+
+
+def check_secret_password(value: str, secret_name: str) -> bool:
+    expected = str(get_secret(secret_name) or "")
+    return bool(expected) and hmac.compare_digest(str(value or ""), expected)
+
+
+# =============================================================================
+# 3. DANE Z SUPABASE
+# =============================================================================
 
 CARRYOVER_TYPE = "Gotówka z przeniesienia"
 
-def public_csv_data(df):
-    export_df = df.copy()
-    export_df = export_df.drop(columns=["status"], errors="ignore")
-    return export_df.to_csv(index=False).encode("utf-8")
+EXPECTED_FINANCE_COLS = ["id", "data", "typ", "kwota", "opis", "status", "data_zdarzenia"]
+FINANCE_DEFAULTS = {
+    "id": None,
+    "data": "",
+    "typ": "",
+    "kwota": 0.0,
+    "opis": "",
+    "status": "Aktywny",
+    "data_zdarzenia": "",
+}
 
-def calculate_range_sums(df):
-    if df.empty:
-        return 0.0, 0.0, 0.0, 0.0
 
-    temp = df.copy()
-    if "kwota" not in temp.columns:
-        temp["kwota"] = 0.0
-    if "typ" not in temp.columns:
-        temp["typ"] = ""
-    temp["kwota"] = pd.to_numeric(temp["kwota"], errors="coerce").fillna(0)
+def load_data() -> pd.DataFrame:
+    res = supabase.table("finanse").select("*").order("id").execute()
+    df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    for col in EXPECTED_FINANCE_COLS:
+        if col not in df.columns:
+            df[col] = FINANCE_DEFAULTS[col]
+    if not df.empty and "status" in df.columns:
+        df["status"] = df["status"].fillna("Aktywny")
+    return df
 
-    przychod = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
-    wydatki = temp[temp["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
-    przeniesienie = temp[temp["typ"] == CARRYOVER_TYPE]["kwota"].sum()
-    gotowka = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
 
-    return przychod, gotowka, wydatki, przeniesienie
+def load_archived_reports() -> pd.DataFrame:
+    res = supabase.table("raporty").select("*").order("id", desc=True).execute()
+    expected_cols = ["id", "data_wygenerowania", "okres_od", "okres_do", "suma_przychodow", "entry_ids"]
+    if res.data:
+        df = pd.DataFrame(res.data)
+        # obsługa starszego schematu z kolumną "data" zamiast "data_wygenerowania"
+        if "data_wygenerowania" not in df.columns and "data" in df.columns:
+            df["data_wygenerowania"] = df["data"]
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = 0.0 if col == "suma_przychodow" else (None if col == "entry_ids" else "Brak daty")
+        df["suma_przychodow"] = pd.to_numeric(df["suma_przychodow"], errors="coerce").fillna(0.0)
+        return df
+    return pd.DataFrame(columns=expected_cols)
 
-# --- POMOCNICZA FUNKCJA DO SORTOWANIA PO DACIE ZDARZENIA ---
-def sort_df_by_data_zdarzenia(df):
+
+def sort_df_by_data_zdarzenia(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     temp = df.copy()
@@ -552,163 +200,189 @@ def sort_df_by_data_zdarzenia(df):
         temp["data_zdarzenia"] = ""
     if "id" not in temp.columns:
         temp["id"] = 0
-    parsed = []
-    for val in temp["data_zdarzenia"].astype(str).str.strip():
-        parsed.append(parse_event_date(val) or datetime.min.date())
-    temp["_sort_date"] = parsed
+    temp["_sort_date"] = [
+        parse_event_date(v) or datetime.min.date()
+        for v in temp["data_zdarzenia"].astype(str).str.strip()
+    ]
     temp = temp.sort_values(by=["_sort_date", "id"], ascending=[False, False])
     return temp.drop(columns=["_sort_date"], errors="ignore")
 
 
-# Ładowanie pełnych danych z bazy
-data = load_data()
+def filter_data_by_date_range(df: pd.DataFrame, date_from, date_to) -> pd.DataFrame:
+    if df.empty:
+        return df.copy()
+    temp = df.copy()
+    if "data_zdarzenia" not in temp.columns:
+        temp["data_zdarzenia"] = ""
+    temp["_parsed"] = [parse_event_date(v) for v in temp["data_zdarzenia"].astype(str).str.strip()]
+    filtered = temp[
+        temp["_parsed"].notna()
+        & (temp["_parsed"] >= date_from)
+        & (temp["_parsed"] <= date_to)
+    ].copy()
+    return filtered.drop(columns=["_parsed"], errors="ignore")
 
-def get_default_date_range(df):
-    dates = []
-    if not df.empty and "data_zdarzenia" in df.columns:
-        for val in df["data_zdarzenia"].astype(str).str.strip():
-            parsed = parse_event_date(val)
-            if parsed:
-                dates.append(parsed)
+
+def calculate_range_sums(df: pd.DataFrame):
+    """Zwraca (przychod, gotowka, wydatki, przeniesienie)."""
+    if df.empty:
+        return 0.0, 0.0, 0.0, 0.0
+    temp = df.copy()
+    temp["kwota"] = pd.to_numeric(temp.get("kwota", 0), errors="coerce").fillna(0)
+    przychod      = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
+    wydatki       = temp[temp["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
+    przeniesienie = temp[temp["typ"] == CARRYOVER_TYPE]["kwota"].sum()
+    gotowka       = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
+    return przychod, gotowka, wydatki, przeniesienie
+
+
+def public_csv_data(df: pd.DataFrame) -> bytes:
+    export_df = df.drop(columns=["status"], errors="ignore")
+    return export_df.to_csv(index=False).encode("utf-8")
+
+
+def get_default_date_range(df: pd.DataFrame):
+    dates = [
+        parse_event_date(v)
+        for v in df.get("data_zdarzenia", pd.Series(dtype=str)).astype(str).str.strip()
+        if parse_event_date(v)
+    ] if not df.empty else []
     if dates:
         latest = max(dates)
         return latest.replace(day=1), latest
     today = get_now().date()
     return today.replace(day=1), today
 
-def get_latest_event_date(df):
-    dates = []
-    if not df.empty and "data_zdarzenia" in df.columns:
-        for val in df["data_zdarzenia"].astype(str).str.strip():
-            parsed = parse_event_date(val)
-            if parsed:
-                dates.append(parsed)
+
+def get_latest_event_date(df: pd.DataFrame):
+    dates = [
+        parse_event_date(v)
+        for v in df.get("data_zdarzenia", pd.Series(dtype=str)).astype(str).str.strip()
+        if parse_event_date(v)
+    ] if not df.empty else []
     return max(dates) if dates else get_now().date()
 
 
-default_date_from, default_date_to = get_default_date_range(data)
-
-df_current_all = data.copy()
-latest_reset_date = get_next_date_after_latest_closed_report()
-next_cumulative_date_from = st.session_state.pop("next_cumulative_date_from", None)
-if next_cumulative_date_from is not None:
-    st.session_state.cumulative_date_widget_version = st.session_state.get("cumulative_date_widget_version", 0) + 1
-
-current_month_start = next_cumulative_date_from or latest_reset_date or get_now().date().replace(day=1)
-
-# --- PASEK BOCZNY ---
-with st.sidebar:
-    st.header("⚙️ Menu")
-    pokaz_rozliczone = False
-    st.markdown("**Kwoty narastająco:**")
-    cumulative_date_key = f"cumulative_date_from_{st.session_state.get('cumulative_date_widget_version', 0)}"
-    cumulative_date_from = st.date_input("Pokaż od", value=current_month_start, key=cumulative_date_key)
-    st.divider()
-
-latest_data_date = get_latest_event_date(df_current_all)
-cumulative_date_to = max(latest_data_date, cumulative_date_from)
-if cumulative_date_from > latest_data_date:
-    df_current = pd.DataFrame(columns=data.columns)
-else:
-    df_current = filter_data_by_date_range(df_current_all, cumulative_date_from, latest_data_date).copy()
-
-df_active_calc = df_current.copy()
-df_history = df_current.copy()
-
-# Przeliczanie głównych kafelków finansowych
-if not df_active_calc.empty:
-    df_active_calc["kwota"] = pd.to_numeric(df_active_calc["kwota"], errors="coerce").fillna(0)
-    st.session_state.all_finance_data = df_active_calc
-    s_og = df_active_calc[df_active_calc["typ"] == "Przychód ogólny"]["kwota"].sum()
-    s_wyd = df_active_calc[df_active_calc["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
-    s_przeniesienie = df_active_calc[df_active_calc["typ"] == CARRYOVER_TYPE]["kwota"].sum()
-    s_got = df_active_calc[df_active_calc["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - s_wyd
-else:
-    s_og, s_wyd, s_got, s_przeniesienie = 0.0, 0.0, 0.0, 0.0
-
-# --- 3. GENERATOR PDF ---
-def infer_report_range(df):
-    dates = []
-    if not df.empty and "data_zdarzenia" in df.columns:
-        for val in df["data_zdarzenia"].astype(str).str.strip():
+def get_next_date_after_latest_closed_report():
+    df_reports = load_archived_reports()
+    closed_to_dates = []
+    if not df_reports.empty and "okres_do" in df_reports.columns:
+        for val in df_reports["okres_do"].astype(str).str.strip():
             parsed = parse_event_date(val)
             if parsed:
-                dates.append(parsed)
-    if dates:
-        return min(dates), max(dates)
-    today = get_now().date()
-    return today, today
+                closed_to_dates.append(parsed)
+    if not closed_to_dates:
+        return None
+    return max(closed_to_dates) + timedelta(days=1)
 
-def create_pdf(df, p, g, w, przeniesienie=0.0, date_from=None, date_to=None):
-    if date_from is None or date_to is None:
-        inferred_from, inferred_to = infer_report_range(df)
-        date_from = date_from or inferred_from
-        date_to = date_to or inferred_to
 
-    generated_at = get_now()
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, pdf_safe("RAPORT SZCZEGOLOWY"), ln=True, align="C")
-    pdf.set_font("Helvetica", size=10)
-    pdf.cell(0, 7, pdf_safe(f"Zakres raportu: {date_from.strftime('%d.%m.%Y')} - {date_to.strftime('%d.%m.%Y')}"), ln=True, align="C")
-    pdf.cell(0, 7, pdf_safe(f"Wygenerowano: {generated_at.strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
-    pdf.ln(5)
+def load_report_rows(report_row) -> pd.DataFrame:
+    entry_ids = parse_entry_ids(report_row.get("entry_ids"))
+    if entry_ids:
+        res = supabase.table("finanse").select("*").in_("id", entry_ids).execute()
+        return sort_df_by_data_zdarzenia(pd.DataFrame(res.data)) if res.data else pd.DataFrame()
+    # fallback: filtruj po zakresie dat
+    d_from = datetime.strptime(report_row["okres_od"], "%d.%m.%Y").date()
+    d_to   = datetime.strptime(report_row["okres_do"], "%d.%m.%Y").date()
+    return sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), d_from, d_to))
 
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.set_fill_color(219, 234, 254)
-    pdf.cell(190, 10, pdf_safe(f"Gotowka z przeniesienia: {przeniesienie:,.2f} zl"), border=1, ln=1, fill=True, align="C")
 
-    pdf.set_fill_color(212, 237, 218)
-    pdf.cell(63, 10, pdf_safe(f"Przychod: {p:,.2f} zl"), border=1, fill=True, align="C")
+# =============================================================================
+# 4. ZAPIS RAPORTU DO BAZY (jednolity schemat)
+# =============================================================================
 
-    if g < 0:
-        pdf.set_fill_color(255, 0, 0)
-        pdf.set_text_color(255, 255, 255)
-    else:
-        pdf.set_fill_color(255, 243, 205)
-        pdf.set_text_color(0, 0, 0)
+def insert_report_with_ids(date_from, date_to, total_income, entry_ids):
+    """
+    Zapisuje zamknięcie okresu do tabeli 'raporty'.
+    Oczekiwany schemat: data_wygenerowania, okres_od, okres_do, suma_przychodow, entry_ids
+    """
+    payload = {
+        "data_wygenerowania": get_now().strftime("%d.%m.%Y %H:%M"),
+        "okres_od":           date_from.strftime("%d.%m.%Y"),
+        "okres_do":           date_to.strftime("%d.%m.%Y"),
+        "suma_przychodow":    float(total_income),
+        "entry_ids":          [int(x) for x in entry_ids],
+    }
+    try:
+        result = supabase.table("raporty").insert(payload).execute()
+        return result
+    except Exception as e:
+        st.warning(
+            f"Raport wysłano e-mailem, ale nie udało się zapisać go w archiwum. "
+            f"Sprawdź schemat tabeli 'raporty' w Supabase. Błąd: {e}"
+        )
+        return None
 
-    pdf.cell(64, 10, pdf_safe(f"Gotowka: {g:,.2f} zl"), border=1, fill=True, align="C")
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_fill_color(248, 215, 218)
-    pdf.cell(63, 10, pdf_safe(f"Wydatki: {w:,.2f} zl"), border=1, ln=1, fill=True, align="C")
-    pdf.ln(10)
 
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.set_fill_color(200, 200, 200)
-    pdf.cell(28, 8, "Data", border=1, fill=True, align="C")
-    pdf.cell(52, 8, "Typ", border=1, fill=True, align="C")
-    pdf.cell(30, 8, "Kwota", border=1, fill=True, align="C")
-    pdf.cell(80, 8, "Opis", border=1, ln=1, fill=True, align="C")
+# =============================================================================
+# 5. E-MAIL
+# =============================================================================
 
-    pdf.set_font("Helvetica", size=9)
-    df_to_print = df.copy()
-    if "kwota" in df_to_print.columns:
-        df_to_print["kwota"] = pd.to_numeric(df_to_print["kwota"], errors="coerce").fillna(0)
+def clean_app_password(value: str) -> str:
+    return str(value or "").replace(" ", "").strip()
 
-    for _, row in df_to_print.iterrows():
-        data_txt = str(row.get("data_zdarzenia", ""))
-        typ_txt = str(row.get("typ", ""))
-        kwota_txt = f"{float(row.get('kwota', 0)):,.2f} zl"
-        opis_txt = short_pdf_text(row.get("opis", ""))
-        bg_color, text_color = get_pdf_row_colors(typ_txt)
-        pdf.set_fill_color(*bg_color)
-        pdf.set_text_color(*text_color)
 
-        pdf.cell(28, 8, pdf_safe(data_txt), border=1, fill=True, align="C")
-        pdf.cell(52, 8, pdf_safe(typ_txt), border=1, fill=True)
-        pdf.cell(30, 8, pdf_safe(kwota_txt), border=1, fill=True, align="R")
-        pdf.cell(80, 8, opis_txt, border=1, ln=1, fill=True)
-        pdf.set_text_color(0, 0, 0)
+def build_email_message(sender_email: str, receiver_email: str, pdf_data: bytes, csv_data: bytes):
+    msg = MIMEMultipart()
+    msg["From"]    = sender_email
+    msg["To"]      = receiver_email
+    msg["Subject"] = f"Raport Pizzeria - {get_now().strftime('%d.%m.%Y %H:%M')}"
+    msg.attach(MIMEText("Automatyczny raport z systemu.", "plain"))
+    for content, ext in [(pdf_data, "pdf"), (csv_data, "csv")]:
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(content)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f"attachment; filename=raport.{ext}")
+        msg.attach(part)
+    return msg
 
-    pdf_output = pdf.output(dest="S")
-    if isinstance(pdf_output, (bytes, bytearray)):
-        return bytes(pdf_output)
-    return pdf_output.encode("latin-1")
 
-def get_pdf_row_colors(typ):
-    typ = str(typ)
+def send_email_with_reports(pdf_data: bytes, csv_data: bytes) -> bool:
+    sender   = str(get_secret("REPORT_SENDER_EMAIL") or "").strip()
+    receiver = str(get_secret("REPORT_RECEIVER_EMAIL") or "").strip()
+    password = clean_app_password(get_secret("REPORT_EMAIL_PASSWORD") or "")
+
+    if not sender or not receiver or not password:
+        st.error(
+            "Brakuje konfiguracji e-mail. Dodaj REPORT_SENDER_EMAIL, "
+            "REPORT_RECEIVER_EMAIL i REPORT_EMAIL_PASSWORD do st.secrets."
+        )
+        return False
+
+    last_error = ""
+    for mode in ("SSL 465", "STARTTLS 587"):
+        try:
+            msg = build_email_message(sender, receiver, pdf_data, csv_data)
+            if mode == "SSL 465":
+                with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
+                    server.login(sender, password)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    server.login(sender, password)
+                    server.send_message(msg)
+            return True
+        except smtplib.SMTPAuthenticationError:
+            st.error(
+                f"Gmail odrzucił hasło aplikacji dla konta {sender}. "
+                "Utwórz nowe hasło aplikacji w ustawieniach konta Google."
+            )
+            return False
+        except Exception as e:
+            last_error = str(e)
+
+    st.error(f"Nie udało się wysłać maila. Nadawca: {sender}. Błąd: {last_error}")
+    return False
+
+
+# =============================================================================
+# 6. GENEROWANIE PDF
+# =============================================================================
+
+def get_pdf_row_colors(typ: str):
     if typ == CARRYOVER_TYPE:
         return (219, 234, 254), (0, 0, 0)
     if typ == "Przychód ogólny":
@@ -719,52 +393,634 @@ def get_pdf_row_colors(typ):
         return (255, 243, 205), (0, 0, 0)
     return (255, 255, 255), (0, 0, 0)
 
-# --- FUNKCJA STYLIZOWANIA KOLORÓW W HISTORII ---
+
+def infer_report_range(df: pd.DataFrame):
+    dates = [
+        parse_event_date(v)
+        for v in df.get("data_zdarzenia", pd.Series(dtype=str)).astype(str).str.strip()
+        if parse_event_date(v)
+    ] if not df.empty else []
+    if dates:
+        return min(dates), max(dates)
+    today = get_now().date()
+    return today, today
+
+
+def create_pdf(df, p, g, w, przeniesienie=0.0, date_from=None, date_to=None) -> bytes:
+    if date_from is None or date_to is None:
+        inferred_from, inferred_to = infer_report_range(df)
+        date_from = date_from or inferred_from
+        date_to   = date_to   or inferred_to
+
+    pdf = FPDF()
+    pdf.add_page()
+
+    # --- Nagłówek ---
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, pdf_safe("RAPORT SZCZEGOLOWY"), ln=True, align="C")
+    pdf.set_font("Helvetica", size=10)
+    pdf.cell(0, 7, pdf_safe(f"Zakres raportu: {date_from.strftime('%d.%m.%Y')} - {date_to.strftime('%d.%m.%Y')}"), ln=True, align="C")
+    pdf.cell(0, 7, pdf_safe(f"Wygenerowano: {get_now().strftime('%d.%m.%Y %H:%M')}"), ln=True, align="C")
+    pdf.ln(5)
+
+    # --- Kafelki sumy ---
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_fill_color(219, 234, 254)
+    pdf.cell(190, 10, pdf_safe(f"Gotowka z przeniesienia: {przeniesienie:,.2f} zl"), border=1, ln=1, fill=True, align="C")
+
+    pdf.set_fill_color(212, 237, 218)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(63, 10, pdf_safe(f"Przychod: {p:,.2f} zl"), border=1, fill=True, align="C")
+
+    if g < 0:
+        pdf.set_fill_color(220, 38, 38)
+        pdf.set_text_color(255, 255, 255)
+    else:
+        pdf.set_fill_color(255, 243, 205)
+        pdf.set_text_color(0, 0, 0)
+    pdf.cell(64, 10, pdf_safe(f"Gotowka: {g:,.2f} zl"), border=1, fill=True, align="C")
+
+    pdf.set_fill_color(248, 215, 218)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(63, 10, pdf_safe(f"Wydatki: {w:,.2f} zl"), border=1, ln=1, fill=True, align="C")
+    pdf.ln(10)
+
+    # --- Nagłówek tabeli ---
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_fill_color(200, 200, 200)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(28, 8, "Data",  border=1, fill=True, align="C")
+    pdf.cell(52, 8, "Typ",   border=1, fill=True, align="C")
+    pdf.cell(30, 8, "Kwota", border=1, fill=True, align="C")
+    pdf.cell(80, 8, "Opis",  border=1, ln=1, fill=True, align="C")
+
+    # --- Wiersze danych ---
+    pdf.set_font("Helvetica", size=9)
+    df_to_print = df.copy()
+    df_to_print["kwota"] = pd.to_numeric(df_to_print.get("kwota", 0), errors="coerce").fillna(0)
+
+    for _, row in df_to_print.iterrows():
+        typ_txt   = str(row.get("typ", ""))
+        bg_color, text_color = get_pdf_row_colors(typ_txt)
+        pdf.set_fill_color(*bg_color)
+        pdf.set_text_color(*text_color)
+        pdf.cell(28, 8, pdf_safe(str(row.get("data_zdarzenia", ""))),          border=1, fill=True, align="C")
+        pdf.cell(52, 8, pdf_safe(typ_txt),                                      border=1, fill=True)
+        pdf.cell(30, 8, pdf_safe(f"{float(row.get('kwota', 0)):,.2f} zl"),      border=1, fill=True, align="R")
+        pdf.cell(80, 8, short_pdf_text(row.get("opis", "")),                    border=1, ln=1, fill=True)
+
+    pdf.set_text_color(0, 0, 0)
+    pdf_output = pdf.output(dest="S")
+    return bytes(pdf_output) if isinstance(pdf_output, (bytes, bytearray)) else pdf_output.encode("latin-1")
+
+
+# =============================================================================
+# 7. ZAMKNIĘCIE OKRESU — wspólna logika (używana przez sidebar i widok mobilny)
+# =============================================================================
+
+def execute_period_close(date_from, date_to):
+    """
+    Wysyła raport e-mailem i zapisuje w archiwum.
+    Zwraca True przy sukcesie, False przy błędzie.
+    """
+    df_all = load_data()
+    df_range = sort_df_by_data_zdarzenia(filter_data_by_date_range(df_all, date_from, date_to))
+
+    if df_range.empty:
+        st.warning("Brak wpisów w wybranym zakresie dat.")
+        return False
+
+    lock_p, lock_g, lock_w, lock_przeniesienie = calculate_range_sums(df_range)
+    pdf_data = create_pdf(df_range, lock_p, lock_g, lock_w, lock_przeniesienie, date_from, date_to)
+    csv_data = public_csv_data(df_range)
+
+    if not send_email_with_reports(pdf_data, csv_data):
+        st.error("Nie rozliczono okresu — błąd wysyłki e-mail.")
+        return False
+
+    lock_ids = df_range["id"].dropna().astype(int).tolist()
+    insert_report_with_ids(date_from, date_to, lock_p, lock_ids)
+    st.session_state.next_cumulative_date_from = date_to + timedelta(days=1)
+    st.success("✅ Raport wysłany e-mailem i zapisany w archiwum. Wpisy pozostają aktywne.")
+    return True
+
+
+def reset_lock_state():
+    st.session_state.lock_step      = 0
+    st.session_state.lock_confirm_1 = False
+    st.session_state.lock_confirm_2 = False
+
+
+# =============================================================================
+# 8. STYLIZOWANIE WIERSZY TABELI
+# =============================================================================
+
 def style_row_by_type(row):
     typ = str(row["typ"])
     if typ == CARRYOVER_TYPE:
-        return ["background-color: #dbeafe; color: black;"] * len(row)
+        color = "background-color: #dbeafe; color: black;"
     elif typ == "Przychód ogólny":
-        return ["background-color: #d4edda; color: black;"] * len(row)
+        color = "background-color: #d4edda; color: black;"
     elif "Gotówka" in typ:
-        return ["background-color: #fff3cd; color: black;"] * len(row)
+        color = "background-color: #fff3cd; color: black;"
     elif typ == "Wydatki gotówkowe":
-        return ["background-color: #f8d7da; color: black;"] * len(row)
-    return [""] * len(row)
+        color = "background-color: #f8d7da; color: black;"
+    else:
+        color = ""
+    return [color] * len(row)
 
-# --- 4. STANY SESJI ---
-if "s" not in st.session_state:
-    st.session_state.s = ""
-if "os" not in st.session_state:
-    st.session_state.os = None
-if "selected_ids" not in st.session_state:
-    st.session_state.selected_ids = []
-if "lock_step" not in st.session_state:
-    st.session_state.lock_step = 0
-if "show_delete_confirm" not in st.session_state:
-    st.session_state.show_delete_confirm = False
-if "show_report_picker" not in st.session_state:
-    st.session_state.show_report_picker = False
-if "show_send_picker" not in st.session_state:
-    st.session_state.show_send_picker = False
-if "show_archive_picker" not in st.session_state:
-    st.session_state.show_archive_picker = False
 
-if "lock_confirm_1" not in st.session_state:
-    st.session_state.lock_confirm_1 = False
-if "lock_confirm_2" not in st.session_state:
-    st.session_state.lock_confirm_2 = False
+# =============================================================================
+# 9. UI — KONFIGURACJA STRONY I CSS
+# =============================================================================
 
-# --- 5. WIDOK GŁÓWNY ---
+st.set_page_config(
+    page_title="Pizzeria",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown(
+    """
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+
+        :root {
+            --bg:        #0a0a0f;
+            --bg2:       #0f0f16;
+            --bg3:       #16161e;
+            --surface:   #1c1c26;
+            --surface2:  #24242f;
+            --border:    rgba(255,255,255,0.07);
+            --border2:   rgba(255,255,255,0.11);
+            --text:      #eeeef8;
+            --text2:     #8888a8;
+            --text3:     #4a4a62;
+            --accent:    #7c6eff;
+            --accent2:   #a594ff;
+            --green:     #22c55e;
+            --green-bg:  rgba(34,197,94,0.10);
+            --green-bd:  rgba(34,197,94,0.22);
+            --yellow:    #f59e0b;
+            --yellow-bg: rgba(245,158,11,0.10);
+            --yellow-bd: rgba(245,158,11,0.22);
+            --red:       #ef4444;
+            --red-bg:    rgba(239,68,68,0.10);
+            --red-bd:    rgba(239,68,68,0.25);
+            --blue:      #60a5fa;
+            --blue-bg:   rgba(96,165,250,0.10);
+            --blue-bd:   rgba(96,165,250,0.22);
+            --r:         12px;
+            --r2:        18px;
+            --shadow:    0 12px 40px rgba(0,0,0,0.5);
+            --shadow2:   0 3px 14px rgba(0,0,0,0.35);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; }
+        #MainMenu, footer, header { display: none !important; }
+
+        .stApp {
+            background: var(--bg) !important;
+            color: var(--text) !important;
+            font-family: 'DM Sans', sans-serif !important;
+        }
+        .stApp::before {
+            content: '';
+            position: fixed;
+            top: -25vh; left: -15vw;
+            width: 55vw; height: 55vh;
+            background: radial-gradient(ellipse, rgba(124,110,255,0.08) 0%, transparent 70%);
+            pointer-events: none; z-index: 0;
+        }
+        .stApp::after {
+            content: '';
+            position: fixed;
+            bottom: -20vh; right: -10vw;
+            width: 45vw; height: 45vh;
+            background: radial-gradient(ellipse, rgba(34,197,94,0.05) 0%, transparent 70%);
+            pointer-events: none; z-index: 0;
+        }
+
+        .block-container {
+            max-width: 1120px !important;
+            padding: 2rem 1.5rem 7rem !important;
+            position: relative; z-index: 1;
+        }
+
+        /* SIDEBAR */
+        [data-testid="stSidebar"] {
+            background: var(--bg2) !important;
+            border-right: 1px solid var(--border) !important;
+            box-shadow: 4px 0 40px rgba(0,0,0,0.4) !important;
+        }
+        [data-testid="stSidebar"] .block-container { padding-top: 1.5rem !important; }
+        [data-testid="stSidebar"] h2,
+        [data-testid="stSidebar"] h3 { color: var(--text) !important; }
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] label { color: var(--text2) !important; }
+
+        /* TYPOGRAPHY */
+        h1, h2, h3 {
+            font-family: 'Syne', sans-serif !important;
+            color: var(--text) !important;
+            letter-spacing: -0.025em;
+        }
+        p, span { color: var(--text2) !important; }
+
+        /* APP HEADER */
+        .app-header { margin-bottom: 2rem; }
+        .app-eyebrow {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--accent2) !important;
+            display: flex; align-items: center; gap: 7px;
+            margin-bottom: 0.45rem;
+        }
+        .app-eyebrow::before {
+            content: '';
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 10px rgba(124,110,255,0.7);
+            flex-shrink: 0;
+        }
+        .app-title {
+            font-family: 'Syne', sans-serif !important;
+            font-size: 2.6rem;
+            font-weight: 800;
+            color: var(--text) !important;
+            line-height: 1.03;
+            margin: 0;
+            letter-spacing: -0.035em;
+        }
+        .app-subtitle {
+            font-size: 0.82rem;
+            color: var(--text3) !important;
+            margin-top: 0.45rem;
+        }
+
+        /* METRIC CARDS */
+        .metric-card {
+            border-radius: var(--r2);
+            padding: 1.4rem 1.5rem 1.3rem;
+            margin-bottom: 1rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s cubic-bezier(.4,0,.2,1), box-shadow 0.2s ease;
+            backdrop-filter: blur(4px);
+        }
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: var(--r2);
+            border: 1px solid var(--border2);
+            pointer-events: none;
+        }
+        .metric-card::after {
+            content: '';
+            position: absolute;
+            top: -40%; right: -20%;
+            width: 160px; height: 160px;
+            border-radius: 50%;
+            opacity: 0.06;
+            pointer-events: none;
+        }
+        .metric-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+        .metric-card .label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.13em;
+            margin-bottom: 0.7rem;
+        }
+        .metric-card .value {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.85rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            line-height: 1;
+        }
+
+        .metric-card.blue   { background: linear-gradient(145deg, rgba(96,165,250,0.12) 0%, rgba(96,165,250,0.03) 100%); }
+        .metric-card.blue .label { color: var(--blue) !important; }
+        .metric-card.blue .value { color: var(--blue) !important; }
+        .metric-card.blue::after { background: var(--blue); }
+
+        .metric-card.green  { background: linear-gradient(145deg, rgba(34,197,94,0.12) 0%, rgba(34,197,94,0.03) 100%); }
+        .metric-card.green .label { color: var(--green) !important; }
+        .metric-card.green .value { color: var(--green) !important; }
+        .metric-card.green::after { background: var(--green); }
+
+        .metric-card.yellow { background: linear-gradient(145deg, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0.03) 100%); }
+        .metric-card.yellow .label { color: var(--yellow) !important; }
+        .metric-card.yellow .value { color: var(--yellow) !important; }
+        .metric-card.yellow::after { background: var(--yellow); }
+
+        .metric-card.red    { background: linear-gradient(145deg, rgba(239,68,68,0.12) 0%, rgba(239,68,68,0.03) 100%); }
+        .metric-card.red .label { color: var(--red) !important; }
+        .metric-card.red .value { color: var(--red) !important; }
+        .metric-card.red::after { background: var(--red); }
+
+        .metric-card.negative {
+            background: linear-gradient(145deg, rgba(239,68,68,0.20) 0%, rgba(239,68,68,0.07) 100%);
+        }
+        .metric-card.negative::before { border-color: var(--red-bd) !important; }
+        .metric-card.negative .label { color: #fca5a5 !important; }
+        .metric-card.negative .value { color: #ffffff !important; }
+        .metric-card.negative::after { background: var(--red); }
+
+        /* BUTTONS */
+        div.stButton > button {
+            background: var(--surface) !important;
+            color: var(--text) !important;
+            border: 1px solid var(--border2) !important;
+            border-radius: var(--r) !important;
+            min-height: 2.65rem !important;
+            font-family: 'DM Sans', sans-serif !important;
+            font-weight: 600 !important;
+            font-size: 0.87rem !important;
+            letter-spacing: 0.01em;
+            transition: all 0.18s cubic-bezier(.4,0,.2,1) !important;
+            box-shadow: none !important;
+        }
+        div.stButton > button:hover {
+            background: var(--surface2) !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+        }
+        div.stButton > button:active { transform: translateY(0) !important; }
+        div.stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, var(--accent) 0%, #5e50d8 100%) !important;
+            border-color: transparent !important;
+            color: #fff !important;
+            box-shadow: 0 4px 22px rgba(124,110,255,0.38) !important;
+        }
+        div.stButton > button[kind="primary"]:hover {
+            box-shadow: 0 6px 30px rgba(124,110,255,0.55) !important;
+            transform: translateY(-2px);
+        }
+
+        /* INPUTS */
+        .stTextInput input, .stNumberInput input {
+            background: var(--surface) !important;
+            border: 1px solid var(--border2) !important;
+            border-radius: var(--r) !important;
+            color: var(--text) !important;
+            font-family: 'DM Sans', sans-serif !important;
+            font-size: 0.92rem !important;
+        }
+        .stTextInput input:focus, .stNumberInput input:focus {
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 0 3px rgba(124,110,255,0.14) !important;
+            outline: none !important;
+        }
+        input[type="date"] {
+            background: var(--surface) !important;
+            border: 1px solid var(--border2) !important;
+            border-radius: var(--r) !important;
+            color: var(--text) !important;
+            font-family: 'DM Sans', sans-serif !important;
+        }
+        .stTextInput label, .stNumberInput label,
+        .stDateInput label, .stMultiSelect label {
+            color: var(--text2) !important;
+            font-size: 0.74rem !important;
+            font-weight: 600 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+        }
+
+        /* MULTISELECT */
+        .stMultiSelect > div > div {
+            background: var(--surface) !important;
+            border: 1px solid var(--border2) !important;
+            border-radius: var(--r) !important;
+        }
+        .stMultiSelect span[data-baseweb="tag"] {
+            background: rgba(124,110,255,0.18) !important;
+            border: 1px solid rgba(124,110,255,0.28) !important;
+            color: var(--accent2) !important;
+            border-radius: 6px !important;
+            font-size: 0.78rem !important;
+        }
+
+        /* CONTAINERS */
+        div[data-testid="stVerticalBlockBorderWrapper"] > div {
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: var(--r2) !important;
+            box-shadow: var(--shadow2) !important;
+        }
+
+        /* DATAFRAME */
+        div[data-testid="stDataFrame"] {
+            border-radius: var(--r2) !important;
+            overflow: hidden;
+            border: 1px solid var(--border) !important;
+        }
+
+        /* ALERTS */
+        div[data-testid="stAlert"] {
+            border-radius: var(--r) !important;
+            background: var(--surface) !important;
+            border: 1px solid var(--border2) !important;
+        }
+        div[data-testid="stAlert"] p { color: var(--text) !important; }
+
+        /* DIVIDER */
+        hr { border-color: var(--border) !important; margin: 1rem 0 !important; }
+
+        /* EXPANDER */
+        details {
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: var(--r) !important;
+            margin-bottom: 0.4rem;
+        }
+        details summary { color: var(--text) !important; font-weight: 600; }
+        details > div { background: var(--surface) !important; }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: var(--bg2); }
+        ::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
+
+        /* SIDEBAR HEADER PILL */
+        .sidebar-menu-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            color: var(--text3) !important;
+            margin: 0.2rem 0 0.7rem;
+        }
+
+        /* LOGIN */
+        .login-wrap {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            min-height: 75vh; padding: 2rem; text-align: center;
+        }
+        .login-icon {
+            font-size: 3.5rem; margin-bottom: 0.3rem;
+            filter: drop-shadow(0 0 24px rgba(124,110,255,0.45));
+        }
+        .login-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.6rem; font-weight: 800;
+            color: var(--text) !important;
+            margin-bottom: 0.2rem; letter-spacing: -0.02em;
+        }
+        .login-sub { font-size: 0.82rem; color: var(--text3) !important; margin-bottom: 2rem; }
+
+        /* MOBILE */
+        @media (max-width: 768px) {
+            .block-container { padding: 1.1rem 0.9rem 6rem !important; }
+            .app-title { font-size: 2rem; }
+            .metric-card { padding: 1.1rem 1.2rem; margin-bottom: 0.75rem; }
+            .metric-card .value { font-size: 1.5rem; }
+        }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
+
+# =============================================================================
+# 10. KAFELEK METRYKI
+# =============================================================================
+
+def metric_card(label: str, value, color_class: str):
+    st.markdown(
+        f"""
+        <div class="metric-card {color_class}">
+            <div class="label">{label}</div>
+            <div class="value">{money_text(value)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# =============================================================================
+# 11. LOGOWANIE
+# =============================================================================
+
+cookies = CookieManager()
+if not cookies.ready():
+    st.stop()
+
+if not is_valid_auth_token(cookies.get("auth_token")):
+    st.markdown(
+        """
+        <div class="login-wrap">
+            <div class="login-icon">🍕</div>
+            <div class="login-title">Pizzeria Finance</div>
+            <div class="login-sub">Zaloguj się, aby kontynuować</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if not get_secret("APP_PASSWORD"):
+        st.error("Brakuje APP_PASSWORD w st.secrets.")
+        st.stop()
+
+    with st.container(border=True):
+        haslo = st.text_input("Hasło dostępu", type="password", placeholder="••••••••")
+        if st.button("Zaloguj →", type="primary", use_container_width=True):
+            if check_secret_password(haslo, "APP_PASSWORD"):
+                cookies["auth_token"] = make_auth_token()
+                cookies.save()
+                st.rerun()
+            else:
+                st.error("Nieprawidłowe hasło.")
+    st.stop()
+
+
+# =============================================================================
+# 12. INICJALIZACJA STANU SESJI
+# =============================================================================
+
+for key, default in {
+    "s":                    "",
+    "os":                   None,
+    "selected_ids":         [],
+    "lock_step":            0,
+    "lock_confirm_1":       False,
+    "lock_confirm_2":       False,
+    "show_delete_confirm":  False,
+    "show_report_picker":   False,
+    "show_send_picker":     False,
+    "show_archive_picker":  False,
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+
+# =============================================================================
+# 13. ŁADOWANIE DANYCH I ZAKRESY
+# =============================================================================
+
+data = load_data()
+default_date_from, default_date_to = get_default_date_range(data)
+
+next_cumulative_date_from = st.session_state.pop("next_cumulative_date_from", None)
+if next_cumulative_date_from is not None:
+    st.session_state.cumulative_date_widget_version = (
+        st.session_state.get("cumulative_date_widget_version", 0) + 1
+    )
+
+latest_reset_date   = get_next_date_after_latest_closed_report()
+current_month_start = next_cumulative_date_from or latest_reset_date or get_now().date().replace(day=1)
+
+# --- Pasek boczny: wybór zakresu narastającego ---
+with st.sidebar:
+    st.header("⚙️ Menu")
+    st.markdown("**Kwoty narastająco:**")
+    cumulative_date_key  = f"cumulative_date_from_{st.session_state.get('cumulative_date_widget_version', 0)}"
+    cumulative_date_from = st.date_input("Pokaż od", value=current_month_start, key=cumulative_date_key)
+    st.divider()
+
+latest_data_date  = get_latest_event_date(data)
+cumulative_date_to = max(latest_data_date, cumulative_date_from)
+
+if cumulative_date_from > latest_data_date:
+    df_current = pd.DataFrame(columns=data.columns)
+else:
+    df_current = filter_data_by_date_range(data, cumulative_date_from, latest_data_date).copy()
+
+df_active_calc = df_current.copy()
+df_history     = df_current.copy()
+
+# Sumy do kafelków
+if not df_active_calc.empty:
+    df_active_calc["kwota"] = pd.to_numeric(df_active_calc["kwota"], errors="coerce").fillna(0)
+    s_og, s_got, s_wyd, s_przeniesienie = calculate_range_sums(df_active_calc)
+else:
+    s_og = s_got = s_wyd = s_przeniesienie = 0.0
+
+
+# =============================================================================
+# 14. WIDOK GŁÓWNY
+# =============================================================================
+
 st.markdown(
     f"""
     <div class="app-header">
-        <div class="app-title">Rozliczenie Pizzerii</div>
-        <div class="app-subtitle">Kwoty narastająco od {cumulative_date_from.strftime('%d.%m.%Y')} do {cumulative_date_to.strftime('%d.%m.%Y')}</div>
+        <div class="app-eyebrow">System Finansowy</div>
+        <div class="app-title">Rozliczenie</div>
+        <div class="app-subtitle">
+            Narastająco {cumulative_date_from.strftime('%d.%m.%Y')} &mdash; {cumulative_date_to.strftime('%d.%m.%Y')}
+        </div>
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
+
+# --- Gotówka z przeniesienia ---
 metric_card("Gotówka z przeniesienia", s_przeniesienie, "blue")
 if st.button("➕ DODAJ", key="zp"):
     st.session_state.s = "ZP" if st.session_state.s != "ZP" else ""
@@ -772,22 +1028,23 @@ if st.button("➕ DODAJ", key="zp"):
 
 if st.session_state.s == "ZP":
     with st.container(border=True):
-        d_zp = st.date_input("Data zdarzenia", get_now().date(), key="date_zp")
+        d_zp  = st.date_input("Data zdarzenia", get_now().date(), key="date_zp")
         kw_zp = st.number_input("Kwota", value=None, step=1.0, key="zp_v", placeholder="Wpisz kwotę")
         op_zp = st.text_input("Opis", key="desc_zp", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_zp", use_container_width=True, type="primary"):
             if kw_zp is not None and kw_zp > 0:
                 supabase.table("finanse").insert({
-                    "data": get_now().strftime("%d.%m %H:%M"),
-                    "typ": CARRYOVER_TYPE,
-                    "kwota": float(kw_zp),
-                    "opis": op_zp,
-                    "status": "Aktywny",
-                    "data_zdarzenia": d_zp.strftime("%d.%m.%Y")
+                    "data":           get_now().strftime("%d.%m %H:%M"),
+                    "typ":            CARRYOVER_TYPE,
+                    "kwota":          float(kw_zp),
+                    "opis":           op_zp,
+                    "status":         "Aktywny",
+                    "data_zdarzenia": d_zp.strftime("%d.%m.%Y"),
                 }).execute()
                 st.session_state.s = ""
                 st.rerun()
 
+# --- Trzy kolumny: Przychód / Gotówka / Wydatki ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
@@ -795,20 +1052,19 @@ with c1:
     if st.button("➕ DODAJ", key="p"):
         st.session_state.s = "P" if st.session_state.s != "P" else ""
         st.rerun()
-
     if st.session_state.s == "P":
         with st.container(border=True):
-            d_p = st.date_input("Data zdarzenia", get_now().date(), key="date_p")
+            d_p  = st.date_input("Data zdarzenia", get_now().date(), key="date_p")
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v", placeholder="Wpisz kwotę")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p is not None and kw_p > 0:
                     supabase.table("finanse").insert({
-                        "data": get_now().strftime("%d.%m %H:%M"),
-                        "typ": "Przychód ogólny",
-                        "kwota": float(kw_p),
-                        "opis": "",
-                        "status": "Aktywny",
-                        "data_zdarzenia": d_p.strftime("%d.%m.%Y")
+                        "data":           get_now().strftime("%d.%m %H:%M"),
+                        "typ":            "Przychód ogólny",
+                        "kwota":          float(kw_p),
+                        "opis":           "",
+                        "status":         "Aktywny",
+                        "data_zdarzenia": d_p.strftime("%d.%m.%Y"),
                     }).execute()
                     st.session_state.s = ""
                     st.rerun()
@@ -819,7 +1075,6 @@ with c2:
         st.session_state.s = "G" if st.session_state.s != "G" else ""
         st.session_state.os = None
         st.rerun()
-
     if st.session_state.s == "G":
         with st.container(border=True):
             osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
@@ -827,23 +1082,22 @@ with c2:
                 if st.button(o, key=f"os_{o}", use_container_width=True):
                     st.session_state.os = o if st.session_state.os != o else None
                     st.rerun()
-
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
-                        d_g = st.date_input("Data", get_now().date(), key=f"date_g_{o}")
+                        d_g  = st.date_input("Data", get_now().date(), key=f"date_g_{o}")
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
                         if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g is not None and kw_g > 0:
                                 supabase.table("finanse").insert({
-                                    "data": get_now().strftime("%d.%m %H:%M"),
-                                    "typ": f"Gotówka - {o}",
-                                    "kwota": float(kw_g),
-                                    "opis": "",
-                                    "status": "Aktywny",
-                                    "data_zdarzenia": d_g.strftime("%d.%m.%Y")
+                                    "data":           get_now().strftime("%d.%m %H:%M"),
+                                    "typ":            f"Gotówka - {o}",
+                                    "kwota":          float(kw_g),
+                                    "opis":           "",
+                                    "status":         "Aktywny",
+                                    "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
                                 }).execute()
-                                st.session_state.s = ""
+                                st.session_state.s  = ""
                                 st.session_state.os = None
                                 st.rerun()
 
@@ -852,124 +1106,104 @@ with c3:
     if st.button("➕ DODAJ", key="w"):
         st.session_state.s = "W" if st.session_state.s != "W" else ""
         st.rerun()
-
     if st.session_state.s == "W":
         with st.container(border=True):
-            d_w = st.date_input("Data zdarzenia", get_now().date(), key="date_w")
+            d_w  = st.date_input("Data zdarzenia", get_now().date(), key="date_w")
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v", placeholder="Wpisz kwotę")
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
                 if kw_w is not None and kw_w > 0:
                     supabase.table("finanse").insert({
-                        "data": get_now().strftime("%d.%m %H:%M"),
-                        "typ": "Wydatki gotówkowe",
-                        "kwota": float(kw_w),
-                        "opis": op_w,
-                        "status": "Aktywny",
-                        "data_zdarzenia": d_w.strftime("%d.%m.%Y")
+                        "data":           get_now().strftime("%d.%m %H:%M"),
+                        "typ":            "Wydatki gotówkowe",
+                        "kwota":          float(kw_w),
+                        "opis":           op_w,
+                        "status":         "Aktywny",
+                        "data_zdarzenia": d_w.strftime("%d.%m.%Y"),
                     }).execute()
                     st.session_state.s = ""
                     st.rerun()
 
-# --- 6. PASEK BOCZNY (AKCJE) ---
+
+# =============================================================================
+# 15. PASEK BOCZNY — AKCJE
+# =============================================================================
+
 with st.sidebar:
+
+    # ---- Wyślij raport ----
     if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="open_send_picker"):
-        st.session_state.show_send_picker = not st.session_state.show_send_picker
-        if st.session_state.show_send_picker:
-            st.session_state.show_report_picker = False
-            st.session_state.show_archive_picker = False
+        st.session_state.show_send_picker   = not st.session_state.show_send_picker
+        st.session_state.show_report_picker = False
+        st.session_state.show_archive_picker = False
         st.rerun()
 
     if st.session_state.show_send_picker:
         with st.container(border=True):
             send_date_from = st.date_input("Data od", value=get_now().date(), key="send_date_from")
-            send_date_to = st.date_input("Data do", value=get_now().date(), key="send_date_to")
-
+            send_date_to   = st.date_input("Data do", value=get_now().date(), key="send_date_to")
             if send_date_from > send_date_to:
-                st.error("Data od nie może być większa niż data do")
+                st.error("Data od nie może być większa niż data do.")
             else:
-                df_send_range = filter_data_by_date_range(df_active_calc, send_date_from, send_date_to).copy()
-                df_send_range = sort_df_by_data_zdarzenia(df_send_range)
-                send_p, send_g, send_w, send_przeniesienie = calculate_range_sums(df_send_range)
-
+                df_send = sort_df_by_data_zdarzenia(
+                    filter_data_by_date_range(df_active_calc, send_date_from, send_date_to)
+                )
+                sp, sg, sw, spr = calculate_range_sums(df_send)
                 if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
-                    pdf_f = create_pdf(df_send_range, send_p, send_g, send_w, send_przeniesienie, send_date_from, send_date_to)
-                    csv_f = public_csv_data(df_send_range)
-                    if send_email_with_reports(pdf_f, csv_f):
+                    if send_email_with_reports(
+                        create_pdf(df_send, sp, sg, sw, spr, send_date_from, send_date_to),
+                        public_csv_data(df_send),
+                    ):
                         st.success("✅ Wysłano raport!")
-
-                if st.button("↩️ Powrót", use_container_width=True, key="send_back_btn"):
-                    st.session_state.show_send_picker = False
-                    st.rerun()
+            if st.button("↩️ Powrót", use_container_width=True, key="send_back_btn"):
+                st.session_state.show_send_picker = False
+                st.rerun()
 
     st.divider()
 
-    if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True):
-        st.session_state.lock_step = 1
+    # ---- Zamknij i rozlicz okres ----
+    if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", type="primary", use_container_width=True, key="lock_open_sidebar"):
+        st.session_state.lock_step      = 1
         st.session_state.lock_confirm_1 = False
         st.session_state.lock_confirm_2 = False
         st.rerun()
 
-    if st.session_state.get("lock_step", 0) >= 1:
+    if st.session_state.lock_step >= 1:
         with st.container(border=True):
-            lock_date_from = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_sidebar")
-            lock_date_to = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_sidebar")
-            
-            if lock_date_from > lock_date_to:
-                st.error("Data od nie może być większa niż data do")
+            lock_df = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_sidebar")
+            lock_dt = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_sidebar")
+            if lock_df > lock_dt:
+                st.error("Data od nie może być większa niż data do.")
             else:
                 if not st.session_state.lock_confirm_1:
                     if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_sidebar"):
                         st.session_state.lock_confirm_1 = True
                         st.rerun()
-                
-                elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
+                elif not st.session_state.lock_confirm_2:
                     st.warning("⚠️ Tej czynności nie można cofnąć!")
                     if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_2_sidebar"):
-                        df_all_raw_data = load_data()
-                        df_lock_range = filter_data_by_date_range(df_all_raw_data, lock_date_from, lock_date_to).copy()
-                        df_lock_range = sort_df_by_data_zdarzenia(df_lock_range)
-
-                        if not df_lock_range.empty:
-                            lock_p, lock_g, lock_w, lock_przeniesienie = calculate_range_sums(df_lock_range)
-                            p_r = create_pdf(df_lock_range, lock_p, lock_g, lock_w, lock_przeniesienie, lock_date_from, lock_date_to)
-                            c_r = public_csv_data(df_lock_range)
-                            if not has_email_config():
-                                st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
-                                st.stop()
-
-                            if not send_email_with_reports(p_r, c_r):
-                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu e-mailem.")
-                                st.stop()
-
-                            lock_ids = df_lock_range["id"].tolist()
-                            insert_report_with_ids(lock_date_from, lock_date_to, lock_p, lock_ids)
-                            st.session_state.next_cumulative_date_from = lock_date_to + timedelta(days=1)
-                            st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy pozostają aktywne.")
-
-                        st.session_state.lock_step = 0
-                        st.session_state.lock_confirm_1 = False
-                        st.session_state.lock_confirm_2 = False
+                        execute_period_close(lock_df, lock_dt)
+                        reset_lock_state()
                         st.rerun()
-
             if st.button("Anuluj", use_container_width=True, key="cancel_close_sidebar"):
-                st.session_state.lock_step = 0
-                st.session_state.lock_confirm_1 = False
-                st.session_state.lock_confirm_2 = False
+                reset_lock_state()
                 st.rerun()
 
     st.divider()
 
-    if len(st.session_state.selected_ids) > 0:
+    # ---- Usuń zaznaczone wpisy ----
+    if st.session_state.selected_ids:
         if st.button(f"🗑️ USUŃ LINIĘ ({len(st.session_state.selected_ids)})", use_container_width=True, type="primary", key="delete_sidebar_btn"):
             st.session_state.show_delete_confirm = True
 
-        if st.session_state.get("show_delete_confirm", False):
-            st.warning("Czy na pewno chcesz usunąć zaznaczoną linię / linie?")
+        if st.session_state.show_delete_confirm:
+            st.warning("Czy na pewno chcesz usunąć zaznaczone wpisy?")
             if st.button("✅ POTWIERDŹ USUNIĘCIE", use_container_width=True, type="primary", key="delete_sidebar_confirm"):
                 for rid in st.session_state.selected_ids:
-                    supabase.table("finanse").delete().eq("id", int(rid)).execute()
-                st.session_state.selected_ids = []
+                    result = supabase.table("finanse").delete().eq("id", int(rid)).execute()
+                    if not result.data:
+                        st.warning(f"Nie udało się usunąć wpisu ID={rid}.")
+                st.session_state.selected_ids       = []
                 st.session_state.show_delete_confirm = False
                 st.rerun()
             if st.button("Anuluj", use_container_width=True, key="delete_sidebar_cancel"):
@@ -980,139 +1214,138 @@ with st.sidebar:
 
     st.divider()
 
+    # ---- Pobierz raport ----
     if st.button("📥 Pobierz raport", use_container_width=True, key="open_report_picker"):
-        st.session_state.show_report_picker = not st.session_state.show_report_picker
-        if st.session_state.show_report_picker:
-            st.session_state.show_send_picker = False
-            st.session_state.show_archive_picker = False
+        st.session_state.show_report_picker  = not st.session_state.show_report_picker
+        st.session_state.show_send_picker    = False
+        st.session_state.show_archive_picker = False
         st.rerun()
 
     if st.session_state.show_report_picker:
         with st.container(border=True):
-            report_date_from = st.date_input("Data od", value=default_date_from, key="report_date_from_picker")
-            report_date_to = st.date_input("Data do", value=default_date_to, key="report_date_to_picker")
-
-            if report_date_from > report_date_to:
-                st.error("Data od nie może być większa niż data do")
+            report_df = st.date_input("Data od", value=default_date_from, key="report_date_from_picker")
+            report_dt = st.date_input("Data do", value=default_date_to,   key="report_date_to_picker")
+            if report_df > report_dt:
+                st.error("Data od nie może być większa niż data do.")
             else:
-                st.info(f"Raport zostanie pobrany z wpisów: {report_date_from.strftime('%d.%m.%Y')} - {report_date_to.strftime('%d.%m.%Y')}.")
-                df_report_range = filter_data_by_date_range(df_active_calc, report_date_from, report_date_to).copy()
-                df_report_range = sort_df_by_data_zdarzenia(df_report_range)
-                report_p, report_g, report_w, report_przeniesienie = calculate_range_sums(df_report_range)
-                st.write(f"Gotówka z przeniesienia: **{report_przeniesienie:,.2f} zł**")
-                st.write(f"Przychód: **{report_p:,.2f} zł**")
-                st.write(f"Gotówka: **{report_g:,.2f} zł**")
-                st.write(f"Wydatki: **{report_w:,.2f} zł**")
-
-                _ = st.download_button(
-                    "📥 Pobierz PDF (Szczegółowy)",
-                    data=create_pdf(df_report_range, report_p, report_g, report_w, report_przeniesienie, report_date_from, report_date_to),
-                    file_name=f"raport_{report_date_from}_{report_date_to}.pdf",
+                df_rep = sort_df_by_data_zdarzenia(filter_data_by_date_range(df_active_calc, report_df, report_dt))
+                rp, rg, rw, rpr = calculate_range_sums(df_rep)
+                st.write(f"Gotówka z przeniesienia: **{rpr:,.2f} zł**")
+                st.write(f"Przychód: **{rp:,.2f} zł**")
+                st.write(f"Gotówka: **{rg:,.2f} zł**")
+                st.write(f"Wydatki: **{rw:,.2f} zł**")
+                st.download_button(
+                    "📥 Pobierz PDF",
+                    data=create_pdf(df_rep, rp, rg, rw, rpr, report_df, report_dt),
+                    file_name=f"raport_{report_df}_{report_dt}.pdf",
                     use_container_width=True,
-                    key="download_pdf_range"
+                    key="download_pdf_range",
                 )
-
-                _ = st.download_button(
-                    "📥 Pobierz CSV (Szczegółowy)",
-                    data=public_csv_data(df_report_range),
-                    file_name=f"raport_{report_date_from}_{report_date_to}.csv",
+                st.download_button(
+                    "📥 Pobierz CSV",
+                    data=public_csv_data(df_rep),
+                    file_name=f"raport_{report_df}_{report_dt}.csv",
                     use_container_width=True,
-                    key="download_csv_range"
+                    key="download_csv_range",
                 )
-
             if st.button("↩️ Powrót", use_container_width=True, key="report_back_btn"):
                 st.session_state.show_report_picker = False
                 st.rerun()
 
     st.divider()
 
+    # ---- Archiwum raportów ----
     if st.button("📜 Archiwum raportów", use_container_width=True, key="open_archive_picker"):
         st.session_state.show_archive_picker = not st.session_state.show_archive_picker
-        if st.session_state.show_archive_picker:
-            st.session_state.show_send_picker = False
-            st.session_state.show_report_picker = False
+        st.session_state.show_send_picker    = False
+        st.session_state.show_report_picker  = False
         st.rerun()
 
     if st.session_state.show_archive_picker:
         with st.container(border=True):
             st.markdown("**Zapisane zamknięcia z bazy:**")
             df_arch = load_archived_reports()
-            
             if df_arch.empty:
                 st.info("Brak zapisanych raportów w bazie.")
             else:
                 for _, r_row in df_arch.iterrows():
                     lbl = f"📅 {r_row['okres_od']} - {r_row['okres_do']}"
                     with st.expander(lbl):
-                        st.write(f"**Wygenerowano:** {r_row.get('data_wygenerowania', r_row.get('data', ''))}")
+                        gen_date = r_row.get("data_wygenerowania") or r_row.get("data", "")
+                        st.write(f"**Wygenerowano:** {gen_date}")
                         st.write(f"💰 Suma Przychodów: {r_row['suma_przychodow']:.2f} zł")
-                        
                         try:
-                            if r_row['okres_od'] == "Brak daty" or r_row['okres_do'] == "Brak daty":
-                                st.warning("Ten wpis jest zbyt stary, aby odtworzyć pełne dane źródłowe.")
+                            if "Brak daty" in (str(r_row["okres_od"]), str(r_row["okres_do"])):
+                                st.warning("Zbyt stary wpis — brak pełnych danych źródłowych.")
                             else:
-                                df_filtered_arch = load_report_rows(r_row)
-                                
+                                df_arch_rows = load_report_rows(r_row)
                                 st.download_button(
-                                    "📥 Pobierz CSV (Dane)",
-                                    data=public_csv_data(df_filtered_arch),
+                                    "📥 Pobierz CSV",
+                                    data=public_csv_data(df_arch_rows),
                                     file_name=f"archiwum_{r_row['okres_od']}_{r_row['okres_do']}.csv",
                                     key=f"dl_arch_{r_row['id']}",
-                                    use_container_width=True
+                                    use_container_width=True,
                                 )
-                        except Exception:
-                            st.error("Nie udało się odtworzyć pełnych danych.")
-
-                if st.button("↩️ Powrót", use_container_width=True, key="archive_back_btn"):
-                    st.session_state.show_archive_picker = False
-                    st.rerun()
+                        except Exception as e:
+                            st.error(f"Nie udało się odtworzyć danych: {e}")
+            if st.button("↩️ Powrót", use_container_width=True, key="archive_back_btn"):
+                st.session_state.show_archive_picker = False
+                st.rerun()
 
     st.divider()
 
-    if st.button("🔓 Wyloguj", use_container_width=True):
+    # ---- Wyloguj ----
+    if st.button("🔓 Wyloguj", use_container_width=True, key="logout_btn"):
         cookies["auth_token"] = ""
         cookies.save()
         st.rerun()
 
-# --- 7. HISTORIA WPISÓW Z KOLOROWANIEM ---
+
+# =============================================================================
+# 16. HISTORIA WPISÓW
+# =============================================================================
+
 st.divider()
 st.subheader("Historia wpisów")
 
 if not df_history.empty:
-    df_display = sort_df_by_data_zdarzenia(df_history)
-    df_display = df_display[["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]]
-    
-    # Formatowanie wyświetlania kwot w tabeli głównej (z separatorami tysięcznymi)
-    df_display["kwota"] = df_display["kwota"].map(lambda x: f"{x:,.2f} zł")
-
-    # Tworzenie selektora usuwania jako wielokrotnego wyboru
-    options_dict = {row["id"]: f"📅 {row['data_zdarzenia']} | {row['typ']} | {row['kwota']} | {row['opis']}" for _, row in df_display.iterrows()}
-    
-    selected_ids = st.multiselect(
-        "Zaznacz wpisy do usunięcia:", 
-        options=list(options_dict.keys()), 
-        format_func=lambda x: options_dict[x],
-        key="delete_multiselect"
+    df_display = sort_df_by_data_zdarzenia(df_history)[
+        ["id", "data", "data_zdarzenia", "typ", "kwota", "opis"]
+    ].copy()
+    df_display["kwota"] = pd.to_numeric(df_display["kwota"], errors="coerce").fillna(0).map(
+        lambda x: f"{x:,.2f} zł"
     )
-    
+
+    options_dict = {
+        row["id"]: f"📅 {row['data_zdarzenia']} | {row['typ']} | {row['kwota']} | {row['opis']}"
+        for _, row in df_display.iterrows()
+    }
+
+    selected_ids = st.multiselect(
+        "Zaznacz wpisy do usunięcia:",
+        options=list(options_dict.keys()),
+        format_func=lambda x: options_dict[x],
+        key="delete_multiselect",
+    )
+
     if st.session_state.selected_ids != selected_ids:
-        st.session_state.selected_ids = selected_ids
+        st.session_state.selected_ids       = selected_ids
         st.session_state.show_delete_confirm = False
         st.rerun()
 
-    # Nakładanie stylów kolorystycznych na wiersze
-    styled_df = df_display.style.apply(style_row_by_type, axis=1)
-
     st.dataframe(
-        styled_df,
+        df_display.style.apply(style_row_by_type, axis=1),
         hide_index=True,
-        use_container_width=True
+        use_container_width=True,
     )
 else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
 
 
-# --- 8. AKCJE MOBILNE ---
+# =============================================================================
+# 17. SZYBKIE AKCJE (MOBILNE)
+# =============================================================================
+
 st.divider()
 st.subheader("⚡ Szybkie akcje")
 
@@ -1120,80 +1353,55 @@ m1, m2, m3 = st.columns(3)
 
 with m1:
     if st.button("📧 Raport", use_container_width=True, key="mobile_report"):
-        df_sorted_mobile = sort_df_by_data_zdarzenia(df_active_calc)
-        mobile_p, mobile_g, mobile_w, mobile_przeniesienie = calculate_range_sums(df_sorted_mobile)
-        pdf_f = create_pdf(df_sorted_mobile, mobile_p, mobile_g, mobile_w, mobile_przeniesienie)
-        csv_f = public_csv_data(df_sorted_mobile)
-        if send_email_with_reports(pdf_f, csv_f):
+        df_mob = sort_df_by_data_zdarzenia(df_active_calc)
+        mp, mg, mw, mpr = calculate_range_sums(df_mob)
+        if send_email_with_reports(
+            create_pdf(df_mob, mp, mg, mw, mpr),
+            public_csv_data(df_mob),
+        ):
             st.success("✅ Wysłano raport!")
 
 with m2:
     if st.button("🔒 Zamknij", use_container_width=True, key="mobile_lock"):
-        st.session_state.lock_step = 1
+        st.session_state.lock_step      = 1
         st.session_state.lock_confirm_1 = False
         st.session_state.lock_confirm_2 = False
         st.rerun()
 
 with m3:
-    if len(st.session_state.selected_ids) > 0:
+    if st.session_state.selected_ids:
         if st.button(f"🗑️ Usuń ({len(st.session_state.selected_ids)})", use_container_width=True, key="mobile_delete"):
             st.session_state.show_delete_confirm = True
             st.rerun()
 
-if st.session_state.get("lock_step", 0) >= 1:
+# Formularz zamknięcia okresu (wspólny — pojawia się po kliknięciu z paska lub mobile)
+if st.session_state.lock_step >= 1:
     with st.container(border=True):
         st.markdown("**Zamknij i rozlicz okres**")
-        lock_date_from_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
-        lock_date_to_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
-        
-        if lock_date_from_m > lock_date_to_m:
-            st.error("Data od nie może być większa niż data do")
+        lock_df_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
+        lock_dt_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
+
+        if lock_df_m > lock_dt_m:
+            st.error("Data od nie może być większa niż data do.")
         else:
             if not st.session_state.lock_confirm_1:
                 if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
                     st.session_state.lock_confirm_1 = True
                     st.rerun()
-            
-            elif st.session_state.lock_confirm_1 and not st.session_state.lock_confirm_2:
+            elif not st.session_state.lock_confirm_2:
                 st.warning("⚠️ Tej czynności nie można cofnąć!")
-                c_a, c_b = st.columns(2)
-                with c_a:
-                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, key="confirm_2_mobile", type="primary"):
-                        df_all_raw_data_m = load_data()
-                        df_lock_range_m = filter_data_by_date_range(df_all_raw_data_m, lock_date_from_m, lock_date_to_m).copy()
-                        df_lock_range_m = sort_df_by_data_zdarzenia(df_lock_range_m)
-                        
-                        if not df_lock_range_m.empty:
-                            lock_p, lock_g, lock_w, lock_przeniesienie = calculate_range_sums(df_lock_range_m)
-                            p_r = create_pdf(df_lock_range_m, lock_p, lock_g, lock_w, lock_przeniesienie, lock_date_from_m, lock_date_to_m)
-                            c_r = public_csv_data(df_lock_range_m)
-                            if not has_email_config():
-                                st.error("Brakuje konfiguracji e-mail w st.secrets. Okres nie został rozliczony.")
-                                st.stop()
-
-                            if not send_email_with_reports(p_r, c_r):
-                                st.error("Nie rozliczono okresu, bo nie udało się wysłać raportu e-mailem.")
-                                st.stop()
-
-                            lock_ids = df_lock_range_m["id"].tolist()
-                            insert_report_with_ids(lock_date_from_m, lock_date_to_m, lock_p, lock_ids)
-                            st.session_state.next_cumulative_date_from = lock_date_to_m + timedelta(days=1)
-                            st.success("✅ Raport wysłany e-mailem i zapisany. Wpisy zostają aktywne.")
-
-                        st.session_state.lock_step = 0
-                        st.session_state.lock_confirm_1 = False
-                        st.session_state.lock_confirm_2 = False
+                ca, cb = st.columns(2)
+                with ca:
+                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_2_mobile"):
+                        execute_period_close(lock_df_m, lock_dt_m)
+                        reset_lock_state()
                         st.rerun()
-                with c_b:
+                with cb:
                     if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile_inner"):
-                        st.session_state.lock_step = 0
-                        st.session_state.lock_confirm_1 = False
-                        st.session_state.lock_confirm_2 = False
+                        reset_lock_state()
                         st.rerun()
 
         if not st.session_state.lock_confirm_1:
             if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
-                st.session_state.lock_step = 0
-                st.session_state.lock_confirm_1 = False
-                st.session_state.lock_confirm_2 = False
+                reset_lock_state()
                 st.rerun()
