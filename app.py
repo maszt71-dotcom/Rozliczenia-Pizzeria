@@ -25,21 +25,35 @@ from supabase import create_client, Client
 #   REPORT_RECEIVER_EMAIL, REPORT_SENDER_EMAIL, REPORT_EMAIL_PASSWORD
 # =============================================================================
 
+DEFAULT_SECRETS = {
+    "APP_PASSWORD":           "dup@",
+    "AUTH_COOKIE_SECRET":     "dup@_sekret_cookie_2026",
+    "REPORT_RECEIVER_EMAIL":  "maszt71@gmail.com",
+    "REPORT_SENDER_EMAIL":    "mange929598@gmail.com",
+    "REPORT_EMAIL_PASSWORD":  "kwoaohaszcshiggg",
+    "SUPABASE_URL":           "https://vtylqbykjispxoejmzxv.supabase.co",
+    "SUPABASE_KEY":           "sb_publishable_3tiUVyl5IHd9FEvkWqd3TQ_gBFWh1mi",
+}
+
+def get_secret(name: str, default=None):
+    """Pobiera sekret z st.secrets, z fallbackiem do DEFAULT_SECRETS."""
+    try:
+        val = st.secrets.get(name)
+        if val is not None:
+            return val
+    except Exception:
+        pass
+    return DEFAULT_SECRETS.get(name, default)
+
+
 @st.cache_resource
 def get_supabase_client() -> Client:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
+    url = get_secret("SUPABASE_URL")
+    key = get_secret("SUPABASE_KEY")
     return create_client(url, key)
 
 supabase = get_supabase_client()
 
-
-def get_secret(name: str, default=None):
-    """Bezpiecznie pobiera sekret z st.secrets."""
-    try:
-        return st.secrets[name]
-    except (KeyError, FileNotFoundError):
-        return default
 
 
 # =============================================================================
@@ -924,14 +938,16 @@ if not is_valid_auth_token(cookies.get("auth_token")):
         """,
         unsafe_allow_html=True,
     )
+
     if not get_secret("APP_PASSWORD"):
-        st.error("Brakuje APP_PASSWORD w st.secrets.")
-        st.stop()
+        st.warning("⚠️ Brakuje APP_PASSWORD w st.secrets — skontaktuj się z administratorem.")
 
     with st.container(border=True):
         haslo = st.text_input("Hasło dostępu", type="password", placeholder="••••••••")
         if st.button("Zaloguj →", type="primary", use_container_width=True):
-            if check_secret_password(haslo, "APP_PASSWORD"):
+            if not get_secret("APP_PASSWORD"):
+                st.error("Brak APP_PASSWORD w konfiguracji.")
+            elif check_secret_password(haslo, "APP_PASSWORD"):
                 cookies["auth_token"] = make_auth_token()
                 cookies.save()
                 st.rerun()
