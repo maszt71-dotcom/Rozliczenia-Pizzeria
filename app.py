@@ -1553,12 +1553,35 @@ st.markdown("""
 # =============================================================================
 
 st.divider()
+st.markdown("""
+<style>
+/* Szybkie akcje — duże kafelki z ikonką */
+div[data-testid="stHorizontalBlock"]:has(.quick-action-col) {
+    gap: 0.75rem !important;
+}
+.quick-btn > div > button {
+    height: 5.5rem !important;
+    border-radius: 16px !important;
+    flex-direction: column !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+    gap: 0.4rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.subheader("⚡ Szybkie akcje")
 
 m1, m2, m3 = st.columns(3)
 
 with m1:
-    if st.button("📧 Raport", use_container_width=True, key="mobile_report"):
+    if st.button("📧\nRaport", use_container_width=True, key="mobile_report"):
         df_mob = sort_df_by_data_zdarzenia(df_active_calc)
         mp, mg, mw, mpr = calculate_range_sums(df_mob)
         if send_email_with_reports(
@@ -1568,7 +1591,7 @@ with m1:
             st.success("✅ Wysłano raport!")
 
 with m2:
-    if st.button("🔒 Zamknij", use_container_width=True, key="mobile_lock"):
+    if st.button("🔒\nZamknij", use_container_width=True, key="mobile_lock"):
         st.session_state.lock_step      = 1
         st.session_state.lock_confirm_1 = False
         st.session_state.lock_confirm_2 = False
@@ -1576,9 +1599,11 @@ with m2:
 
 with m3:
     if st.session_state.selected_ids:
-        if st.button(f"🗑️ Usuń ({len(st.session_state.selected_ids)})", use_container_width=True, key="mobile_delete"):
+        if st.button(f"🗑️\nUsuń ({len(st.session_state.selected_ids)})", use_container_width=True, key="mobile_delete"):
             st.session_state.show_delete_confirm = True
             st.rerun()
+    else:
+        st.button("🗑️\nUsuń", use_container_width=True, key="mobile_delete_disabled", disabled=True)
 
 # Formularz zamknięcia okresu (wspólny — pojawia się po kliknięciu z paska lub mobile)
 if st.session_state.lock_step >= 1:
