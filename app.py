@@ -186,6 +186,7 @@ FINANCE_DEFAULTS = {
 
 
 def load_data() -> pd.DataFrame:
+    # Ładuje WSZYSTKIE wpisy bez filtrowania po statusie
     res = supabase.table("finanse").select("*").order("id").execute()
     df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
     for col in EXPECTED_FINANCE_COLS:
@@ -1001,7 +1002,10 @@ if next_cumulative_date_from is not None:
     )
 
 latest_reset_date   = get_next_date_after_latest_closed_report()
-current_month_start = next_cumulative_date_from or latest_reset_date or get_now().date().replace(day=1)
+# Domyślnie: pierwszy dzień miesiąca najpóźniejszego wpisu w bazie
+_, _latest_date = get_default_date_range(data)
+_default_month_start = _latest_date.replace(day=1)
+current_month_start = next_cumulative_date_from or latest_reset_date or _default_month_start
 
 # --- Pasek boczny: wybór zakresu narastającego ---
 with st.sidebar:
