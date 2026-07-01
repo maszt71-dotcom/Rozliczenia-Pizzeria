@@ -974,6 +974,16 @@ st.markdown(
             section[data-testid="stSidebar"] { display: none !important; }
         }
 
+        /* Ukryj ikonkę Streamlit która zasłania przyciski */
+        [data-testid="stActionButtonIcon"],
+        .viewerBadge_container__r5tak,
+        #stDecoration,
+        a[href="https://streamlit.io"],
+        .css-1dp5vir,
+        iframe[title="streamlit_overlay"] {
+            display: none !important;
+        }
+
         /* BOTTOM NAV BAR — tylko mobile */
         .bottom-nav {
             display: none;
@@ -983,15 +993,17 @@ st.markdown(
                 display: flex;
                 position: fixed;
                 bottom: 0; left: 0; right: 0;
-                height: 4.2rem;
-                background: rgba(15,15,22,0.96);
+                height: 4.8rem;
+                padding-bottom: env(safe-area-inset-bottom);
+                background: rgba(15,15,22,0.97);
                 backdrop-filter: blur(20px);
                 border-top: 1px solid rgba(255,255,255,0.08);
-                z-index: 9999;
+                z-index: 99999;
                 align-items: center;
                 justify-content: space-around;
-                padding: 0 0.5rem;
-                box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
+                padding-left: 0.5rem;
+                padding-right: 0.5rem;
+                box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
             }
             .bottom-nav a {
                 display: flex;
@@ -1008,6 +1020,8 @@ st.markdown(
                 border-radius: 10px;
                 transition: all 0.18s ease;
                 -webkit-tap-highlight-color: transparent;
+                min-width: 4rem;
+                text-align: center;
             }
             .bottom-nav a:active { background: rgba(124,110,255,0.15); }
             .bottom-nav a .icon {
@@ -1017,6 +1031,9 @@ st.markdown(
             .bottom-nav a.accent { color: #7c6eff; }
             .bottom-nav a.danger { color: #ef4444; }
             .bottom-nav a.green  { color: #22c55e; }
+
+            /* padding żeby ostatni element nie był pod paskiem */
+            .block-container { padding-bottom: 9rem !important; }
         }
     </style>
 """,
