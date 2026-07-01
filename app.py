@@ -629,16 +629,42 @@ st.markdown(
         }
 
         /* SIDEBAR */
-        [data-testid="stSidebar"] {
+        section[data-testid="stSidebar"] {
             background: var(--bg2) !important;
             border-right: 1px solid var(--border) !important;
             box-shadow: 4px 0 40px rgba(0,0,0,0.4) !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
         }
         [data-testid="stSidebarNav"] { display: none !important; }
-        section[data-testid="stSidebar"] { display: block !important; }
+
+        /* Przycisk otwierania sidebara — zawsze widoczny i ładny */
+        button[data-testid="collapsedControl"],
+        [data-testid="stSidebarCollapsedControl"] {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: var(--surface) !important;
+            border: 1px solid var(--border2) !important;
+            border-radius: 0 10px 10px 0 !important;
+            color: var(--text) !important;
+            box-shadow: 4px 0 16px rgba(0,0,0,0.3) !important;
+            width: 2.2rem !important;
+            height: 2.8rem !important;
+            position: fixed !important;
+            top: 50% !important;
+            left: 0 !important;
+            transform: translateY(-50%) !important;
+            z-index: 999 !important;
+            cursor: pointer !important;
+        }
+        button[data-testid="collapsedControl"]:hover,
+        [data-testid="stSidebarCollapsedControl"]:hover {
+            background: var(--surface2) !important;
+            border-color: var(--accent) !important;
+        }
+        button[data-testid="collapsedControl"] svg,
+        [data-testid="stSidebarCollapsedControl"] svg {
+            fill: var(--accent2) !important;
+        }
         [data-testid="stSidebar"] .block-container { padding-top: 1.5rem !important; }
         [data-testid="stSidebar"] h2,
         [data-testid="stSidebar"] h3 { color: var(--text) !important; }
@@ -941,10 +967,56 @@ st.markdown(
 
         /* MOBILE */
         @media (max-width: 768px) {
-            .block-container { padding: 1.1rem 0.9rem 6rem !important; }
+            .block-container { padding: 1.1rem 0.9rem 8rem !important; }
             .app-title { font-size: 2rem; }
             .metric-card { padding: 1.1rem 1.2rem; margin-bottom: 0.75rem; }
             .metric-card .value { font-size: 1.5rem; }
+            section[data-testid="stSidebar"] { display: none !important; }
+        }
+
+        /* BOTTOM NAV BAR — tylko mobile */
+        .bottom-nav {
+            display: none;
+        }
+        @media (max-width: 768px) {
+            .bottom-nav {
+                display: flex;
+                position: fixed;
+                bottom: 0; left: 0; right: 0;
+                height: 4.2rem;
+                background: rgba(15,15,22,0.96);
+                backdrop-filter: blur(20px);
+                border-top: 1px solid rgba(255,255,255,0.08);
+                z-index: 9999;
+                align-items: center;
+                justify-content: space-around;
+                padding: 0 0.5rem;
+                box-shadow: 0 -8px 32px rgba(0,0,0,0.4);
+            }
+            .bottom-nav a {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 3px;
+                color: #4a4a62;
+                text-decoration: none;
+                font-size: 0.58rem;
+                font-weight: 700;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                padding: 0.4rem 0.8rem;
+                border-radius: 10px;
+                transition: all 0.18s ease;
+                -webkit-tap-highlight-color: transparent;
+            }
+            .bottom-nav a:active { background: rgba(124,110,255,0.15); }
+            .bottom-nav a .icon {
+                font-size: 1.4rem;
+                line-height: 1;
+            }
+            .bottom-nav a.accent { color: #7c6eff; }
+            .bottom-nav a.danger { color: #ef4444; }
+            .bottom-nav a.green  { color: #22c55e; }
         }
     </style>
 """,
@@ -1440,6 +1512,24 @@ if not df_history.empty:
 else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
 
+
+# Bottom nav bar dla mobile
+st.markdown("""
+    <div class="bottom-nav">
+        <a href="javascript:void(0)" onclick="window.scrollTo(0,0)" class="accent">
+            <span class="icon">🏠</span>
+            <span>Główna</span>
+        </a>
+        <a href="javascript:void(0)" onclick="document.querySelector('[data-testid=stSidebar]') && document.querySelector('button[data-testid=collapsedControl]') && document.querySelector('button[data-testid=collapsedControl]').click()" class="accent">
+            <span class="icon">⚙️</span>
+            <span>Menu</span>
+        </a>
+        <a href="javascript:void(0)" onclick="window.scrollTo(0, document.body.scrollHeight)" class="">
+            <span class="icon">📋</span>
+            <span>Historia</span>
+        </a>
+    </div>
+""", unsafe_allow_html=True)
 
 # =============================================================================
 # 17. SZYBKIE AKCJE (MOBILNE)
