@@ -1140,6 +1140,7 @@ for key, default in {
     "show_report_picker":   False,
     "show_send_picker":     False,
     "show_archive_picker":  False,
+    "page":                 "home",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -1192,10 +1193,156 @@ else:
 
 
 # =============================================================================
-# 14. WIDOK GŁÓWNY
+# 14. STRONA MENU (mobilna) lub WIDOK GŁÓWNY
 # =============================================================================
 
-st.markdown(
+if st.session_state.page == "menu":
+    st.markdown(
+        f"""
+        <div class="app-header">
+            <div class="app-eyebrow">System Finansowy</div>
+            <div class="app-title">Menu</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("**Kwoty narastająco od:**")
+    cumulative_date_key2 = f"menu_date_{st.session_state.get('cumulative_date_widget_version', 0)}"
+    new_date = st.date_input("Pokaż od", value=cumulative_date_from, key=cumulative_date_key2)
+    if new_date != cumulative_date_from:
+        st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
+        st.rerun()
+
+    st.divider()
+
+    if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="menu_send_open"):
+        st.session_state.show_send_picker = not st.session_state.show_send_picker
+        st.rerun()
+    if st.session_state.show_send_picker:
+        with st.container(border=True):
+            sd_from = st.date_input("Data od", value=get_now().date(), key="menu_send_from")
+            sd_to   = st.date_input("Data do", value=get_now().date(), key="menu_send_to")
+            if sd_from <= sd_to:
+                df_s = sort_df_by_data_zdarzenia(filter_data_by_date_range(df_active_calc, sd_from, sd_to))
+                sp, sg, sw, spr = calculate_range_sums(df_s)
+                if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="menu_send_btn"):
+                    if send_email_with_reports(create_pdf(df_s, sp, sg, sw, spr, sd_from, sd_to), public_csv_data(df_s)):
+                        st.success("✅ Wysłano!")
+            if st.button("↩️ Zamknij", use_container_width=True, key="menu_send_close"):
+                st.session_state.show_send_picker = False
+                st.rerun()
+
+    st.divider()
+
+    if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", use_container_width=True, type="primary", key="menu_lock_open"):
+        st.session_state.lock_step = 1
+        st.session_state.lock_confirm_1 = False
+        st.rerun()
+    if st.session_state.lock_step >= 1:
+        with st.container(border=True):
+            ld_from = st.date_input("Rozlicz od:", value=get_now().date(), key="menu_lock_from")
+            ld_to   = st.date_input("Rozlicz do:", value=get_now().date(), key="menu_lock_to")
+            if ld_from <= ld_to:
+                if not st.session_state.lock_confirm_1:
+                    if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="menu_confirm1"):
+                        st.session_state.lock_confirm_1 = True
+                        st.rerun()
+                else:
+                    st.warning("⚠️ Tej czynności nie można cofnąć!")
+                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="menu_confirm2"):
+                        execute_period_close(ld_from, ld_to)
+                        reset_lock_state()
+                        st.rerun()
+            if st.button("Anuluj", use_container_width=True, key="menu_lock_cancel"):
+                reset_lock_state()
+                st.rerun()
+
+    st.divider()
+
+    if st.button("📥 POBIERZ RAPORT", use_container_width=True, key="menu_report_open"):
+        st.session_state.show_report_picker = not st.session_state.show_report_picker
+        st.rerun()
+    if st.session_state.show_report_picker:
+        with st.container(border=True):
+            rd_from = st.date_input("Data od", value=default_date_from, key="menu_rep_from")
+            rd_to   = st.date_input("Data do", value=default_date_to,   key="menu_rep_to")
+            if rd_from <= rd_to:
+                df_r = sort_df_by_data_zdarzenia(filter_data_by_date_range(df_active_calc, rd_from, rd_to))
+                rp, rg, rw, rpr = calculate_range_sums(df_r)
+                st.write(f"Przychód: **{rp:,.2f} zł** | Gotówka: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
+                st.download_button("📥 Pobierz PDF", data=create_pdf(df_r, rp, rg, rw, rpr, rd_from, rd_to),
+                    file_name=f"raport_{rd_from}_{rd_to}.pdf", use_container_width=True, key="menu_dl_pdf")
+                st.download_button("📥 Pobierz CSV", data=public_csv_data(df_r),
+                    file_name=f"raport_{rd_from}_{rd_to}.csv", use_container_width=True, key="menu_dl_csv")
+            if st.button("↩️ Zamknij", use_container_width=True, key="menu_rep_close"):
+                st.session_state.show_report_picker = False
+                st.rerun()
+
+    st.divider()
+
+    if st.button("📜 ARCHIWUM RAPORTÓW", use_container_width=True, key="menu_arch_open"):
+        st.session_state.show_archive_picker = not st.session_state.show_archive_picker
+        st.rerun()
+    if st.session_state.show_archive_picker:
+        with st.container(border=True):
+            df_arch = load_archived_reports()
+            if df_arch.empty:
+                st.info("Brak zapisanych raportów.")
+            else:
+                for _, r_row in df_arch.iterrows():
+                    with st.expander(f"📅 {r_row['okres_od']} - {r_row['okres_od']}"):
+                        st.write(f"Suma: {r_row['suma_przychodow']:.2f} zł")
+                        try:
+                            df_ar = load_report_rows(r_row)
+                            st.download_button("📥 CSV", data=public_csv_data(df_ar),
+                                file_name=f"arch_{r_row['okres_od']}.csv",
+                                key=f"menu_arch_{r_row['id']}", use_container_width=True)
+                        except Exception as e:
+                            st.error(f"Błąd: {e}")
+            if st.button("↩️ Zamknij", use_container_width=True, key="menu_arch_close"):
+                st.session_state.show_archive_picker = False
+                st.rerun()
+
+    st.divider()
+
+    if st.button("🔓 WYLOGUJ", use_container_width=True, key="menu_logout"):
+        cookies["auth_token"] = ""
+        cookies.save()
+        st.rerun()
+
+    # bottom nav na stronie menu też
+    st.markdown("""<div class="bottom-nav">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#4a4a62;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            <span style="font-size:1.4rem;">🏠</span><span>Główna</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            <span style="font-size:1.4rem;">⚙️</span><span>Menu</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#4a4a62;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+            <span style="font-size:1.4rem;">📋</span><span>Historia</span>
+        </div>
+    </div>""", unsafe_allow_html=True)
+    mn1, mn2, mn3 = st.columns(3)
+    with mn1:
+        if st.button("🏠", key="menu_nav_home", use_container_width=True):
+            st.session_state.page = "home"
+            st.rerun()
+    with mn2:
+        st.button("⚙️", key="menu_nav_menu", use_container_width=True, disabled=True)
+    with mn3:
+        if st.button("📋", key="menu_nav_hist", use_container_width=True):
+            st.session_state.page = "home"
+            st.rerun()
+
+else:
+    # =========================================================================
+    # WIDOK GŁÓWNY (home)
+    # =========================================================================
+    pass
+
+if st.session_state.page == "home":
+    st.markdown(
     f"""
     <div class="app-header">
         <div class="app-eyebrow">System Finansowy</div>
@@ -1530,23 +1677,47 @@ else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
 
 
-# Bottom nav bar dla mobile
+# Bottom nav — Streamlit przyciski ukryte, HTML pasek na wierzchu
 st.markdown("""
-    <div class="bottom-nav">
-        <a href="javascript:void(0)" onclick="window.scrollTo(0,0)" class="accent">
-            <span class="icon">🏠</span>
-            <span>Główna</span>
-        </a>
-        <a href="javascript:void(0)" onclick="document.querySelector('[data-testid=stSidebar]') && document.querySelector('button[data-testid=collapsedControl]') && document.querySelector('button[data-testid=collapsedControl]').click()" class="accent">
-            <span class="icon">⚙️</span>
-            <span>Menu</span>
-        </a>
-        <a href="javascript:void(0)" onclick="window.scrollTo(0, document.body.scrollHeight)" class="">
-            <span class="icon">📋</span>
-            <span>Historia</span>
-        </a>
-    </div>
+    <style>
+    /* Ukryj etykiety przycisków nav — zostawiamy tylko funkcjonalność */
+    div[data-testid="stHorizontalBlock"]:has(#nav_home) button,
+    div[data-testid="stHorizontalBlock"]:has(#nav_menu) button,
+    div[data-testid="stHorizontalBlock"]:has(#nav_hist) button {
+        opacity: 0 !important;
+        position: absolute !important;
+        height: 4.8rem !important;
+        width: 100% !important;
+        z-index: 100000 !important;
+    }
+    </style>
 """, unsafe_allow_html=True)
+
+st.markdown("""<div class="bottom-nav">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+        <span style="font-size:1.4rem;">🏠</span><span>Główna</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+        <span style="font-size:1.4rem;">⚙️</span><span>Menu</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#4a4a62;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+        <span style="font-size:1.4rem;">📋</span><span>Historia</span>
+    </div>
+</div>""", unsafe_allow_html=True)
+
+nav1, nav2, nav3 = st.columns(3)
+with nav1:
+    if st.button("🏠", key="nav_home", use_container_width=True):
+        st.session_state.page = "home"
+        st.rerun()
+with nav2:
+    if st.button("⚙️", key="nav_menu", use_container_width=True):
+        st.session_state.page = "menu"
+        st.rerun()
+with nav3:
+    if st.button("📋", key="nav_hist", use_container_width=True):
+        st.session_state.page = "home"
+        st.rerun()
 
 # =============================================================================
 # 17. SZYBKIE AKCJE (MOBILNE)
