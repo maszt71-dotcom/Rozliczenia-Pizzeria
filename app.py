@@ -885,22 +885,59 @@ st.markdown(
         }
 
         /* LOGIN */
+        /* LOGIN PAGE */
+        .login-page {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
         .login-wrap {
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            min-height: 75vh; padding: 2rem; text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            width: 100%;
+            max-width: 380px;
+            padding: 2.5rem 2rem;
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 24px;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
         }
         .login-icon {
-            font-size: 3.5rem; margin-bottom: 0.3rem;
+            font-size: 3.5rem;
+            margin-bottom: 0.5rem;
             filter: drop-shadow(0 0 24px rgba(124,110,255,0.45));
         }
         .login-title {
             font-family: 'Syne', sans-serif;
-            font-size: 1.6rem; font-weight: 800;
+            font-size: 1.6rem;
+            font-weight: 800;
             color: var(--text) !important;
-            margin-bottom: 0.2rem; letter-spacing: -0.02em;
+            margin-bottom: 0.2rem;
+            letter-spacing: -0.02em;
         }
-        .login-sub { font-size: 0.82rem; color: var(--text3) !important; margin-bottom: 2rem; }
+        .login-sub {
+            font-size: 0.82rem;
+            color: var(--text3) !important;
+            margin-bottom: 0;
+        }
+        /* wyśrodkuj kontener Streamlit na stronie logowania */
+        .login-container .block-container {
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-height: 100vh !important;
+            padding-top: 0 !important;
+        }
+        .login-container div[data-testid="stVerticalBlockBorderWrapper"] {
+            width: 100% !important;
+            max-width: 380px !important;
+        }
 
         /* MOBILE */
         @media (max-width: 768px) {
@@ -940,31 +977,36 @@ if not cookies.ready():
     st.stop()
 
 if not is_valid_auth_token(cookies.get("auth_token")):
-    st.markdown(
-        """
-        <div class="login-wrap">
-            <div class="login-icon">🍕</div>
-            <div class="login-title">Pizzeria Finance</div>
-            <div class="login-sub">Zaloguj się, aby kontynuować</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    # Wyśrodkuj layout na stronie logowania
+    st.markdown('<style>.block-container{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding-top:0!important;padding-bottom:0!important;}</style>', unsafe_allow_html=True)
 
-    if not get_secret("APP_PASSWORD"):
-        st.warning("⚠️ Brakuje APP_PASSWORD w st.secrets — skontaktuj się z administratorem.")
+    _, col, _ = st.columns([1, 2, 1])
+    with col:
+        st.markdown(
+            """
+            <div class="login-wrap">
+                <div class="login-icon">🍕</div>
+                <div class="login-title">Pizzeria Finance</div>
+                <div class="login-sub">Zaloguj się, aby kontynuować</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    with st.container(border=True):
-        haslo = st.text_input("Hasło dostępu", type="password", placeholder="••••••••")
-        if st.button("Zaloguj →", type="primary", use_container_width=True):
-            if not get_secret("APP_PASSWORD"):
-                st.error("Brak APP_PASSWORD w konfiguracji.")
-            elif check_secret_password(haslo, "APP_PASSWORD"):
-                cookies["auth_token"] = make_auth_token()
-                cookies.save()
-                st.rerun()
-            else:
-                st.error("Nieprawidłowe hasło.")
+        if not get_secret("APP_PASSWORD"):
+            st.warning("⚠️ Brakuje APP_PASSWORD w st.secrets.")
+
+        with st.container(border=True):
+            haslo = st.text_input("Hasło dostępu", type="password", placeholder="••••••••")
+            if st.button("Zaloguj →", type="primary", use_container_width=True):
+                if not get_secret("APP_PASSWORD"):
+                    st.error("Brak APP_PASSWORD w konfiguracji.")
+                elif check_secret_password(haslo, "APP_PASSWORD"):
+                    cookies["auth_token"] = make_auth_token()
+                    cookies.save()
+                    st.rerun()
+                else:
+                    st.error("Nieprawidłowe hasło.")
     st.stop()
 
 
