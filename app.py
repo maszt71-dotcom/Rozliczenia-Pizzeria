@@ -32,7 +32,7 @@ DEFAULT_SECRETS = {
     "REPORT_SENDER_EMAIL":    "mange929598@gmail.com",
     "REPORT_EMAIL_PASSWORD":  "kwoaohaszcshiggg",
     "SUPABASE_URL":           "https://vtylqbykjispxoejmzxv.supabase.co",
-    "SUPABASE_KEY":           "sb_publishable_3tiUVyl5IHd9FEvkWqd3TQ_gBFWh1mi",
+    "SUPABASE_KEY":           "sb_secret_QO5nULOP-hDw0a4cuA6YiA_5FkzDU3x",
 }
 
 def get_secret(name: str, default=None):
@@ -50,9 +50,15 @@ def get_secret(name: str, default=None):
 def get_supabase_client() -> Client:
     url = get_secret("SUPABASE_URL")
     key = get_secret("SUPABASE_KEY")
+    if not url or not key:
+        raise ValueError("Brak SUPABASE_URL lub SUPABASE_KEY")
     return create_client(url, key)
 
-supabase = get_supabase_client()
+try:
+    supabase = get_supabase_client()
+except Exception as _e:
+    st.error(f"❌ Błąd połączenia z bazą danych: {_e}")
+    st.stop()
 
 
 
@@ -626,7 +632,12 @@ st.markdown(
             background: var(--bg2) !important;
             border-right: 1px solid var(--border) !important;
             box-shadow: 4px 0 40px rgba(0,0,0,0.4) !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
         }
+        [data-testid="stSidebarNav"] { display: none !important; }
+        section[data-testid="stSidebar"] { display: block !important; }
         [data-testid="stSidebar"] .block-container { padding-top: 1.5rem !important; }
         [data-testid="stSidebar"] h2,
         [data-testid="stSidebar"] h3 { color: var(--text) !important; }
