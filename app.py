@@ -977,36 +977,62 @@ if not cookies.ready():
     st.stop()
 
 if not is_valid_auth_token(cookies.get("auth_token")):
-    # Wyśrodkuj layout na stronie logowania
-    st.markdown('<style>.block-container{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding-top:0!important;padding-bottom:0!important;}</style>', unsafe_allow_html=True)
+    # Login — nagłówek na pełną szerokość, formularz wyśrodkowany pod nim
+    st.markdown(
+        """
+        <style>
+        /* na stronie logowania wyśrodkuj całą zawartość */
+        .login-page-wrap .block-container {
+            padding-top: 0 !important;
+        }
+        </style>
+        <div style="
+            width: 100%;
+            text-align: center;
+            padding: 3.5rem 1rem 2rem;
+        ">
+            <div style="font-size:3.2rem; margin-bottom:0.4rem; filter:drop-shadow(0 0 20px rgba(124,110,255,0.5))">🍕</div>
+            <div style="
+                font-family: 'Syne', sans-serif;
+                font-size: 2rem;
+                font-weight: 800;
+                color: #eeeef8;
+                letter-spacing: -0.03em;
+                margin-bottom: 0.3rem;
+            ">Pizzeria Finance</div>
+            <div style="font-size:0.82rem; color:#4a4a62;">Zaloguj się, aby kontynuować</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    _, col, _ = st.columns([1, 2, 1])
-    with col:
-        st.markdown(
-            """
-            <div class="login-wrap">
-                <div class="login-icon">🍕</div>
-                <div class="login-title">Pizzeria Finance</div>
-                <div class="login-sub">Zaloguj się, aby kontynuować</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    if not get_secret("APP_PASSWORD"):
+        st.warning("⚠️ Brakuje APP_PASSWORD w st.secrets.")
 
+    # pole i przycisk na pełną szerokość kontenera
+    st.markdown("""
+        <style>
+        div[data-testid="stTextInput"],
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stButton"],
+        div[data-testid="stButton"] > button {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    haslo = st.text_input("Hasło dostępu", type="password", placeholder="••••••••")
+    if st.button("Zaloguj →", type="primary", use_container_width=True):
         if not get_secret("APP_PASSWORD"):
-            st.warning("⚠️ Brakuje APP_PASSWORD w st.secrets.")
-
-        with st.container(border=True):
-            haslo = st.text_input("Hasło dostępu", type="password", placeholder="••••••••")
-            if st.button("Zaloguj →", type="primary", use_container_width=True):
-                if not get_secret("APP_PASSWORD"):
-                    st.error("Brak APP_PASSWORD w konfiguracji.")
-                elif check_secret_password(haslo, "APP_PASSWORD"):
-                    cookies["auth_token"] = make_auth_token()
-                    cookies.save()
-                    st.rerun()
-                else:
-                    st.error("Nieprawidłowe hasło.")
+            st.error("Brak APP_PASSWORD w konfiguracji.")
+        elif check_secret_password(haslo, "APP_PASSWORD"):
+            cookies["auth_token"] = make_auth_token()
+            cookies.save()
+            st.rerun()
+        else:
+            st.error("Nieprawidłowe hasło.")
     st.stop()
 
 
