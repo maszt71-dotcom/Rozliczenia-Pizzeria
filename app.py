@@ -1641,7 +1641,27 @@ with st.sidebar:
 # =============================================================================
 
 st.divider()
-st.subheader("Historia wpisów")
+st.markdown("""
+    <div style="
+        margin: 2rem 0 1.5rem 0;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        position: relative;
+    ">
+        <span style="
+            position: absolute;
+            top: -0.65rem;
+            left: 0;
+            background: #0a0a0f;
+            padding-right: 1rem;
+            font-family: 'Syne', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: #eeeef8;
+            letter-spacing: -0.01em;
+        ">Historia wpisów</span>
+    </div>
+    <div style="height: 0.8rem;"></div>
+""", unsafe_allow_html=True)
 
 if not df_history.empty:
     df_display = sort_df_by_data_zdarzenia(df_history)[
@@ -1838,7 +1858,7 @@ div[data-testid="stHorizontalBlock"]:has(.quick-action-col) {
 
 st.subheader("⚡ Szybkie akcje")
 
-m1, m2, m3 = st.columns(3)
+m1, m2 = st.columns(2)
 
 with m1:
     if st.button("📧\nRaport", use_container_width=True, key="mobile_report"):
@@ -1856,14 +1876,6 @@ with m2:
         st.session_state.lock_confirm_1 = False
         st.session_state.lock_confirm_2 = False
         st.rerun()
-
-with m3:
-    if st.session_state.selected_ids:
-        if st.button(f"🗑️\nUsuń ({len(st.session_state.selected_ids)})", use_container_width=True, key="mobile_delete"):
-            st.session_state.show_delete_confirm = True
-            st.rerun()
-    else:
-        st.button("🗑️\nUsuń", use_container_width=True, key="mobile_delete_disabled", disabled=True)
 
 # Formularz zamknięcia okresu (wspólny — pojawia się po kliknięciu z paska lub mobile)
 if st.session_state.lock_step >= 1:
