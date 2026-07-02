@@ -245,7 +245,9 @@ def filter_data_by_date_range(df: pd.DataFrame, date_from, date_to) -> pd.DataFr
 
 
 def calculate_range_sums(df: pd.DataFrame):
-    """Zwraca (przychod, gotowka, wydatki, przeniesienie)."""
+    """Zwraca (przychod, gotowka, wydatki, przeniesienie).
+    gotowka = Gotowka z przeniesienia + Przychod ogolny - Wydatki gotowkowe
+    """
     if df.empty:
         return 0.0, 0.0, 0.0, 0.0
     temp = df.copy()
@@ -253,7 +255,7 @@ def calculate_range_sums(df: pd.DataFrame):
     przychod      = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
     wydatki       = temp[temp["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
     przeniesienie = temp[temp["typ"] == CARRYOVER_TYPE]["kwota"].sum()
-    gotowka       = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
+    gotowka       = przeniesienie + przychod - wydatki
     return przychod, gotowka, wydatki, przeniesienie
 
 
