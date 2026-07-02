@@ -1651,28 +1651,117 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    options_dict = {
-        row["id"]: f"📅 {row['data_zdarzenia']} | {row['typ']} | {row['kwota']} | {row['opis']}"
-        for _, row in df_display.iterrows()
-    }
+    # --- Checkboxy do zaznaczania wpisów ---
+    st.markdown("""
+        <style>
+        .history-table-wrap {
+            overflow-y: auto;
+            max-height: 480px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.07);
+        }
+        .hist-row {
+            display: grid;
+            grid-template-columns: 28px 70px 90px 1fr 90px;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.55rem 0.75rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.82rem;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .hist-row:last-child { border-bottom: none; }
+        .hist-row:hover { background: rgba(255,255,255,0.04); }
+        .hist-row.selected { background: rgba(239,68,68,0.10); }
+        .hist-row .col-data { color: #5a5a72; font-size: 0.75rem; }
+        .hist-row .col-typ  { color: #8888a8; font-size: 0.78rem; }
+        .hist-row .col-kwota { font-weight: 700; text-align: right; }
+        .hist-header {
+            display: grid;
+            grid-template-columns: 28px 70px 90px 1fr 90px;
+            gap: 0.5rem;
+            padding: 0.45rem 0.75rem;
+            font-size: 0.65rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #4a4a62;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    selected_ids = st.multiselect(
-        "Zaznacz wpisy do usunięcia:",
-        options=list(options_dict.keys()),
-        format_func=lambda x: options_dict[x],
-        key="delete_multiselect",
-    )
+    # Checkboxy — jeden na wiersz
+    new_selected = list(st.session_state.selected_ids)
 
-    if st.session_state.selected_ids != selected_ids:
-        st.session_state.selected_ids       = selected_ids
+    with st.container():
+        # nagłówek tabeli
+        col_chk, col_date, col_event, col_typ, col_amt = st.columns([0.3, 1, 1.1, 2, 1])
+        with col_chk:   st.markdown("", unsafe_allow_html=True)
+        with col_date:  st.markdown("<span style='font-size:0.7rem;color:#4a4a62;font-weight:700;text-transform:uppercase;letter-spacing:0.08em'>Data</span>", unsafe_allow_html=True)
+        with col_event: st.markdown("<span style='font-size:0.7rem;color:#4a4a62;font-weight:700;text-transform:uppercase;letter-spacing:0.08em'>Zdarzenie</span>", unsafe_allow_html=True)
+        with col_typ:   st.markdown("<span style='font-size:0.7rem;color:#4a4a62;font-weight:700;text-transform:uppercase;letter-spacing:0.08em'>Typ</span>", unsafe_allow_html=True)
+        with col_amt:   st.markdown("<span style='font-size:0.7rem;color:#4a4a62;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;text-align:right;display:block'>Kwota</span>", unsafe_allow_html=True)
+
+    # Wiersze z checkboxami
+    changed = False
+    for _, row in df_display.iterrows():
+        rid = row["id"]
+        typ = str(row["typ"])
+
+        # kolor kwoty
+        if typ == "Przychód ogólny":      kolor = "#22c55e"
+        elif typ == "Wydatki gotówkowe":  kolor = "#ef4444"
+        elif "Gotówka" in typ:            kolor = "#f59e0b"
+        else:                             kolor = "#60a5fa"
+
+        c1, c2, c3, c4, c5 = st.columns([0.3, 1, 1.1, 2, 1])
+        with c1:
+            checked = st.checkbox("", key=f"cb_{rid}", value=(rid in new_selected), label_visibility="collapsed")
+            if checked and rid not in new_selected:
+                new_selected.append(rid)
+                changed = True
+            elif not checked and rid in new_selected:
+                new_selected.remove(rid)
+                changed = True
+        with c2:
+            st.markdown(f"<span style='font-size:0.78rem;color:#5a5a72'>{row['data_zdarzenia']}</span>", unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"<span style='font-size:0.75rem;color:#4a4a62'>{row['data']}</span>", unsafe_allow_html=True)
+        with c4:
+            st.markdown(f"<span style='font-size:0.82rem;color:#c8c8e0'>{typ}</span>", unsafe_allow_html=True)
+        with c5:
+            st.markdown(f"<span style='font-size:0.85rem;font-weight:700;color:{kolor};text-align:right;display:block'>{row['kwota']}</span>", unsafe_allow_html=True)
+
+    if changed:
+        st.session_state.selected_ids = new_selected
         st.session_state.show_delete_confirm = False
         st.rerun()
 
-    st.dataframe(
-        df_display.style.apply(style_row_by_type, axis=1),
-        hide_index=True,
-        use_container_width=True,
-    )
+    # Przycisk usuwania
+    if st.session_state.selected_ids:
+        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+        if not st.session_state.get("show_delete_confirm"):
+            if st.button(f"🗑️ Usuń zaznaczone ({len(st.session_state.selected_ids)})",
+                         use_container_width=True, type="primary", key="delete_checked_btn"):
+                st.session_state.show_delete_confirm = True
+                st.rerun()
+        else:
+            st.warning("⚠️ Czy na pewno chcesz usunąć zaznaczone wpisy?")
+            cd1, cd2 = st.columns(2)
+            with cd1:
+                if st.button("✅ Tak, usuń", use_container_width=True, type="primary", key="delete_confirm_yes"):
+                    for rid in st.session_state.selected_ids:
+                        supabase.table("finanse").delete().eq("id", int(rid)).execute()
+                    st.session_state.selected_ids = []
+                    st.session_state.show_delete_confirm = False
+                    st.rerun()
+            with cd2:
+                if st.button("Anuluj", use_container_width=True, key="delete_confirm_no"):
+                    st.session_state.show_delete_confirm = False
+                    st.rerun()
+
 else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
 
