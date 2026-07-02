@@ -1783,13 +1783,20 @@ if not df_history.empty:
         typ_safe   = _html.escape(typ)
         date_safe  = _html.escape(str(row['data_zdarzenia']))
         kwota_safe = _html.escape(str(row['kwota']))
-        opis_html  = f"<div class='r-opis'>{opis_safe}</div>" if opis_safe else ""
+        # typ + opis w jednej linii, oddzielone "·"
+        if opis_safe:
+            typ_opis = f"{typ_safe} &nbsp;·&nbsp; {opis_safe}"
+        else:
+            typ_opis = typ_safe
+
+        zdarz_safe = _html.escape(str(row.get('data_zdarzenia', '')))
 
         rows_html += (
             f'<div class="hist-row {sel_class}" style="background:{bg};border-bottom:1px solid {bd};">'
             f'<div class="r-cb"><input type="checkbox" {checked} onchange="toggleRow({rid},this.checked)"></div>'
-            f'<div class="r-date" style="color:{kolor};opacity:0.85;">{date_safe}</div>'
-            f'<div class="r-typ-wrap"><span class="r-typ-badge" style="color:{kolor};">{typ_safe}</span>{opis_html}</div>'
+            f'<div class="r-date" style="color:{kolor};opacity:0.7;">{date_safe}</div>'
+            f'<div class="r-date" style="color:{kolor};opacity:0.9;font-weight:600;">{zdarz_safe}</div>'
+            f'<div class="r-typ-wrap"><span class="r-typ-line" style="color:{kolor};">{typ_opis}</span></div>'
             f'<div class="r-amt" style="color:{kolor};">{kwota_safe}</div>'
             f'</div>'
         )
@@ -1837,7 +1844,8 @@ if not df_history.empty:
         <div class="hist-wrap" id="histWrap">
             <div class="hist-head">
                 <span></span>
-                <span>Data</span>
+                <span>Data wpisu</span>
+                <span>Zdarzenie</span>
                 <span>Typ / Opis</span>
                 <span class="h-amt">Kwota</span>
             </div>
