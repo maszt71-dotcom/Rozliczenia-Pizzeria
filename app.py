@@ -1671,88 +1671,202 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    # --- Checkboxy do zaznaczania wpisów ---
+    # --- Checkboxy + scrollowalna tabela HTML ---
     st.markdown("""
         <style>
-        .history-table-wrap {
+        /* kontener scrollowalny */
+        .hist-wrap {
             overflow-y: auto;
-            max-height: 480px;
+            max-height: 420px;
             border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.08);
+            background: #111118;
+            margin-bottom: 0.75rem;
         }
-        .hist-row {
+        .hist-wrap::-webkit-scrollbar { width: 4px; }
+        .hist-wrap::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 2px; }
+
+        /* nagłówek */
+        .hist-head {
             display: grid;
-            grid-template-columns: 28px 70px 90px 1fr 90px;
-            gap: 0.5rem;
-            align-items: center;
-            padding: 0.55rem 0.75rem;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            font-size: 0.82rem;
-            cursor: pointer;
-            transition: background 0.15s;
+            grid-template-columns: 32px 90px 80px 1fr 95px;
+            gap: 0;
+            padding: 0.5rem 0.8rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            position: sticky; top: 0;
+            background: #16161e;
+            z-index: 2;
         }
-        .hist-row:last-child { border-bottom: none; }
-        .hist-row:hover { background: rgba(255,255,255,0.04); }
-        .hist-row.selected { background: rgba(239,68,68,0.10); }
-        .hist-row .col-data { color: #5a5a72; font-size: 0.75rem; }
-        .hist-row .col-typ  { color: #8888a8; font-size: 0.78rem; }
-        .hist-row .col-kwota { font-weight: 700; text-align: right; }
-        .hist-header {
-            display: grid;
-            grid-template-columns: 28px 70px 90px 1fr 90px;
-            gap: 0.5rem;
-            padding: 0.45rem 0.75rem;
+        .hist-head span {
             font-size: 0.65rem;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.1em;
-            color: #4a4a62;
-            border-bottom: 1px solid rgba(255,255,255,0.07);
+            color: #3a3a52;
+        }
+        .hist-head .h-amt { text-align: right; }
+
+        /* wiersz */
+        .hist-row {
+            display: grid;
+            grid-template-columns: 32px 90px 80px 1fr 95px;
+            gap: 0;
+            padding: 0.6rem 0.8rem;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            align-items: center;
+            transition: background 0.12s;
+        }
+        .hist-row:last-child { border-bottom: none; }
+        .hist-row:hover { background: rgba(255,255,255,0.03); }
+        .hist-row.sel { background: rgba(239,68,68,0.08); }
+
+        .hist-row .r-date  { font-size: 0.78rem; color: #5a5a72; }
+        .hist-row .r-time  { font-size: 0.72rem; color: #3a3a52; }
+        .hist-row .r-typ   { font-size: 0.78rem; color: #8888a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .hist-row .r-amt   { font-size: 0.82rem; font-weight: 700; text-align: right; }
+        .hist-row .r-cb    { display: flex; align-items: center; }
+
+        /* checkbox styling */
+        .hist-row input[type=checkbox] {
+            width: 16px; height: 16px;
+            accent-color: #ef4444;
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .hist-head {
+                grid-template-columns: 32px 80px 1fr 85px;
+            }
+            .hist-head .h-zdarz { display: none; }
+            .hist-row {
+                grid-template-columns: 32px 80px 1fr 85px;
+            }
+            .hist-row .r-time { display: none; }
         }
         </style>
     """, unsafe_allow_html=True)
 
-    # Checkboxy — jeden na wiersz
+    # Budujemy HTML tabeli
     new_selected = list(st.session_state.selected_ids)
 
-    with st.container():
-        # nagłówek tabeli
-        col_chk, col_date, col_event, col_typ, col_amt = st.columns([0.3, 1, 1.1, 2, 1])
-        with col_chk:   st.markdown("", unsafe_allow_html=True)
-        with col_date:  st.markdown("<span style='font-size:0.7rem;color:#4a4a62;font-weight:700;text-transform:uppercase;letter-spacing:0.08em'>Data</span>", unsafe_allow_html=True)
-        with col_event: st.markdown("<span style='font-size:0.7rem;color:#4a4a62;font-weight:700;text-transform:uppercase;letter-spacing:0.08em'>Zdarzenie</span>", unsafe_allow_html=True)
-        with col_typ:   st.markdown("<span style='font-size:0.7rem;color:#4a4a62;font-weight:700;text-transform:uppercase;letter-spacing:0.08em'>Typ</span>", unsafe_allow_html=True)
-        with col_amt:   st.markdown("<span style='font-size:0.7rem;color:#4a4a62;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;text-align:right;display:block'>Kwota</span>", unsafe_allow_html=True)
+    rows_html = ""
+    for _, row in df_display.iterrows():
+        rid   = int(row["id"])
+        typ   = str(row["typ"])
+        opis  = str(row.get("opis", "")) if str(row.get("opis", "")).lower() not in ("empty", "nan", "none", "") else ""
+        sel_class = "sel" if rid in new_selected else ""
 
-    # Wiersze z checkboxami
+        if typ == "Przychód ogólny":
+            kolor = "#22c55e"
+            bg    = "rgba(34,197,94,0.08)"
+            bd    = "rgba(34,197,94,0.18)"
+        elif typ == "Wydatki gotówkowe":
+            kolor = "#ef4444"
+            bg    = "rgba(239,68,68,0.08)"
+            bd    = "rgba(239,68,68,0.18)"
+        elif typ == CARRYOVER_TYPE:
+            kolor = "#60a5fa"
+            bg    = "rgba(96,165,250,0.08)"
+            bd    = "rgba(96,165,250,0.18)"
+        elif "Gotówka" in typ:
+            kolor = "#f59e0b"
+            bg    = "rgba(245,158,11,0.08)"
+            bd    = "rgba(245,158,11,0.18)"
+        else:
+            kolor = "#c8c8e0"
+            bg    = "transparent"
+            bd    = "rgba(255,255,255,0.05)"
+
+        checked   = "checked" if rid in new_selected else ""
+        opis_html = f"<span class='r-opis'>{opis}</span>" if opis else ""
+
+        rows_html += f"""
+        <div class="hist-row {sel_class}" id="row_{rid}"
+             style="background:{bg}; border-bottom:1px solid {bd};">
+            <div class="r-cb"><input type="checkbox" {checked} onchange="toggleRow({rid}, this.checked)"></div>
+            <div class="r-date" style="color:{kolor};opacity:0.8;">{row['data_zdarzenia']}</div>
+            <div class="r-typ-wrap">
+                <span class="r-typ-badge" style="color:{kolor};">{typ}</span>
+                {opis_html}
+            </div>
+            <div class="r-amt" style="color:{kolor};">{row['kwota']}</div>
+        </div>"""
+
+    st.markdown(f"""
+        <style>
+        .hist-head {{
+            grid-template-columns: 32px 85px 1fr 95px !important;
+        }}
+        .hist-row {{
+            grid-template-columns: 32px 85px 1fr 95px !important;
+        }}
+        .r-typ-wrap {{
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }}
+        .r-typ-badge {{
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }}
+        .r-opis {{
+            font-size: 0.68rem;
+            color: #4a4a62;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding-left: 2px;
+        }}
+        @media (max-width: 768px) {{
+            .hist-head {{ grid-template-columns: 28px 75px 1fr 80px !important; }}
+            .hist-row  {{ grid-template-columns: 28px 75px 1fr 80px !important; }}
+            .r-typ-badge {{ font-size: 0.68rem; }}
+            .r-amt {{ font-size: 0.76rem; }}
+        }}
+        </style>
+        <div class="hist-wrap" id="histWrap">
+            <div class="hist-head">
+                <span></span>
+                <span>Data</span>
+                <span>Typ / Opis</span>
+                <span class="h-amt">Kwota</span>
+            </div>
+            {rows_html}
+        </div>
+        <script>
+        function toggleRow(id, checked) {{
+            let sel = JSON.parse(sessionStorage.getItem('hist_selected') || '[]');
+            if (checked) {{ if (!sel.includes(id)) sel.push(id); }}
+            else {{ sel = sel.filter(x => x !== id); }}
+            sessionStorage.setItem('hist_selected', JSON.stringify(sel));
+        }}
+        </script>
+    """, unsafe_allow_html=True)
+
+    # Streamlit checkboxy (ukryte) do faktycznego stanu
     changed = False
     for _, row in df_display.iterrows():
         rid = row["id"]
-        typ = str(row["typ"])
-
-        # kolor kwoty
-        if typ == "Przychód ogólny":      kolor = "#22c55e"
-        elif typ == "Wydatki gotówkowe":  kolor = "#ef4444"
-        elif "Gotówka" in typ:            kolor = "#f59e0b"
-        else:                             kolor = "#60a5fa"
-
-        c1, c2, c3, c4, c5 = st.columns([0.3, 1, 1.1, 2, 1])
-        with c1:
-            checked = st.checkbox("", key=f"cb_{rid}", value=(rid in new_selected), label_visibility="collapsed")
-            if checked and rid not in new_selected:
-                new_selected.append(rid)
-                changed = True
-            elif not checked and rid in new_selected:
-                new_selected.remove(rid)
-                changed = True
-        with c2:
-            st.markdown(f"<span style='font-size:0.78rem;color:#5a5a72'>{row['data_zdarzenia']}</span>", unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"<span style='font-size:0.75rem;color:#4a4a62'>{row['data']}</span>", unsafe_allow_html=True)
-        with c4:
-            st.markdown(f"<span style='font-size:0.82rem;color:#c8c8e0'>{typ}</span>", unsafe_allow_html=True)
-        with c5:
-            st.markdown(f"<span style='font-size:0.85rem;font-weight:700;color:{kolor};text-align:right;display:block'>{row['kwota']}</span>", unsafe_allow_html=True)
+        checked = st.checkbox(
+            f"{row['data_zdarzenia']} {row['typ']} {row['kwota']}",
+            key=f"cb_{rid}",
+            value=(rid in new_selected),
+            label_visibility="collapsed",
+        )
+        if checked and rid not in new_selected:
+            new_selected.append(rid)
+            changed = True
+        elif not checked and rid in new_selected:
+            new_selected.remove(rid)
+            changed = True
 
     if changed:
         st.session_state.selected_ids = new_selected
