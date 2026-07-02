@@ -1671,38 +1671,140 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    # --- data_editor z checkboxami ---
-    df_edit = df_display.copy()
-    df_edit.insert(0, "🗑️", [rid in st.session_state.selected_ids for rid in df_edit["id"]])
+    # --- Tabela HTML + st.multiselect zsynchronizowany z kliknięciem ---
+    import html as _html
 
-    edited = st.data_editor(
-        df_edit,
-        column_config={
-            "🗑️":             st.column_config.CheckboxColumn("🗑️",        width="small"),
-            "id":             st.column_config.NumberColumn("ID",          width="small"),
-            "data":           st.column_config.TextColumn("Wpis",          width="small"),
-            "data_zdarzenia": st.column_config.TextColumn("Zdarzenie",     width="small"),
-            "typ":            st.column_config.TextColumn("Typ",           width="medium"),
-            "kwota":          st.column_config.NumberColumn("Kwota",       width="small", format="%.2f zł"),
-            "opis":           st.column_config.TextColumn("Opis",          width="large"),
-        },
-        disabled=["id","data","data_zdarzenia","typ","kwota","opis"],
-        hide_index=True,
-        use_container_width=True,
-        height=440,
-        key="hist_editor",
+    # Buduj dane wierszy
+    rows_data = []
+    for _, row in df_display.iterrows():
+        rid  = int(row["id"])
+        typ  = str(row["typ"])
+        opis = str(row.get("opis",""))
+        if opis.lower() in ("empty","nan","none",""): opis = ""
+        if typ == "Przychód ogólny":
+            kolor="#22c55e"; bg="rgba(34,197,94,0.10)"; bd="rgba(34,197,94,0.20)"
+        elif typ == "Wydatki gotówkowe":
+            kolor="#ef4444"; bg="rgba(239,68,68,0.10)"; bd="rgba(239,68,68,0.20)"
+        elif typ == CARRYOVER_TYPE:
+            kolor="#60a5fa"; bg="rgba(96,165,250,0.10)"; bd="rgba(96,165,250,0.20)"
+        elif "Gotówka" in typ:
+            kolor="#f59e0b"; bg="rgba(245,158,11,0.10)"; bd="rgba(245,158,11,0.20)"
+        else:
+            kolor="#c8c8e0"; bg="rgba(255,255,255,0.03)"; bd="rgba(255,255,255,0.05)"
+        rows_data.append((rid,typ,opis,str(row.get("data","")),str(row.get("data_zdarzenia","")),str(row["kwota"]),kolor,bg,bd))
+
+    sel = st.session_state.selected_ids
+
+    # Tabela HTML — czysto wizualna
+    rows_html = ""
+    for rid,typ,opis,data,zdarz,kwota,kolor,bg,bd in rows_data:
+        t = _html.escape(typ)
+        o = _html.escape(opis)
+        d = _html.escape(data)
+        z = _html.escape(zdarz)
+        k = _html.escape(kwota)
+        label = f"{t} &middot; {o}" if o else t
+        is_sel = rid in sel
+        border = f"2px solid {kolor}" if is_sel else f"1px solid {bd}"
+        opacity = "1" if is_sel else "0.85"
+        rows_html += (
+            f'<div class="hr" data-id="{rid}" onclick="toggleSel({rid})" '
+            f'style="background:{bg};border-bottom:{border};opacity:{opacity};">'
+            f'<div class="hck">{"✓" if is_sel else ""}</div>'
+            f'<div class="hd" style="color:{kolor};opacity:0.75;">{d}</div>'
+            f'<div class="hd" style="color:{kolor};font-weight:600;">{z}</div>'
+            f'<div class="ht" style="color:{kolor};">{label}</div>'
+            f'<div class="ha" style="color:{kolor};">{k}</div>'
+            f'</div>'
+        )
+
+    sel_ids_json = str([r[0] for r in rows_data if r[0] in sel])
+
+    st.markdown(f"""
+        <style>
+        .hw2 {{ overflow-y:auto; max-height:440px; border-radius:14px;
+                border:1px solid rgba(255,255,255,0.07); background:#0f0f16;
+                margin-bottom:0.5rem; }}
+        .hw2::-webkit-scrollbar {{ width:4px; }}
+        .hw2::-webkit-scrollbar-thumb {{ background:#2a2a3a; border-radius:2px; }}
+        .hh2 {{ display:grid; grid-template-columns:24px 78px 84px 1fr 98px;
+                gap:6px; padding:0.45rem 0.8rem;
+                border-bottom:1px solid rgba(255,255,255,0.09);
+                position:sticky; top:0; background:#14141c; z-index:2; }}
+        .hh2 span {{ font-size:0.62rem; font-weight:700; text-transform:uppercase;
+                     letter-spacing:0.1em; color:#3a3a52; }}
+        .hh2 span:last-child {{ text-align:right; }}
+        .hr {{ display:grid; grid-template-columns:24px 78px 84px 1fr 98px;
+               gap:6px; padding:0.55rem 0.8rem; cursor:pointer;
+               transition:filter 0.12s, opacity 0.12s; }}
+        .hr:hover {{ filter:brightness(1.2); }}
+        .hck {{ font-size:0.85rem; color:#ef4444; font-weight:700; display:flex; align-items:center; }}
+        .hd  {{ font-size:0.74rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+        .ht  {{ font-size:0.76rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+        .ha  {{ font-size:0.82rem; font-weight:700; text-align:right; white-space:nowrap; }}
+        @media(max-width:768px){{
+            .hh2,.hr{{ grid-template-columns:20px 0 72px 1fr 80px !important; gap:4px; padding:0.45rem 0.5rem; }}
+            .hh2 span:nth-child(2),.hd:nth-child(2){{ display:none; }}
+            .ht{{ font-size:0.68rem; }} .ha{{ font-size:0.72rem; }}
+        }}
+        </style>
+        <div class="hw2">
+            <div class="hh2">
+                <span></span><span>Wpis</span><span>Zdarzenie</span>
+                <span>Typ / Opis</span><span>Kwota</span>
+            </div>
+            {rows_html}
+        </div>
+        <input type="hidden" id="sel_ids" value="{','.join(str(r[0]) for r in rows_data if r[0] in sel)}">
+        <script>
+        var _sel = {sel_ids_json};
+        function toggleSel(id) {{
+            var idx = _sel.indexOf(id);
+            if (idx === -1) _sel.push(id); else _sel.splice(idx, 1);
+            // aktualizuj wizualnie
+            document.querySelectorAll('.hr').forEach(function(el) {{
+                var eid = parseInt(el.getAttribute('data-id'));
+                var isSel = _sel.indexOf(eid) !== -1;
+                el.style.opacity = isSel ? '1' : '0.85';
+                el.querySelector('.hck').textContent = isSel ? '✓' : '';
+            }});
+            // zapisz do hidden input dla Streamlit
+            document.getElementById('sel_ids').value = _sel.join(',');
+        }}
+        </script>
+    """, unsafe_allow_html=True)
+
+    # Multiselect zsynchronizowany — schowany wizualnie
+    st.markdown("""
+        <style>
+        div[data-testid="stMultiSelect"] {
+            margin-top: -0.5rem;
+            opacity: 0;
+            height: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    all_ids   = [r[0] for r in rows_data]
+    id_labels = {r[0]: f"{r[3]} | {r[1]} | {r[5]}" for r in rows_data}
+
+    selected_ids = st.multiselect(
+        "sel",
+        options=all_ids,
+        default=[i for i in st.session_state.selected_ids if i in all_ids],
+        format_func=lambda x: id_labels.get(x, str(x)),
+        key="hist_multisel",
+        label_visibility="collapsed",
     )
 
-    new_selected = [
-        int(row["id"])
-        for _, row in edited.iterrows()
-        if row["🗑️"]
-    ]
-    if new_selected != st.session_state.selected_ids:
-        st.session_state.selected_ids = new_selected
+    if selected_ids != st.session_state.selected_ids:
+        st.session_state.selected_ids = selected_ids
         st.session_state.show_delete_confirm = False
         st.rerun()
 
+    # Przycisk usuwania
     if st.session_state.selected_ids:
         if not st.session_state.get("show_delete_confirm"):
             if st.button(f"🗑️ Usuń zaznaczone ({len(st.session_state.selected_ids)})",
