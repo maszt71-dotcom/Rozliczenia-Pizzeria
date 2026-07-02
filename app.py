@@ -245,12 +245,7 @@ def filter_data_by_date_range(df: pd.DataFrame, date_from, date_to) -> pd.DataFr
 
 
 def calculate_range_sums(df: pd.DataFrame):
-    """Zwraca (przychod, bilans, wydatki, gotowka_info).
-    - przychod      = suma "Przychód ogólny"
-    - wydatki       = suma "Wydatki gotówkowe"
-    - bilans        = przychod - wydatki  (do rozliczenia)
-    - gotowka_info  = "Gotówka z przeniesienia" + suma "Gotówka - *" (tylko informacyjnie)
-    """
+    """Zwraca (przychod, gotowka, wydatki, przeniesienie)."""
     if df.empty:
         return 0.0, 0.0, 0.0, 0.0
     temp = df.copy()
@@ -258,10 +253,8 @@ def calculate_range_sums(df: pd.DataFrame):
     przychod      = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
     wydatki       = temp[temp["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
     przeniesienie = temp[temp["typ"] == CARRYOVER_TYPE]["kwota"].sum()
-    gotowka_kier  = temp[temp["typ"].astype(str).str.startswith("Gotówka -", na=False)]["kwota"].sum()
-    bilans        = przychod - wydatki
-    gotowka_info  = przeniesienie + gotowka_kier
-    return przychod, bilans, wydatki, gotowka_info
+    gotowka       = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
+    return przychod, gotowka, wydatki, przeniesienie
 
 
 def public_csv_data(df: pd.DataFrame) -> bytes:
@@ -466,7 +459,7 @@ def create_pdf(df, p, g, w, przeniesienie=0.0, date_from=None, date_to=None) -> 
     else:
         pdf.set_fill_color(255, 243, 205)
         pdf.set_text_color(0, 0, 0)
-    pdf.cell(64, 10, pdf_safe(f"Bilans: {g:,.2f} zl"), border=1, fill=True, align="C")
+    pdf.cell(64, 10, pdf_safe(f"Gotowka: {g:,.2f} zl"), border=1, fill=True, align="C")
 
     pdf.set_fill_color(248, 215, 218)
     pdf.set_text_color(0, 0, 0)
@@ -1277,7 +1270,7 @@ if st.session_state.page == "menu":
             if rd_from <= rd_to:
                 df_r = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), rd_from, rd_to))
                 rp, rg, rw, rpr = calculate_range_sums(df_r)
-                st.write(f"Przychód: **{rp:,.2f} zł** | Bilans: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
+                st.write(f"Przychód: **{rp:,.2f} zł** | Gotówka: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
                 st.download_button("📥 Pobierz PDF", data=create_pdf(df_r, rp, rg, rw, rpr, rd_from, rd_to),
                     file_name=f"raport_{rd_from}_{rd_to}.pdf", use_container_width=True, key="menu_dl_pdf")
                 st.download_button("📥 Pobierz CSV", data=public_csv_data(df_r),
@@ -1386,7 +1379,7 @@ if st.session_state.s == "ZP":
                 st.session_state.s = ""
                 st.rerun()
 
-# --- Trzy kolumny: Przychód / Bilans / Wydatki ---
+# --- Trzy kolumny: Przychód / Gotówka / Wydatki ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
@@ -1412,8 +1405,36 @@ with c1:
                     st.rerun()
 
 with c2:
-    # Bilans = Przychód - Wydatki (do rozliczenia)
-    metric_card("Bilans", s_got, "negative" if s_got < 0 else "yellow")
+    metric_card("Gotówka", s_got, "negative" if s_got < 0 else "yellow")
+    if st.button("➕ DODAJ", key="g"):
+        st.session_state.s = "G" if st.session_state.s != "G" else ""
+        st.session_state.os = None
+        st.rerun()
+    if st.session_state.s == "G":
+        with st.container(border=True):
+            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+            for o in osoby:
+                if st.button(o, key=f"os_{o}", use_container_width=True):
+                    st.session_state.os = o if st.session_state.os != o else None
+                    st.rerun()
+                if st.session_state.os == o:
+                    with st.container(border=True):
+                        st.markdown(f"Dla: **{o}**")
+                        d_g  = st.date_input("Data", get_now().date(), key=f"date_g_{o}")
+                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
+                        if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
+                            if kw_g is not None and kw_g > 0:
+                                supabase.table("finanse").insert({
+                                    "data":           get_now().strftime("%d.%m %H:%M"),
+                                    "typ":            f"Gotówka - {o}",
+                                    "kwota":          float(kw_g),
+                                    "opis":           "",
+                                    "status":         "Aktywny",
+                                    "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
+                                }).execute()
+                                st.session_state.s  = ""
+                                st.session_state.os = None
+                                st.rerun()
 
 with c3:
     metric_card("Wydatki", s_wyd, "red")
@@ -1437,43 +1458,6 @@ with c3:
                     }).execute()
                     st.session_state.s = ""
                     st.rerun()
-
-# --- Karta informacyjna: Gotówka (przeniesienie + kierowcy/bufet) ---
-# s_got w calculate_range_sums to teraz bilans, a s_przeniesienie to karta osobna
-# Gotówka informacyjna = czwarta wartość z calculate_range_sums
-_, _, _, s_gotowka_info = calculate_range_sums(df_active_calc) if not df_active_calc.empty else (0,0,0,0)
-metric_card("Gotówka (info)", s_gotowka_info, "blue")
-
-# Przycisk DODAJ gotówki (bufet/kierowcy)
-if st.button("➕ DODAJ gotówkę", key="g"):
-    st.session_state.s = "G" if st.session_state.s != "G" else ""
-    st.session_state.os = None
-    st.rerun()
-if st.session_state.s == "G":
-    with st.container(border=True):
-        osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-        for o in osoby:
-            if st.button(o, key=f"os_{o}", use_container_width=True):
-                st.session_state.os = o if st.session_state.os != o else None
-                st.rerun()
-            if st.session_state.os == o:
-                with st.container(border=True):
-                    st.markdown(f"Dla: **{o}**")
-                    d_g  = st.date_input("Data", get_now().date(), key=f"date_g_{o}")
-                    kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
-                    if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
-                        if kw_g is not None and kw_g > 0:
-                            supabase.table("finanse").insert({
-                                "data":           get_now().strftime("%d.%m %H:%M"),
-                                "typ":            f"Gotówka - {o}",
-                                "kwota":          float(kw_g),
-                                "opis":           "",
-                                "status":         "Aktywny",
-                                "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
-                            }).execute()
-                            st.session_state.s  = ""
-                            st.session_state.os = None
-                            st.rerun()
 
 
 # =============================================================================
@@ -1585,7 +1569,7 @@ with st.sidebar:
                 rp, rg, rw, rpr = calculate_range_sums(df_rep)
                 st.write(f"Gotówka z przeniesienia: **{rpr:,.2f} zł**")
                 st.write(f"Przychód: **{rp:,.2f} zł**")
-                st.write(f"Bilans: **{rg:,.2f} zł**")
+                st.write(f"Gotówka: **{rg:,.2f} zł**")
                 st.write(f"Wydatki: **{rw:,.2f} zł**")
                 st.download_button(
                     "📥 Pobierz PDF",
