@@ -1780,6 +1780,15 @@ if not df_history.empty:
     """, unsafe_allow_html=True)
 
     # Ukryte checkboxy Streamlit — prawdziwy stan
+    st.markdown("""
+        <style>
+        /* Ukryj checkboxy Streamlit pod tabelą HTML */
+        div[data-testid="stCheckbox"] {
+            display: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     changed = False
     for _, row in df_display.iterrows():
         rid = row["id"]
