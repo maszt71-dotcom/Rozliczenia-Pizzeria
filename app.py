@@ -1671,148 +1671,54 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    # --- Scrollowalna tabela HTML z checkboxami ---
+    # --- Tabela z data_editor (wbudowane checkboxy + scroll) ---
     import html as _html
 
-    new_selected = list(st.session_state.selected_ids)
+    # Dodaj kolumnę "Zaznacz" do usunięcia
+    df_edit = df_display.copy()
+    df_edit.insert(0, "🗑️", [rid in st.session_state.selected_ids for rid in df_edit["id"]])
 
-    rows_html = ""
-    for _, row in df_display.iterrows():
-        rid  = int(row["id"])
-        typ  = str(row["typ"])
-        opis = str(row.get("opis", ""))
-        if opis.lower() in ("empty", "nan", "none", ""):
-            opis = ""
+    # Kolorowanie typów
+    def color_typ(val):
+        if val == "Przychód ogólny":      return "color: #22c55e; font-weight:600"
+        if val == "Wydatki gotówkowe":    return "color: #ef4444; font-weight:600"
+        if val == CARRYOVER_TYPE:         return "color: #60a5fa; font-weight:600"
+        if "Gotówka" in str(val):         return "color: #f59e0b; font-weight:600"
+        return ""
 
-        if typ == "Przychód ogólny":
-            kolor = "#22c55e"; bg = "rgba(34,197,94,0.07)";   bd = "rgba(34,197,94,0.15)"
-        elif typ == "Wydatki gotówkowe":
-            kolor = "#ef4444"; bg = "rgba(239,68,68,0.07)";   bd = "rgba(239,68,68,0.15)"
-        elif typ == CARRYOVER_TYPE:
-            kolor = "#60a5fa"; bg = "rgba(96,165,250,0.07)";  bd = "rgba(96,165,250,0.15)"
-        elif "Gotówka" in typ:
-            kolor = "#f59e0b"; bg = "rgba(245,158,11,0.07)";  bd = "rgba(245,158,11,0.15)"
-        else:
-            kolor = "#c8c8e0"; bg = "transparent";             bd = "rgba(255,255,255,0.05)"
+    styled = df_edit.style.applymap(color_typ, subset=["typ"])
 
-        chk       = "checked" if rid in new_selected else ""
-        t_safe    = _html.escape(typ)
-        o_safe    = _html.escape(opis)
-        d_safe    = _html.escape(str(row.get("data_zdarzenia", "")))
-        w_safe    = _html.escape(str(row.get("data", "")))
-        k_safe    = _html.escape(str(row["kwota"]))
-        typ_opis  = f"{t_safe} &middot; {o_safe}" if o_safe else t_safe
-        sel_cls   = "sel" if rid in new_selected else ""
+    edited = st.data_editor(
+        df_edit,
+        column_config={
+            "🗑️":            st.column_config.CheckboxColumn("🗑️", width="small"),
+            "id":            st.column_config.NumberColumn("ID",       width="small"),
+            "data":          st.column_config.TextColumn("Wpis",       width="small"),
+            "data_zdarzenia":st.column_config.TextColumn("Zdarzenie",  width="small"),
+            "typ":           st.column_config.TextColumn("Typ",        width="medium"),
+            "kwota":         st.column_config.NumberColumn("Kwota",    width="small", format="%.2f zł"),
+            "opis":          st.column_config.TextColumn("Opis",       width="large"),
+        },
+        disabled=["id","data","data_zdarzenia","typ","kwota","opis"],
+        hide_index=True,
+        use_container_width=True,
+        height=440,
+        key="hist_editor",
+    )
 
-        rows_html += (
-            f'<div class="hr {sel_cls}" style="background:{bg};border-bottom:1px solid {bd};">'
-            f'<div class="hcb"><input type="checkbox" {chk} onchange="hToggle({rid},this.checked)"></div>'
-            f'<div class="hd" style="color:{kolor};opacity:0.75;">{w_safe}</div>'
-            f'<div class="hd" style="color:{kolor};font-weight:600;">{d_safe}</div>'
-            f'<div class="ht" style="color:{kolor};">{typ_opis}</div>'
-            f'<div class="ha" style="color:{kolor};">{k_safe}</div>'
-            f'</div>'
-        )
-
-    st.markdown(f"""
-        <style>
-        .hw {{
-            overflow-y: auto;
-            max-height: 440px;
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.07);
-            background: #0f0f16;
-            margin-bottom: 0.75rem;
-        }}
-        .hw::-webkit-scrollbar {{ width: 4px; }}
-        .hw::-webkit-scrollbar-thumb {{ background: #2a2a3a; border-radius: 2px; }}
-        .hh, .hr {{
-            display: grid;
-            grid-template-columns: 30px 75px 80px 1fr 95px;
-            align-items: center;
-            padding: 0.5rem 0.7rem;
-            gap: 6px;
-        }}
-        .hh {{
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            position: sticky; top: 0;
-            background: #14141c;
-            z-index: 2;
-        }}
-        .hh span {{
-            font-size: 0.62rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: #3a3a52;
-        }}
-        .hh .ha {{ text-align: right; }}
-        .hr {{ transition: filter 0.12s; }}
-        .hr:hover {{ filter: brightness(1.15); }}
-        .hr:last-child {{ border-bottom: none !important; }}
-        .hcb {{ display:flex; align-items:center; }}
-        .hcb input {{ width:15px; height:15px; accent-color:#ef4444; cursor:pointer; margin:0; }}
-        .hd {{ font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-        .ht {{ font-size:0.76rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-        .ha {{ font-size:0.82rem; font-weight:700; text-align:right; white-space:nowrap; }}
-        @media (max-width:768px) {{
-            .hh, .hr {{ grid-template-columns: 28px 0px 72px 1fr 80px; gap:4px; padding: 0.45rem 0.5rem; }}
-            .hh span:nth-child(2), .hd:nth-child(2) {{ display:none; }}
-            .ht {{ font-size:0.68rem; }}
-            .ha {{ font-size:0.72rem; }}
-        }}
-        </style>
-        <div class="hw">
-            <div class="hh">
-                <span></span>
-                <span>Wpis</span>
-                <span>Zdarzenie</span>
-                <span>Typ / Opis</span>
-                <span class="ha">Kwota</span>
-            </div>
-            {rows_html}
-        </div>
-        <script>
-        function hToggle(id, checked) {{
-            // tylko wizualne — stan Streamlit przez ukryte checkboxy poniżej
-        }}
-        </script>
-    """, unsafe_allow_html=True)
-
-    # Ukryte checkboxy Streamlit — prawdziwy stan
-    # JS ukrywa checkboxy Streamlit po załadowaniu
-    st.markdown("""
-        <script>
-        (function hideCbs() {
-            const boxes = window.parent.document.querySelectorAll('[data-testid="stCheckbox"]');
-            boxes.forEach(b => { b.style.display = 'none'; });
-            if (boxes.length === 0) setTimeout(hideCbs, 200);
-        })();
-        </script>
-    """, unsafe_allow_html=True)
-
-    changed = False
-    for _, row in df_display.iterrows():
-        rid = row["id"]
-        val = st.checkbox(
-            label=str(rid),
-            key=f"cb_{rid}",
-            value=(rid in new_selected),
-            label_visibility="collapsed",
-        )
-        if val and rid not in new_selected:
-            new_selected.append(rid); changed = True
-        elif not val and rid in new_selected:
-            new_selected.remove(rid); changed = True
-
-    if changed:
+    # Synchronizuj zaznaczone z session_state
+    new_selected = [
+        int(row["id"])
+        for _, row in edited.iterrows()
+        if row["🗑️"]
+    ]
+    if new_selected != st.session_state.selected_ids:
         st.session_state.selected_ids = new_selected
         st.session_state.show_delete_confirm = False
         st.rerun()
 
-        # Przycisk usuwania
+    # Przycisk usuwania
     if st.session_state.selected_ids:
-        st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
         if not st.session_state.get("show_delete_confirm"):
             if st.button(f"🗑️ Usuń zaznaczone ({len(st.session_state.selected_ids)})",
                          use_container_width=True, type="primary", key="delete_checked_btn"):
@@ -1832,6 +1738,7 @@ if not df_history.empty:
                 if st.button("Anuluj", use_container_width=True, key="delete_confirm_no"):
                     st.session_state.show_delete_confirm = False
                     st.rerun()
+
 
 else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
