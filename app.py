@@ -1671,219 +1671,135 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    # --- Checkboxy + scrollowalna tabela HTML ---
-    st.markdown("""
-        <style>
-        /* kontener scrollowalny */
-        .hist-wrap {
-            overflow-y: auto;
-            max-height: 420px;
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.08);
-            background: #111118;
-            margin-bottom: 0.75rem;
-        }
-        .hist-wrap::-webkit-scrollbar { width: 4px; }
-        .hist-wrap::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 2px; }
+    # --- Scrollowalna tabela HTML z checkboxami ---
+    import html as _html
 
-        /* nagłówek */
-        .hist-head {
-            display: grid;
-            grid-template-columns: 32px 90px 80px 1fr 95px;
-            gap: 0;
-            padding: 0.5rem 0.8rem;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            position: sticky; top: 0;
-            background: #16161e;
-            z-index: 2;
-        }
-        .hist-head span {
-            font-size: 0.65rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: #3a3a52;
-        }
-        .hist-head .h-amt { text-align: right; }
-
-        /* wiersz */
-        .hist-row {
-            display: grid;
-            grid-template-columns: 32px 90px 80px 1fr 95px;
-            gap: 0;
-            padding: 0.6rem 0.8rem;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
-            align-items: center;
-            transition: background 0.12s;
-        }
-        .hist-row:last-child { border-bottom: none; }
-        .hist-row:hover { background: rgba(255,255,255,0.03); }
-        .hist-row.sel { background: rgba(239,68,68,0.08); }
-
-        .hist-row .r-date  { font-size: 0.78rem; color: #5a5a72; }
-        .hist-row .r-time  { font-size: 0.72rem; color: #3a3a52; }
-        .hist-row .r-typ   { font-size: 0.78rem; color: #8888a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .hist-row .r-amt   { font-size: 0.82rem; font-weight: 700; text-align: right; }
-        .hist-row .r-cb    { display: flex; align-items: center; }
-
-        /* checkbox styling */
-        .hist-row input[type=checkbox] {
-            width: 16px; height: 16px;
-            accent-color: #ef4444;
-            cursor: pointer;
-        }
-
-        @media (max-width: 768px) {
-            .hist-head {
-                grid-template-columns: 32px 80px 1fr 85px;
-            }
-            .hist-head .h-zdarz { display: none; }
-            .hist-row {
-                grid-template-columns: 32px 80px 1fr 85px;
-            }
-            .hist-row .r-time { display: none; }
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # Budujemy HTML tabeli
     new_selected = list(st.session_state.selected_ids)
 
     rows_html = ""
     for _, row in df_display.iterrows():
-        rid   = int(row["id"])
-        typ   = str(row["typ"])
-        opis  = str(row.get("opis", "")) if str(row.get("opis", "")).lower() not in ("empty", "nan", "none", "") else ""
-        sel_class = "sel" if rid in new_selected else ""
+        rid  = int(row["id"])
+        typ  = str(row["typ"])
+        opis = str(row.get("opis", ""))
+        if opis.lower() in ("empty", "nan", "none", ""):
+            opis = ""
 
         if typ == "Przychód ogólny":
-            kolor = "#22c55e"
-            bg    = "rgba(34,197,94,0.08)"
-            bd    = "rgba(34,197,94,0.18)"
+            kolor = "#22c55e"; bg = "rgba(34,197,94,0.07)";   bd = "rgba(34,197,94,0.15)"
         elif typ == "Wydatki gotówkowe":
-            kolor = "#ef4444"
-            bg    = "rgba(239,68,68,0.08)"
-            bd    = "rgba(239,68,68,0.18)"
+            kolor = "#ef4444"; bg = "rgba(239,68,68,0.07)";   bd = "rgba(239,68,68,0.15)"
         elif typ == CARRYOVER_TYPE:
-            kolor = "#60a5fa"
-            bg    = "rgba(96,165,250,0.08)"
-            bd    = "rgba(96,165,250,0.18)"
+            kolor = "#60a5fa"; bg = "rgba(96,165,250,0.07)";  bd = "rgba(96,165,250,0.15)"
         elif "Gotówka" in typ:
-            kolor = "#f59e0b"
-            bg    = "rgba(245,158,11,0.08)"
-            bd    = "rgba(245,158,11,0.18)"
+            kolor = "#f59e0b"; bg = "rgba(245,158,11,0.07)";  bd = "rgba(245,158,11,0.15)"
         else:
-            kolor = "#c8c8e0"
-            bg    = "transparent"
-            bd    = "rgba(255,255,255,0.05)"
+            kolor = "#c8c8e0"; bg = "transparent";             bd = "rgba(255,255,255,0.05)"
 
-        import html as _html
-        checked    = "checked" if rid in new_selected else ""
-        opis_safe  = _html.escape(opis)
-        typ_safe   = _html.escape(typ)
-        date_safe  = _html.escape(str(row['data_zdarzenia']))
-        kwota_safe = _html.escape(str(row['kwota']))
-        # typ + opis w jednej linii, oddzielone "·"
-        if opis_safe:
-            typ_opis = f"{typ_safe} &nbsp;·&nbsp; {opis_safe}"
-        else:
-            typ_opis = typ_safe
-
-        zdarz_safe = _html.escape(str(row.get('data_zdarzenia', '')))
+        chk       = "checked" if rid in new_selected else ""
+        t_safe    = _html.escape(typ)
+        o_safe    = _html.escape(opis)
+        d_safe    = _html.escape(str(row.get("data_zdarzenia", "")))
+        w_safe    = _html.escape(str(row.get("data", "")))
+        k_safe    = _html.escape(str(row["kwota"]))
+        typ_opis  = f"{t_safe} &middot; {o_safe}" if o_safe else t_safe
+        sel_cls   = "sel" if rid in new_selected else ""
 
         rows_html += (
-            f'<div class="hist-row {sel_class}" style="background:{bg};border-bottom:1px solid {bd};">'
-            f'<div class="r-cb"><input type="checkbox" {checked} onchange="toggleRow({rid},this.checked)"></div>'
-            f'<div class="r-date" style="color:{kolor};opacity:0.7;">{date_safe}</div>'
-            f'<div class="r-date" style="color:{kolor};opacity:0.9;font-weight:600;">{zdarz_safe}</div>'
-            f'<div class="r-typ-wrap"><span class="r-typ-line" style="color:{kolor};">{typ_opis}</span></div>'
-            f'<div class="r-amt" style="color:{kolor};">{kwota_safe}</div>'
+            f'<div class="hr {sel_cls}" style="background:{bg};border-bottom:1px solid {bd};">'
+            f'<div class="hcb"><input type="checkbox" {chk} onchange="hToggle({rid},this.checked)"></div>'
+            f'<div class="hd" style="color:{kolor};opacity:0.75;">{w_safe}</div>'
+            f'<div class="hd" style="color:{kolor};font-weight:600;">{d_safe}</div>'
+            f'<div class="ht" style="color:{kolor};">{typ_opis}</div>'
+            f'<div class="ha" style="color:{kolor};">{k_safe}</div>'
             f'</div>'
         )
 
     st.markdown(f"""
         <style>
-        .hist-head {{
-            grid-template-columns: 32px 85px 1fr 95px !important;
+        .hw {{
+            overflow-y: auto;
+            max-height: 440px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: #0f0f16;
+            margin-bottom: 0.75rem;
         }}
-        .hist-row {{
-            grid-template-columns: 32px 85px 1fr 95px !important;
+        .hw::-webkit-scrollbar {{ width: 4px; }}
+        .hw::-webkit-scrollbar-thumb {{ background: #2a2a3a; border-radius: 2px; }}
+        .hh, .hr {{
+            display: grid;
+            grid-template-columns: 30px 75px 80px 1fr 95px;
+            align-items: center;
+            padding: 0.5rem 0.7rem;
+            gap: 6px;
         }}
-        .r-typ-wrap {{
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            min-width: 0;
+        .hh {{
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            position: sticky; top: 0;
+            background: #14141c;
+            z-index: 2;
         }}
-        .r-typ-badge {{
-            display: inline-block;
-            font-size: 0.75rem;
-            font-weight: 600;
-            padding: 2px 7px;
-            border-radius: 5px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100%;
+        .hh span {{
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #3a3a52;
         }}
-        .r-opis {{
-            font-size: 0.68rem;
-            color: #4a4a62;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            padding-left: 2px;
-        }}
-        @media (max-width: 768px) {{
-            .hist-head {{ grid-template-columns: 28px 75px 1fr 80px !important; }}
-            .hist-row  {{ grid-template-columns: 28px 75px 1fr 80px !important; }}
-            .r-typ-badge {{ font-size: 0.68rem; }}
-            .r-amt {{ font-size: 0.76rem; }}
+        .hh .ha {{ text-align: right; }}
+        .hr {{ transition: filter 0.12s; }}
+        .hr:hover {{ filter: brightness(1.15); }}
+        .hr:last-child {{ border-bottom: none !important; }}
+        .hcb {{ display:flex; align-items:center; }}
+        .hcb input {{ width:15px; height:15px; accent-color:#ef4444; cursor:pointer; margin:0; }}
+        .hd {{ font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+        .ht {{ font-size:0.76rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+        .ha {{ font-size:0.82rem; font-weight:700; text-align:right; white-space:nowrap; }}
+        @media (max-width:768px) {{
+            .hh, .hr {{ grid-template-columns: 28px 0px 72px 1fr 80px; gap:4px; padding: 0.45rem 0.5rem; }}
+            .hh span:nth-child(2), .hd:nth-child(2) {{ display:none; }}
+            .ht {{ font-size:0.68rem; }}
+            .ha {{ font-size:0.72rem; }}
         }}
         </style>
-        <div class="hist-wrap" id="histWrap">
-            <div class="hist-head">
+        <div class="hw">
+            <div class="hh">
                 <span></span>
-                <span>Data wpisu</span>
+                <span>Wpis</span>
                 <span>Zdarzenie</span>
                 <span>Typ / Opis</span>
-                <span class="h-amt">Kwota</span>
+                <span class="ha">Kwota</span>
             </div>
             {rows_html}
         </div>
         <script>
-        function toggleRow(id, checked) {{
-            let sel = JSON.parse(sessionStorage.getItem('hist_selected') || '[]');
-            if (checked) {{ if (!sel.includes(id)) sel.push(id); }}
-            else {{ sel = sel.filter(x => x !== id); }}
-            sessionStorage.setItem('hist_selected', JSON.stringify(sel));
+        function hToggle(id, checked) {{
+            // tylko wizualne — stan Streamlit przez ukryte checkboxy poniżej
         }}
         </script>
     """, unsafe_allow_html=True)
 
-    # Streamlit checkboxy (ukryte) do faktycznego stanu
+    # Ukryte checkboxy Streamlit — prawdziwy stan
     changed = False
     for _, row in df_display.iterrows():
         rid = row["id"]
-        checked = st.checkbox(
-            f"{row['data_zdarzenia']} {row['typ']} {row['kwota']}",
+        val = st.checkbox(
+            label=str(rid),
             key=f"cb_{rid}",
             value=(rid in new_selected),
             label_visibility="collapsed",
         )
-        if checked and rid not in new_selected:
-            new_selected.append(rid)
-            changed = True
-        elif not checked and rid in new_selected:
-            new_selected.remove(rid)
-            changed = True
+        if val and rid not in new_selected:
+            new_selected.append(rid); changed = True
+        elif not val and rid in new_selected:
+            new_selected.remove(rid); changed = True
 
     if changed:
         st.session_state.selected_ids = new_selected
         st.session_state.show_delete_confirm = False
         st.rerun()
 
-    # Przycisk usuwania
+        # Przycisk usuwania
     if st.session_state.selected_ids:
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
         if not st.session_state.get("show_delete_confirm"):
