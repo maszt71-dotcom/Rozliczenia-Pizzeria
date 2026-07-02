@@ -1671,86 +1671,121 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    # --- Tabela HTML z kolorami + checkboxy przez form ---
+    # --- Tabela: checkbox Streamlit + kolorowy HTML w kolumnach ---
     import html as _html
 
-    # Buduj listę wierszy
-    rows_data = []
+    new_selected = list(st.session_state.selected_ids)
+    changed = False
+
+    # Nagłówek
+    st.markdown("""
+        <style>
+        .hist-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr 1fr;
+            gap: 8px;
+            padding: 0.4rem 0.5rem 0.4rem 2.2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            margin-bottom: 0.2rem;
+        }
+        .hist-header span {
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #3a3a52;
+        }
+        .hist-header span:last-child { text-align: right; }
+        .hist-cell {
+            display: grid;
+            grid-template-columns: 1fr 1fr 2fr 1fr;
+            gap: 8px;
+            align-items: center;
+            padding: 0.1rem 0.5rem;
+            border-radius: 8px;
+        }
+        .hist-cell span {
+            font-size: 0.78rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .hist-cell span:last-child { text-align: right; }
+        /* Usuń gap między checkboxem a resztą wiersza */
+        div[data-testid="stHorizontalBlock"] {
+            gap: 0 !important;
+            align-items: center !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div:first-child {
+            flex: 0 0 32px !important;
+            min-width: 32px !important;
+            max-width: 32px !important;
+        }
+        div[data-testid="stHorizontalBlock"] > div:last-child {
+            flex: 1 !important;
+        }
+        </style>
+        <div class="hist-header">
+            <span>Wpis</span>
+            <span>Zdarzenie</span>
+            <span>Typ / Opis</span>
+            <span>Kwota</span>
+        </div>
+    """, unsafe_allow_html=True)
+
     for _, row in df_display.iterrows():
         rid  = int(row["id"])
         typ  = str(row["typ"])
         opis = str(row.get("opis",""))
         if opis.lower() in ("empty","nan","none",""): opis = ""
+
         if typ == "Przychód ogólny":
-            kolor="#22c55e"; bg="rgba(34,197,94,0.10)"; bd="rgba(34,197,94,0.20)"
+            kolor="#22c55e"; bg="rgba(34,197,94,0.08)"; bd="rgba(34,197,94,0.18)"
         elif typ == "Wydatki gotówkowe":
-            kolor="#ef4444"; bg="rgba(239,68,68,0.10)"; bd="rgba(239,68,68,0.20)"
+            kolor="#ef4444"; bg="rgba(239,68,68,0.08)"; bd="rgba(239,68,68,0.18)"
         elif typ == CARRYOVER_TYPE:
-            kolor="#60a5fa"; bg="rgba(96,165,250,0.10)"; bd="rgba(96,165,250,0.20)"
+            kolor="#60a5fa"; bg="rgba(96,165,250,0.08)"; bd="rgba(96,165,250,0.18)"
         elif "Gotówka" in typ:
-            kolor="#f59e0b"; bg="rgba(245,158,11,0.10)"; bd="rgba(245,158,11,0.20)"
+            kolor="#f59e0b"; bg="rgba(245,158,11,0.08)"; bd="rgba(245,158,11,0.18)"
         else:
-            kolor="#c8c8e0"; bg="rgba(255,255,255,0.03)"; bd="rgba(255,255,255,0.06)"
-        rows_data.append((rid, typ, opis, row.get("data",""), row.get("data_zdarzenia",""), row["kwota"], kolor, bg, bd))
+            kolor="#c8c8e0"; bg="rgba(255,255,255,0.03)"; bd="rgba(255,255,255,0.05)"
 
-    new_selected = list(st.session_state.selected_ids)
+        t = _html.escape(typ)
+        o = _html.escape(opis)
+        d = _html.escape(str(row.get("data","")))
+        z = _html.escape(str(row.get("data_zdarzenia","")))
+        k = _html.escape(str(row["kwota"]))
+        label = f"{t} &middot; {o}" if o else t
 
-    # Form z checkboxami i tabelą HTML
-    with st.form("hist_form", clear_on_submit=False):
-        rows_html = ""
-        for rid, typ, opis, data, zdarz, kwota, kolor, bg, bd in rows_data:
-            t = _html.escape(typ)
-            o = _html.escape(opis)
-            d = _html.escape(str(data))
-            z = _html.escape(str(zdarz))
-            k = _html.escape(str(kwota))
-            label = f"{t} · {o}" if o else t
-            chk = "checked" if rid in new_selected else ""
-            rows_html += (
-                f'<label style="display:grid;grid-template-columns:30px 78px 82px 1fr 98px;'
-                f'gap:6px;align-items:center;padding:0.55rem 0.8rem;'
-                f'background:{bg};border-bottom:1px solid {bd};cursor:pointer;">'
-                f'<input type="checkbox" name="sel" value="{rid}" {chk} '
-                f'style="width:15px;height:15px;accent-color:#ef4444;margin:0;">'
-                f'<span style="font-size:0.74rem;color:{kolor};opacity:0.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{d}</span>'
-                f'<span style="font-size:0.74rem;color:{kolor};font-weight:600;white-space:nowrap;">{z}</span>'
-                f'<span style="font-size:0.76rem;color:{kolor};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{label}</span>'
-                f'<span style="font-size:0.82rem;color:{kolor};font-weight:700;text-align:right;white-space:nowrap;">{k}</span>'
-                f'</label>'
+        c_cb, c_row = st.columns([0.35, 9.65])
+        with c_cb:
+            val = st.checkbox("", key=f"cb_{rid}", value=(rid in new_selected),
+                              label_visibility="collapsed")
+        with c_row:
+            st.markdown(
+                f'<div class="hist-cell" style="background:{bg};border:1px solid {bd};margin-bottom:2px;">'
+                f'<span style="color:{kolor};opacity:0.75;">{d}</span>'
+                f'<span style="color:{kolor};">{z}</span>'
+                f'<span style="color:{kolor};">{label}</span>'
+                f'<span style="color:{kolor};">{k}</span>'
+                f'</div>',
+                unsafe_allow_html=True
             )
 
-        st.markdown(f"""
-            <style>
-            .htbl {{ overflow-y:auto; max-height:440px; border-radius:14px;
-                     border:1px solid rgba(255,255,255,0.07); background:#0f0f16; }}
-            .htbl::-webkit-scrollbar {{ width:4px; }}
-            .htbl::-webkit-scrollbar-thumb {{ background:#2a2a3a; border-radius:2px; }}
-            .htbl-head {{ display:grid; grid-template-columns:30px 78px 82px 1fr 98px;
-                          gap:6px; padding:0.5rem 0.8rem;
-                          border-bottom:1px solid rgba(255,255,255,0.09);
-                          position:sticky; top:0; background:#14141c; z-index:2; }}
-            .htbl-head span {{ font-size:0.62rem; font-weight:700; text-transform:uppercase;
-                               letter-spacing:0.1em; color:#3a3a52; }}
-            .htbl-head span:last-child {{ text-align:right; }}
-            label:hover {{ filter:brightness(1.18); }}
-            @media(max-width:768px){{
-                .htbl-head,.htbl label{{grid-template-columns:28px 0 70px 1fr 80px!important;}}
-                .htbl-head span:nth-child(2){{display:none;}}
-            }}
-            </style>
-            <div class="htbl">
-                <div class="htbl-head">
-                    <span></span><span>Wpis</span><span>Zdarzenie</span>
-                    <span>Typ / Opis</span><span>Kwota</span>
-                </div>
-                {rows_html}
-            </div>
-        """, unsafe_allow_html=True)
+        if val and rid not in new_selected:
+            new_selected.append(rid); changed = True
+        elif not val and rid in new_selected:
+            new_selected.remove(rid); changed = True
 
-        submitted = st.form_submit_button("Zastosuj zaznaczenie", use_container_width=True)
+    if changed:
+        st.session_state.selected_ids = new_selected
+        st.session_state.show_delete_confirm = False
+        st.rerun()
 
     # Przycisk usuwania
     if st.session_state.selected_ids:
+        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
         if not st.session_state.get("show_delete_confirm"):
             if st.button(f"🗑️ Usuń zaznaczone ({len(st.session_state.selected_ids)})",
                          use_container_width=True, type="primary", key="delete_checked_btn"):
