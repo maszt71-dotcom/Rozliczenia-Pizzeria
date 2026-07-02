@@ -1780,13 +1780,15 @@ if not df_history.empty:
     """, unsafe_allow_html=True)
 
     # Ukryte checkboxy Streamlit — prawdziwy stan
+    # JS ukrywa checkboxy Streamlit po załadowaniu
     st.markdown("""
-        <style>
-        /* Ukryj checkboxy Streamlit pod tabelą HTML */
-        div[data-testid="stCheckbox"] {
-            display: none !important;
-        }
-        </style>
+        <script>
+        (function hideCbs() {
+            const boxes = window.parent.document.querySelectorAll('[data-testid="stCheckbox"]');
+            boxes.forEach(b => { b.style.display = 'none'; });
+            if (boxes.length === 0) setTimeout(hideCbs, 200);
+        })();
+        </script>
     """, unsafe_allow_html=True)
 
     changed = False
