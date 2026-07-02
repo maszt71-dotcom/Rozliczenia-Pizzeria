@@ -1671,121 +1671,39 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    # --- Tabela: checkbox Streamlit + kolorowy HTML w kolumnach ---
-    import html as _html
+    # --- data_editor z checkboxami ---
+    df_edit = df_display.copy()
+    df_edit.insert(0, "🗑️", [rid in st.session_state.selected_ids for rid in df_edit["id"]])
 
-    new_selected = list(st.session_state.selected_ids)
-    changed = False
+    edited = st.data_editor(
+        df_edit,
+        column_config={
+            "🗑️":             st.column_config.CheckboxColumn("🗑️",        width="small"),
+            "id":             st.column_config.NumberColumn("ID",          width="small"),
+            "data":           st.column_config.TextColumn("Wpis",          width="small"),
+            "data_zdarzenia": st.column_config.TextColumn("Zdarzenie",     width="small"),
+            "typ":            st.column_config.TextColumn("Typ",           width="medium"),
+            "kwota":          st.column_config.NumberColumn("Kwota",       width="small", format="%.2f zł"),
+            "opis":           st.column_config.TextColumn("Opis",          width="large"),
+        },
+        disabled=["id","data","data_zdarzenia","typ","kwota","opis"],
+        hide_index=True,
+        use_container_width=True,
+        height=440,
+        key="hist_editor",
+    )
 
-    # Nagłówek
-    st.markdown("""
-        <style>
-        .hist-header {
-            display: grid;
-            grid-template-columns: 1fr 1fr 2fr 1fr;
-            gap: 8px;
-            padding: 0.4rem 0.5rem 0.4rem 2.2rem;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            margin-bottom: 0.2rem;
-        }
-        .hist-header span {
-            font-size: 0.62rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            color: #3a3a52;
-        }
-        .hist-header span:last-child { text-align: right; }
-        .hist-cell {
-            display: grid;
-            grid-template-columns: 1fr 1fr 2fr 1fr;
-            gap: 8px;
-            align-items: center;
-            padding: 0.1rem 0.5rem;
-            border-radius: 8px;
-        }
-        .hist-cell span {
-            font-size: 0.78rem;
-            font-weight: 600;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .hist-cell span:last-child { text-align: right; }
-        /* Usuń gap między checkboxem a resztą wiersza */
-        div[data-testid="stHorizontalBlock"] {
-            gap: 0 !important;
-            align-items: center !important;
-        }
-        div[data-testid="stHorizontalBlock"] > div:first-child {
-            flex: 0 0 32px !important;
-            min-width: 32px !important;
-            max-width: 32px !important;
-        }
-        div[data-testid="stHorizontalBlock"] > div:last-child {
-            flex: 1 !important;
-        }
-        </style>
-        <div class="hist-header">
-            <span>Wpis</span>
-            <span>Zdarzenie</span>
-            <span>Typ / Opis</span>
-            <span>Kwota</span>
-        </div>
-    """, unsafe_allow_html=True)
-
-    for _, row in df_display.iterrows():
-        rid  = int(row["id"])
-        typ  = str(row["typ"])
-        opis = str(row.get("opis",""))
-        if opis.lower() in ("empty","nan","none",""): opis = ""
-
-        if typ == "Przychód ogólny":
-            kolor="#22c55e"; bg="rgba(34,197,94,0.08)"; bd="rgba(34,197,94,0.18)"
-        elif typ == "Wydatki gotówkowe":
-            kolor="#ef4444"; bg="rgba(239,68,68,0.08)"; bd="rgba(239,68,68,0.18)"
-        elif typ == CARRYOVER_TYPE:
-            kolor="#60a5fa"; bg="rgba(96,165,250,0.08)"; bd="rgba(96,165,250,0.18)"
-        elif "Gotówka" in typ:
-            kolor="#f59e0b"; bg="rgba(245,158,11,0.08)"; bd="rgba(245,158,11,0.18)"
-        else:
-            kolor="#c8c8e0"; bg="rgba(255,255,255,0.03)"; bd="rgba(255,255,255,0.05)"
-
-        t = _html.escape(typ)
-        o = _html.escape(opis)
-        d = _html.escape(str(row.get("data","")))
-        z = _html.escape(str(row.get("data_zdarzenia","")))
-        k = _html.escape(str(row["kwota"]))
-        label = f"{t} &middot; {o}" if o else t
-
-        c_cb, c_row = st.columns([0.35, 9.65])
-        with c_cb:
-            val = st.checkbox("", key=f"cb_{rid}", value=(rid in new_selected),
-                              label_visibility="collapsed")
-        with c_row:
-            st.markdown(
-                f'<div class="hist-cell" style="background:{bg};border:1px solid {bd};margin-bottom:2px;">'
-                f'<span style="color:{kolor};opacity:0.75;">{d}</span>'
-                f'<span style="color:{kolor};">{z}</span>'
-                f'<span style="color:{kolor};">{label}</span>'
-                f'<span style="color:{kolor};">{k}</span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-
-        if val and rid not in new_selected:
-            new_selected.append(rid); changed = True
-        elif not val and rid in new_selected:
-            new_selected.remove(rid); changed = True
-
-    if changed:
+    new_selected = [
+        int(row["id"])
+        for _, row in edited.iterrows()
+        if row["🗑️"]
+    ]
+    if new_selected != st.session_state.selected_ids:
         st.session_state.selected_ids = new_selected
         st.session_state.show_delete_confirm = False
         st.rerun()
 
-    # Przycisk usuwania
     if st.session_state.selected_ids:
-        st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
         if not st.session_state.get("show_delete_confirm"):
             if st.button(f"🗑️ Usuń zaznaczone ({len(st.session_state.selected_ids)})",
                          use_container_width=True, type="primary", key="delete_checked_btn"):
