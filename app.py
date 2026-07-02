@@ -1777,20 +1777,22 @@ if not df_history.empty:
             bg    = "transparent"
             bd    = "rgba(255,255,255,0.05)"
 
-        checked   = "checked" if rid in new_selected else ""
-        opis_html = f"<span class='r-opis'>{opis}</span>" if opis else ""
+        import html as _html
+        checked    = "checked" if rid in new_selected else ""
+        opis_safe  = _html.escape(opis)
+        typ_safe   = _html.escape(typ)
+        date_safe  = _html.escape(str(row['data_zdarzenia']))
+        kwota_safe = _html.escape(str(row['kwota']))
+        opis_html  = f"<div class='r-opis'>{opis_safe}</div>" if opis_safe else ""
 
-        rows_html += f"""
-        <div class="hist-row {sel_class}" id="row_{rid}"
-             style="background:{bg}; border-bottom:1px solid {bd};">
-            <div class="r-cb"><input type="checkbox" {checked} onchange="toggleRow({rid}, this.checked)"></div>
-            <div class="r-date" style="color:{kolor};opacity:0.8;">{row['data_zdarzenia']}</div>
-            <div class="r-typ-wrap">
-                <span class="r-typ-badge" style="color:{kolor};">{typ}</span>
-                {opis_html}
-            </div>
-            <div class="r-amt" style="color:{kolor};">{row['kwota']}</div>
-        </div>"""
+        rows_html += (
+            f'<div class="hist-row {sel_class}" style="background:{bg};border-bottom:1px solid {bd};">'
+            f'<div class="r-cb"><input type="checkbox" {checked} onchange="toggleRow({rid},this.checked)"></div>'
+            f'<div class="r-date" style="color:{kolor};opacity:0.85;">{date_safe}</div>'
+            f'<div class="r-typ-wrap"><span class="r-typ-badge" style="color:{kolor};">{typ_safe}</span>{opis_html}</div>'
+            f'<div class="r-amt" style="color:{kolor};">{kwota_safe}</div>'
+            f'</div>'
+        )
 
     st.markdown(f"""
         <style>
