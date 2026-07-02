@@ -1678,16 +1678,6 @@ if not df_history.empty:
     df_edit = df_display.copy()
     df_edit.insert(0, "🗑️", [rid in st.session_state.selected_ids for rid in df_edit["id"]])
 
-    # Kolorowanie typów
-    def color_typ(val):
-        if val == "Przychód ogólny":      return "color: #22c55e; font-weight:600"
-        if val == "Wydatki gotówkowe":    return "color: #ef4444; font-weight:600"
-        if val == CARRYOVER_TYPE:         return "color: #60a5fa; font-weight:600"
-        if "Gotówka" in str(val):         return "color: #f59e0b; font-weight:600"
-        return ""
-
-    styled = df_edit.style.applymap(color_typ, subset=["typ"])
-
     edited = st.data_editor(
         df_edit,
         column_config={
