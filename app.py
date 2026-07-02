@@ -245,7 +245,12 @@ def filter_data_by_date_range(df: pd.DataFrame, date_from, date_to) -> pd.DataFr
 
 
 def calculate_range_sums(df: pd.DataFrame):
-    """Zwraca (przychod, gotowka, wydatki, przeniesienie)."""
+    """Zwraca (przychod, bilans, wydatki, gotowka_info).
+    - przychod      = suma "Przychód ogólny"
+    - wydatki       = suma "Wydatki gotówkowe"
+    - bilans        = przychod - wydatki  (do rozliczenia)
+    - gotowka_info  = "Gotówka z przeniesienia" + suma "Gotówka - *" (tylko informacyjnie)
+    """
     if df.empty:
         return 0.0, 0.0, 0.0, 0.0
     temp = df.copy()
@@ -253,8 +258,10 @@ def calculate_range_sums(df: pd.DataFrame):
     przychod      = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
     wydatki       = temp[temp["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
     przeniesienie = temp[temp["typ"] == CARRYOVER_TYPE]["kwota"].sum()
-    gotowka       = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
-    return przychod, gotowka, wydatki, przeniesienie
+    gotowka_kier  = temp[temp["typ"].astype(str).str.startswith("Gotówka -", na=False)]["kwota"].sum()
+    bilans        = przychod - wydatki
+    gotowka_info  = przeniesienie + gotowka_kier
+    return przychod, bilans, wydatki, gotowka_info
 
 
 def public_csv_data(df: pd.DataFrame) -> bytes:
@@ -459,7 +466,7 @@ def create_pdf(df, p, g, w, przeniesienie=0.0, date_from=None, date_to=None) -> 
     else:
         pdf.set_fill_color(255, 243, 205)
         pdf.set_text_color(0, 0, 0)
-    pdf.cell(64, 10, pdf_safe(f"Gotowka: {g:,.2f} zl"), border=1, fill=True, align="C")
+    pdf.cell(64, 10, pdf_safe(f"Bilans: {g:,.2f} zl"), border=1, fill=True, align="C")
 
     pdf.set_fill_color(248, 215, 218)
     pdf.set_text_color(0, 0, 0)
@@ -1270,7 +1277,7 @@ if st.session_state.page == "menu":
             if rd_from <= rd_to:
                 df_r = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), rd_from, rd_to))
                 rp, rg, rw, rpr = calculate_range_sums(df_r)
-                st.write(f"Przychód: **{rp:,.2f} zł** | Gotówka: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
+                st.write(f"Przychód: **{rp:,.2f} zł** | Bilans: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
                 st.download_button("📥 Pobierz PDF", data=create_pdf(df_r, rp, rg, rw, rpr, rd_from, rd_to),
                     file_name=f"raport_{rd_from}_{rd_to}.pdf", use_container_width=True, key="menu_dl_pdf")
                 st.download_button("📥 Pobierz CSV", data=public_csv_data(df_r),
@@ -1379,7 +1386,7 @@ if st.session_state.s == "ZP":
                 st.session_state.s = ""
                 st.rerun()
 
-# --- Trzy kolumny: Przychód / Gotówka / Wydatki ---
+# --- Trzy kolumny: Przychód / Bilans / Wydatki ---
 c1, c2, c3 = st.columns(3)
 
 with c1:
@@ -1405,36 +1412,8 @@ with c1:
                     st.rerun()
 
 with c2:
-    metric_card("Gotówka", s_got, "negative" if s_got < 0 else "yellow")
-    if st.button("➕ DODAJ", key="g"):
-        st.session_state.s = "G" if st.session_state.s != "G" else ""
-        st.session_state.os = None
-        st.rerun()
-    if st.session_state.s == "G":
-        with st.container(border=True):
-            osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
-            for o in osoby:
-                if st.button(o, key=f"os_{o}", use_container_width=True):
-                    st.session_state.os = o if st.session_state.os != o else None
-                    st.rerun()
-                if st.session_state.os == o:
-                    with st.container(border=True):
-                        st.markdown(f"Dla: **{o}**")
-                        d_g  = st.date_input("Data", get_now().date(), key=f"date_g_{o}")
-                        kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
-                        if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
-                            if kw_g is not None and kw_g > 0:
-                                supabase.table("finanse").insert({
-                                    "data":           get_now().strftime("%d.%m %H:%M"),
-                                    "typ":            f"Gotówka - {o}",
-                                    "kwota":          float(kw_g),
-                                    "opis":           "",
-                                    "status":         "Aktywny",
-                                    "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
-                                }).execute()
-                                st.session_state.s  = ""
-                                st.session_state.os = None
-                                st.rerun()
+    # Bilans = Przychód - Wydatki (do rozliczenia)
+    metric_card("Bilans", s_got, "negative" if s_got < 0 else "yellow")
 
 with c3:
     metric_card("Wydatki", s_wyd, "red")
@@ -1458,6 +1437,43 @@ with c3:
                     }).execute()
                     st.session_state.s = ""
                     st.rerun()
+
+# --- Karta informacyjna: Gotówka (przeniesienie + kierowcy/bufet) ---
+# s_got w calculate_range_sums to teraz bilans, a s_przeniesienie to karta osobna
+# Gotówka informacyjna = czwarta wartość z calculate_range_sums
+_, _, _, s_gotowka_info = calculate_range_sums(df_active_calc) if not df_active_calc.empty else (0,0,0,0)
+metric_card("Gotówka (info)", s_gotowka_info, "blue")
+
+# Przycisk DODAJ gotówki (bufet/kierowcy)
+if st.button("➕ DODAJ gotówkę", key="g"):
+    st.session_state.s = "G" if st.session_state.s != "G" else ""
+    st.session_state.os = None
+    st.rerun()
+if st.session_state.s == "G":
+    with st.container(border=True):
+        osoby = ["🏢 Bufet", "🚗 Kierowca 1", "🚗 Kierowca 2", "🚗 Kierowca 3", "🚗 Kierowca 4"]
+        for o in osoby:
+            if st.button(o, key=f"os_{o}", use_container_width=True):
+                st.session_state.os = o if st.session_state.os != o else None
+                st.rerun()
+            if st.session_state.os == o:
+                with st.container(border=True):
+                    st.markdown(f"Dla: **{o}**")
+                    d_g  = st.date_input("Data", get_now().date(), key=f"date_g_{o}")
+                    kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
+                    if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
+                        if kw_g is not None and kw_g > 0:
+                            supabase.table("finanse").insert({
+                                "data":           get_now().strftime("%d.%m %H:%M"),
+                                "typ":            f"Gotówka - {o}",
+                                "kwota":          float(kw_g),
+                                "opis":           "",
+                                "status":         "Aktywny",
+                                "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
+                            }).execute()
+                            st.session_state.s  = ""
+                            st.session_state.os = None
+                            st.rerun()
 
 
 # =============================================================================
@@ -1569,7 +1585,7 @@ with st.sidebar:
                 rp, rg, rw, rpr = calculate_range_sums(df_rep)
                 st.write(f"Gotówka z przeniesienia: **{rpr:,.2f} zł**")
                 st.write(f"Przychód: **{rp:,.2f} zł**")
-                st.write(f"Gotówka: **{rg:,.2f} zł**")
+                st.write(f"Bilans: **{rg:,.2f} zł**")
                 st.write(f"Wydatki: **{rw:,.2f} zł**")
                 st.download_button(
                     "📥 Pobierz PDF",
@@ -1769,14 +1785,228 @@ if not df_history.empty:
                 st.session_state.show_delete_confirm = True
                 st.rerun()
         else:
-            st.warning("⚠️ Czy na pewno chcesz usunąć zaznaczone wpisy?")
+            ids_str = ", ".join(str(x) for x in st.session_state.selected_ids)
+            st.warning(f"⚠️ Usunięcie **{len(st.session_state.selected_ids)}** wpis(ów): ID {ids_str}. Tej operacji nie można cofnąć!")
+            confirm_text = st.text_input(
+                'Wpisz "USUŃ" aby potwierdzić:',
+                key="delete_confirm_text",
+                placeholder="USUŃ",
+            )
             cd1, cd2 = st.columns(2)
             with cd1:
-                if st.button("✅ Tak, usuń", use_container_width=True, type="primary", key="delete_confirm_yes"):
+                ok = confirm_text.strip().upper() == "USUŃ"
+                if st.button("✅ Potwierdź usunięcie", use_container_width=True, type="primary",
+                             key="delete_confirm_yes", disabled=not ok):
                     for rid in st.session_state.selected_ids:
                         supabase.table("finanse").delete().eq("id", int(rid)).execute()
                     st.session_state.selected_ids = []
                     st.session_state.show_delete_confirm = False
+                    st.success("✅ Usunięto wpisy.")
+                    st.rerun()
+            with cd2:
+                if st.button("Anuluj", use_container_width=True, key="delete_confirm_no"):
+                    st.session_state.show_delete_confirm = False
+                    st.rerun()
+
+
+else:
+    st.info("Brak wpisów w historii dla wybranego okresu.")
+
+
+# Bottom nav — Streamlit przyciski ukryte, HTML pasek na wierzchu
+st.markdown("""
+    <style>
+    /* Ukryj etykiety przycisków nav — zostawiamy tylko funkcjonalność */
+    div[data-testid="stHorizontalBlock"]:has(#nav_home) button,
+    div[data-testid="stHorizontalBlock"]:has(#nav_menu) button,
+    div[data-testid="stHorizontalBlock"]:has(#nav_hist) button {
+        opacity: 0 !important;
+        position: absolute !important;
+        height: 4.8rem !important;
+        width: 100% !important;
+        z-index: 100000 !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown("""<div class="bottom-nav">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+        <span style="font-size:1.4rem;">🏠</span><span>Główna</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+        <span style="font-size:1.4rem;">⚙️</span><span>Menu</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#4a4a62;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
+        <span style="font-size:1.4rem;">📋</span><span>Historia</span>
+    </div>
+</div>""", unsafe_allow_html=True)
+
+nav1, nav2, nav3 = st.columns(3)
+with nav1:
+    if st.button("🏠", key="nav_home", use_container_width=True):
+        st.session_state.page = "home"
+        st.rerun()
+with nav2:
+    if st.button("⚙️", key="nav_menu", use_container_width=True):
+        st.session_state.page = "menu"
+        st.rerun()
+with nav3:
+    if st.button("📋", key="nav_hist", use_container_width=True):
+        st.session_state.page = "home"
+        st.rerun()
+
+# =============================================================================
+# 17. SZYBKIE AKCJE (MOBILNE)
+# =============================================================================
+
+st.divider()
+st.markdown("""
+<style>
+/* Szybkie akcje — duże kafelki z ikonką */
+div[data-testid="stHorizontalBlock"]:has(.quick-action-col) {
+    gap: 0.75rem !important;
+}
+.quick-btn > div > button {
+    height: 5.5rem !important;
+    border-radius: 16px !important;
+    flex-direction: column !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+    gap: 0.4rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.subheader("⚡ Szybkie akcje")
+
+m1, m2 = st.columns(2)
+
+with m1:
+    if st.button("📧\nRaport", use_container_width=True, key="mobile_report"):
+        df_mob = sort_df_by_data_zdarzenia(load_data())
+        mp, mg, mw, mpr = calculate_range_sums(df_mob)
+        if send_email_with_reports(
+            create_pdf(df_mob, mp, mg, mw, mpr),
+            public_csv_data(df_mob),
+        ):
+            st.success("✅ Wysłano raport!")
+
+with m2:
+    if st.button("🔒\nZamknij", use_container_width=True, key="mobile_lock"):
+        st.session_state.lock_step      = 1
+        st.session_state.lock_confirm_1 = False
+        st.session_state.lock_confirm_2 = False
+        st.rerun()
+
+# Formularz zamknięcia okresu (wspólny — pojawia się po kliknięciu z paska lub mobile)
+if st.session_state.lock_step >= 1:
+    with st.container(border=True):
+        st.markdown("**Zamknij i rozlicz okres**")
+        lock_df_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
+        lock_dt_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
+
+        if lock_df_m > lock_dt_m:
+            st.error("Data od nie może być większa niż data do.")
+        else:
+            if not st.session_state.lock_confirm_1:
+                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
+                    st.session_state.lock_confirm_1 = True
+                    st.rerun()
+            elif not st.session_state.lock_confirm_2:
+                st.warning("⚠️ Tej czynności nie można cofnąć!")
+                ca, cb = st.columns(2)
+                with ca:
+                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_2_mobile"):
+                        execute_period_close(lock_df_m, lock_dt_m)
+                        reset_lock_state()
+                        st.rerun()
+                with cb:
+                    if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile_inner"):
+                        reset_lock_state()
+                        st.rerun()
+
+        if not st.session_state.lock_confirm_1:
+            if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
+                reset_lock_state()
+                st.rerun()    # --- st.dataframe z on_select + kolorowanie przez Styler ---
+    import html as _html
+
+    df_show = df_display[["id","data","data_zdarzenia","typ","kwota","opis"]].copy()
+    df_show["kwota"] = pd.to_numeric(df_show["kwota"].astype(str).str.replace(" zł","").str.replace(",",""), errors="coerce").fillna(0)
+
+    def style_history(row):
+        typ = str(row["typ"])
+        if typ == "Przychód ogólny":
+            c = "background-color:rgba(34,197,94,0.12);color:#22c55e"
+        elif typ == "Wydatki gotówkowe":
+            c = "background-color:rgba(239,68,68,0.12);color:#ef4444"
+        elif typ == CARRYOVER_TYPE:
+            c = "background-color:rgba(96,165,250,0.12);color:#60a5fa"
+        elif "Gotówka" in typ:
+            c = "background-color:rgba(245,158,11,0.12);color:#f59e0b"
+        else:
+            c = "background-color:rgba(255,255,255,0.03);color:#c8c8e0"
+        return [c] * len(row)
+
+    styled = df_show.style.apply(style_history, axis=1)
+
+    event = st.dataframe(
+        styled,
+        hide_index=True,
+        use_container_width=True,
+        height=440,
+        key="hist_df",
+        on_select="rerun",
+        selection_mode="multi-row",
+        column_config={
+            "id":             st.column_config.NumberColumn("ID",        width="small"),
+            "data":           st.column_config.TextColumn("Wpis",        width="small"),
+            "data_zdarzenia": st.column_config.TextColumn("Zdarzenie",   width="small"),
+            "typ":            st.column_config.TextColumn("Typ",         width="medium"),
+            "kwota":          st.column_config.NumberColumn("Kwota",     width="small", format="%.2f zł"),
+            "opis":           st.column_config.TextColumn("Opis",        width="large"),
+        },
+    )
+
+    # Pobierz zaznaczone wiersze
+    sel_rows = event.selection.rows if event.selection else []
+    new_selected = [int(df_show.iloc[i]["id"]) for i in sel_rows]
+
+    if new_selected != st.session_state.selected_ids:
+        st.session_state.selected_ids = new_selected
+        st.session_state.show_delete_confirm = False
+
+    # Przycisk usuwania
+    if st.session_state.selected_ids:
+        if not st.session_state.get("show_delete_confirm"):
+            if st.button(f"🗑️ Usuń zaznaczone ({len(st.session_state.selected_ids)})",
+                         use_container_width=True, type="primary", key="delete_checked_btn"):
+                st.session_state.show_delete_confirm = True
+                st.rerun()
+        else:
+            ids_str = ", ".join(str(x) for x in st.session_state.selected_ids)
+            st.warning(f"⚠️ Usunięcie **{len(st.session_state.selected_ids)}** wpis(ów): ID {ids_str}. Tej operacji nie można cofnąć!")
+            confirm_text = st.text_input(
+                'Wpisz "USUŃ" aby potwierdzić:',
+                key="delete_confirm_text",
+                placeholder="USUŃ",
+            )
+            cd1, cd2 = st.columns(2)
+            with cd1:
+                ok = confirm_text.strip().upper() == "USUŃ"
+                if st.button("✅ Potwierdź usunięcie", use_container_width=True, type="primary",
+                             key="delete_confirm_yes", disabled=not ok):
+                    for rid in st.session_state.selected_ids:
+                        supabase.table("finanse").delete().eq("id", int(rid)).execute()
+                    st.session_state.selected_ids = []
+                    st.session_state.show_delete_confirm = False
+                    st.success("✅ Usunięto wpisy.")
                     st.rerun()
             with cd2:
                 if st.button("Anuluj", use_container_width=True, key="delete_confirm_no"):
