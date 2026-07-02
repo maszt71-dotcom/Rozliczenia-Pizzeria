@@ -1671,41 +1671,83 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    # --- Tabela z data_editor (wbudowane checkboxy + scroll) ---
+    # --- Tabela HTML z kolorami + checkboxy przez form ---
     import html as _html
 
-    # Dodaj kolumnę "Zaznacz" do usunięcia
-    df_edit = df_display.copy()
-    df_edit.insert(0, "🗑️", [rid in st.session_state.selected_ids for rid in df_edit["id"]])
+    # Buduj listę wierszy
+    rows_data = []
+    for _, row in df_display.iterrows():
+        rid  = int(row["id"])
+        typ  = str(row["typ"])
+        opis = str(row.get("opis",""))
+        if opis.lower() in ("empty","nan","none",""): opis = ""
+        if typ == "Przychód ogólny":
+            kolor="#22c55e"; bg="rgba(34,197,94,0.10)"; bd="rgba(34,197,94,0.20)"
+        elif typ == "Wydatki gotówkowe":
+            kolor="#ef4444"; bg="rgba(239,68,68,0.10)"; bd="rgba(239,68,68,0.20)"
+        elif typ == CARRYOVER_TYPE:
+            kolor="#60a5fa"; bg="rgba(96,165,250,0.10)"; bd="rgba(96,165,250,0.20)"
+        elif "Gotówka" in typ:
+            kolor="#f59e0b"; bg="rgba(245,158,11,0.10)"; bd="rgba(245,158,11,0.20)"
+        else:
+            kolor="#c8c8e0"; bg="rgba(255,255,255,0.03)"; bd="rgba(255,255,255,0.06)"
+        rows_data.append((rid, typ, opis, row.get("data",""), row.get("data_zdarzenia",""), row["kwota"], kolor, bg, bd))
 
-    edited = st.data_editor(
-        df_edit,
-        column_config={
-            "🗑️":            st.column_config.CheckboxColumn("🗑️", width="small"),
-            "id":            st.column_config.NumberColumn("ID",       width="small"),
-            "data":          st.column_config.TextColumn("Wpis",       width="small"),
-            "data_zdarzenia":st.column_config.TextColumn("Zdarzenie",  width="small"),
-            "typ":           st.column_config.TextColumn("Typ",        width="medium"),
-            "kwota":         st.column_config.NumberColumn("Kwota",    width="small", format="%.2f zł"),
-            "opis":          st.column_config.TextColumn("Opis",       width="large"),
-        },
-        disabled=["id","data","data_zdarzenia","typ","kwota","opis"],
-        hide_index=True,
-        use_container_width=True,
-        height=440,
-        key="hist_editor",
-    )
+    new_selected = list(st.session_state.selected_ids)
 
-    # Synchronizuj zaznaczone z session_state
-    new_selected = [
-        int(row["id"])
-        for _, row in edited.iterrows()
-        if row["🗑️"]
-    ]
-    if new_selected != st.session_state.selected_ids:
-        st.session_state.selected_ids = new_selected
-        st.session_state.show_delete_confirm = False
-        st.rerun()
+    # Form z checkboxami i tabelą HTML
+    with st.form("hist_form", clear_on_submit=False):
+        rows_html = ""
+        for rid, typ, opis, data, zdarz, kwota, kolor, bg, bd in rows_data:
+            t = _html.escape(typ)
+            o = _html.escape(opis)
+            d = _html.escape(str(data))
+            z = _html.escape(str(zdarz))
+            k = _html.escape(str(kwota))
+            label = f"{t} · {o}" if o else t
+            chk = "checked" if rid in new_selected else ""
+            rows_html += (
+                f'<label style="display:grid;grid-template-columns:30px 78px 82px 1fr 98px;'
+                f'gap:6px;align-items:center;padding:0.55rem 0.8rem;'
+                f'background:{bg};border-bottom:1px solid {bd};cursor:pointer;">'
+                f'<input type="checkbox" name="sel" value="{rid}" {chk} '
+                f'style="width:15px;height:15px;accent-color:#ef4444;margin:0;">'
+                f'<span style="font-size:0.74rem;color:{kolor};opacity:0.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{d}</span>'
+                f'<span style="font-size:0.74rem;color:{kolor};font-weight:600;white-space:nowrap;">{z}</span>'
+                f'<span style="font-size:0.76rem;color:{kolor};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{label}</span>'
+                f'<span style="font-size:0.82rem;color:{kolor};font-weight:700;text-align:right;white-space:nowrap;">{k}</span>'
+                f'</label>'
+            )
+
+        st.markdown(f"""
+            <style>
+            .htbl {{ overflow-y:auto; max-height:440px; border-radius:14px;
+                     border:1px solid rgba(255,255,255,0.07); background:#0f0f16; }}
+            .htbl::-webkit-scrollbar {{ width:4px; }}
+            .htbl::-webkit-scrollbar-thumb {{ background:#2a2a3a; border-radius:2px; }}
+            .htbl-head {{ display:grid; grid-template-columns:30px 78px 82px 1fr 98px;
+                          gap:6px; padding:0.5rem 0.8rem;
+                          border-bottom:1px solid rgba(255,255,255,0.09);
+                          position:sticky; top:0; background:#14141c; z-index:2; }}
+            .htbl-head span {{ font-size:0.62rem; font-weight:700; text-transform:uppercase;
+                               letter-spacing:0.1em; color:#3a3a52; }}
+            .htbl-head span:last-child {{ text-align:right; }}
+            label:hover {{ filter:brightness(1.18); }}
+            @media(max-width:768px){{
+                .htbl-head,.htbl label{{grid-template-columns:28px 0 70px 1fr 80px!important;}}
+                .htbl-head span:nth-child(2){{display:none;}}
+            }}
+            </style>
+            <div class="htbl">
+                <div class="htbl-head">
+                    <span></span><span>Wpis</span><span>Zdarzenie</span>
+                    <span>Typ / Opis</span><span>Kwota</span>
+                </div>
+                {rows_html}
+            </div>
+        """, unsafe_allow_html=True)
+
+        submitted = st.form_submit_button("Zastosuj zaznaczenie", use_container_width=True)
 
     # Przycisk usuwania
     if st.session_state.selected_ids:
