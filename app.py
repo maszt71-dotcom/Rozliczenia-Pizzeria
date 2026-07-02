@@ -1224,7 +1224,7 @@ if st.session_state.page == "menu":
             sd_from = st.date_input("Data od", value=get_now().date(), key="menu_send_from")
             sd_to   = st.date_input("Data do", value=get_now().date(), key="menu_send_to")
             if sd_from <= sd_to:
-                df_s = sort_df_by_data_zdarzenia(filter_data_by_date_range(df_active_calc, sd_from, sd_to))
+                df_s = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), sd_from, sd_to))
                 sp, sg, sw, spr = calculate_range_sums(df_s)
                 if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="menu_send_btn"):
                     if send_email_with_reports(create_pdf(df_s, sp, sg, sw, spr, sd_from, sd_to), public_csv_data(df_s)):
@@ -1268,7 +1268,7 @@ if st.session_state.page == "menu":
             rd_from = st.date_input("Data od", value=default_date_from, key="menu_rep_from")
             rd_to   = st.date_input("Data do", value=default_date_to,   key="menu_rep_to")
             if rd_from <= rd_to:
-                df_r = sort_df_by_data_zdarzenia(filter_data_by_date_range(df_active_calc, rd_from, rd_to))
+                df_r = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), rd_from, rd_to))
                 rp, rg, rw, rpr = calculate_range_sums(df_r)
                 st.write(f"Przychód: **{rp:,.2f} zł** | Gotówka: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
                 st.download_button("📥 Pobierz PDF", data=create_pdf(df_r, rp, rg, rw, rpr, rd_from, rd_to),
@@ -1480,10 +1480,12 @@ with st.sidebar:
             if send_date_from > send_date_to:
                 st.error("Data od nie może być większa niż data do.")
             else:
+                # Ładuj WSZYSTKIE dane z bazy — ignoruj filtr "Pokaż od"
                 df_send = sort_df_by_data_zdarzenia(
-                    filter_data_by_date_range(df_active_calc, send_date_from, send_date_to)
+                    filter_data_by_date_range(load_data(), send_date_from, send_date_to)
                 )
                 sp, sg, sw, spr = calculate_range_sums(df_send)
+                st.write(f"Wpisów w zakresie: **{len(df_send)}** | Przychód: **{sp:,.2f} zł** | Wydatki: **{sw:,.2f} zł**")
                 if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="send_range_btn"):
                     if send_email_with_reports(
                         create_pdf(df_send, sp, sg, sw, spr, send_date_from, send_date_to),
@@ -1563,7 +1565,7 @@ with st.sidebar:
             if report_df > report_dt:
                 st.error("Data od nie może być większa niż data do.")
             else:
-                df_rep = sort_df_by_data_zdarzenia(filter_data_by_date_range(df_active_calc, report_df, report_dt))
+                df_rep = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), report_df, report_dt))
                 rp, rg, rw, rpr = calculate_range_sums(df_rep)
                 st.write(f"Gotówka z przeniesienia: **{rpr:,.2f} zł**")
                 st.write(f"Przychód: **{rp:,.2f} zł**")
@@ -1671,10 +1673,9 @@ if not df_history.empty:
         lambda x: f"{x:,.2f} zł"
     )
 
-    # --- Tabela HTML + st.multiselect zsynchronizowany z kliknięciem ---
+    # --- Tabela HTML (kolory) + multiselect do zaznaczania ---
     import html as _html
 
-    # Buduj dane wierszy
     rows_data = []
     for _, row in df_display.iterrows():
         rid  = int(row["id"])
@@ -1693,9 +1694,24 @@ if not df_history.empty:
             kolor="#c8c8e0"; bg="rgba(255,255,255,0.03)"; bd="rgba(255,255,255,0.05)"
         rows_data.append((rid,typ,opis,str(row.get("data","")),str(row.get("data_zdarzenia","")),str(row["kwota"]),kolor,bg,bd))
 
-    sel = st.session_state.selected_ids
+    all_ids   = [r[0] for r in rows_data]
+    id_labels = {r[0]: f"{r[4]} | {r[1]}{(' · '+r[2]) if r[2] else ''} | {r[5]}" for r in rows_data}
 
-    # Tabela HTML — czysto wizualna
+    # Multiselect do zaznaczania — kompaktowy
+    selected_ids = st.multiselect(
+        "Zaznacz do usunięcia:",
+        options=all_ids,
+        default=[i for i in st.session_state.selected_ids if i in all_ids],
+        format_func=lambda x: id_labels.get(x, str(x)),
+        key="hist_multisel",
+    )
+
+    if selected_ids != st.session_state.selected_ids:
+        st.session_state.selected_ids = selected_ids
+        st.session_state.show_delete_confirm = False
+        st.rerun()
+
+    # Tabela HTML z kolorami
     rows_html = ""
     for rid,typ,opis,data,zdarz,kwota,kolor,bg,bd in rows_data:
         t = _html.escape(typ)
@@ -1704,105 +1720,46 @@ if not df_history.empty:
         z = _html.escape(zdarz)
         k = _html.escape(kwota)
         label = f"{t} &middot; {o}" if o else t
-        is_sel = rid in sel
+        is_sel = rid in selected_ids
         border = f"2px solid {kolor}" if is_sel else f"1px solid {bd}"
-        opacity = "1" if is_sel else "0.85"
+        ck = f'<span style="color:{kolor};font-weight:700;">✓</span>' if is_sel else ""
         rows_html += (
-            f'<div class="hr" data-id="{rid}" onclick="toggleSel({rid})" '
-            f'style="background:{bg};border-bottom:{border};opacity:{opacity};">'
-            f'<div class="hck">{"✓" if is_sel else ""}</div>'
-            f'<div class="hd" style="color:{kolor};opacity:0.75;">{d}</div>'
-            f'<div class="hd" style="color:{kolor};font-weight:600;">{z}</div>'
-            f'<div class="ht" style="color:{kolor};">{label}</div>'
-            f'<div class="ha" style="color:{kolor};">{k}</div>'
+            f'<div style="display:grid;grid-template-columns:20px 78px 84px 1fr 98px;'
+            f'gap:6px;align-items:center;padding:0.52rem 0.8rem;'
+            f'background:{bg};border-bottom:{border};">'
+            f'<div>{ck}</div>'
+            f'<div style="font-size:0.74rem;color:{kolor};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{d}</div>'
+            f'<div style="font-size:0.74rem;color:{kolor};font-weight:600;white-space:nowrap;">{z}</div>'
+            f'<div style="font-size:0.76rem;color:{kolor};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{label}</div>'
+            f'<div style="font-size:0.82rem;color:{kolor};font-weight:700;text-align:right;white-space:nowrap;">{k}</div>'
             f'</div>'
         )
 
-    sel_ids_json = str([r[0] for r in rows_data if r[0] in sel])
-
     st.markdown(f"""
         <style>
-        .hw2 {{ overflow-y:auto; max-height:440px; border-radius:14px;
-                border:1px solid rgba(255,255,255,0.07); background:#0f0f16;
-                margin-bottom:0.5rem; }}
+        .hw2 {{ overflow-y:auto; max-height:420px; border-radius:14px;
+                border:1px solid rgba(255,255,255,0.07); background:#0f0f16; }}
         .hw2::-webkit-scrollbar {{ width:4px; }}
         .hw2::-webkit-scrollbar-thumb {{ background:#2a2a3a; border-radius:2px; }}
-        .hh2 {{ display:grid; grid-template-columns:24px 78px 84px 1fr 98px;
-                gap:6px; padding:0.45rem 0.8rem;
-                border-bottom:1px solid rgba(255,255,255,0.09);
-                position:sticky; top:0; background:#14141c; z-index:2; }}
-        .hh2 span {{ font-size:0.62rem; font-weight:700; text-transform:uppercase;
-                     letter-spacing:0.1em; color:#3a3a52; }}
-        .hh2 span:last-child {{ text-align:right; }}
-        .hr {{ display:grid; grid-template-columns:24px 78px 84px 1fr 98px;
-               gap:6px; padding:0.55rem 0.8rem; cursor:pointer;
-               transition:filter 0.12s, opacity 0.12s; }}
-        .hr:hover {{ filter:brightness(1.2); }}
-        .hck {{ font-size:0.85rem; color:#ef4444; font-weight:700; display:flex; align-items:center; }}
-        .hd  {{ font-size:0.74rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-        .ht  {{ font-size:0.76rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
-        .ha  {{ font-size:0.82rem; font-weight:700; text-align:right; white-space:nowrap; }}
+        .hw2-head {{ display:grid; grid-template-columns:20px 78px 84px 1fr 98px;
+                     gap:6px; padding:0.45rem 0.8rem;
+                     border-bottom:1px solid rgba(255,255,255,0.09);
+                     position:sticky; top:0; background:#14141c; z-index:2; }}
+        .hw2-head span {{ font-size:0.62rem; font-weight:700; text-transform:uppercase;
+                          letter-spacing:0.1em; color:#3a3a52; }}
+        .hw2-head span:last-child {{ text-align:right; }}
         @media(max-width:768px){{
-            .hh2,.hr{{ grid-template-columns:20px 0 72px 1fr 80px !important; gap:4px; padding:0.45rem 0.5rem; }}
-            .hh2 span:nth-child(2),.hd:nth-child(2){{ display:none; }}
-            .ht{{ font-size:0.68rem; }} .ha{{ font-size:0.72rem; }}
+            .hw2-head,.hw2 > div > div{{ font-size:0.65rem !important; }}
         }}
         </style>
         <div class="hw2">
-            <div class="hh2">
+            <div class="hw2-head">
                 <span></span><span>Wpis</span><span>Zdarzenie</span>
                 <span>Typ / Opis</span><span>Kwota</span>
             </div>
             {rows_html}
         </div>
-        <input type="hidden" id="sel_ids" value="{','.join(str(r[0]) for r in rows_data if r[0] in sel)}">
-        <script>
-        var _sel = {sel_ids_json};
-        function toggleSel(id) {{
-            var idx = _sel.indexOf(id);
-            if (idx === -1) _sel.push(id); else _sel.splice(idx, 1);
-            // aktualizuj wizualnie
-            document.querySelectorAll('.hr').forEach(function(el) {{
-                var eid = parseInt(el.getAttribute('data-id'));
-                var isSel = _sel.indexOf(eid) !== -1;
-                el.style.opacity = isSel ? '1' : '0.85';
-                el.querySelector('.hck').textContent = isSel ? '✓' : '';
-            }});
-            // zapisz do hidden input dla Streamlit
-            document.getElementById('sel_ids').value = _sel.join(',');
-        }}
-        </script>
     """, unsafe_allow_html=True)
-
-    # Multiselect zsynchronizowany — schowany wizualnie
-    st.markdown("""
-        <style>
-        div[data-testid="stMultiSelect"] {
-            margin-top: -0.5rem;
-            opacity: 0;
-            height: 0;
-            overflow: hidden;
-            pointer-events: none;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    all_ids   = [r[0] for r in rows_data]
-    id_labels = {r[0]: f"{r[3]} | {r[1]} | {r[5]}" for r in rows_data}
-
-    selected_ids = st.multiselect(
-        "sel",
-        options=all_ids,
-        default=[i for i in st.session_state.selected_ids if i in all_ids],
-        format_func=lambda x: id_labels.get(x, str(x)),
-        key="hist_multisel",
-        label_visibility="collapsed",
-    )
-
-    if selected_ids != st.session_state.selected_ids:
-        st.session_state.selected_ids = selected_ids
-        st.session_state.show_delete_confirm = False
-        st.rerun()
 
     # Przycisk usuwania
     if st.session_state.selected_ids:
@@ -1907,7 +1864,7 @@ m1, m2 = st.columns(2)
 
 with m1:
     if st.button("📧\nRaport", use_container_width=True, key="mobile_report"):
-        df_mob = sort_df_by_data_zdarzenia(df_active_calc)
+        df_mob = sort_df_by_data_zdarzenia(load_data())
         mp, mg, mw, mpr = calculate_range_sums(df_mob)
         if send_email_with_reports(
             create_pdf(df_mob, mp, mg, mw, mpr),
