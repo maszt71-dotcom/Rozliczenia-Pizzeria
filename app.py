@@ -255,7 +255,9 @@ def calculate_range_sums(df: pd.DataFrame):
     przychod      = temp[temp["typ"] == "Przychód ogólny"]["kwota"].sum()
     wydatki       = temp[temp["typ"] == "Wydatki gotówkowe"]["kwota"].sum()
     przeniesienie = temp[temp["typ"] == CARRYOVER_TYPE]["kwota"].sum()
-    gotowka       = temp[temp["typ"].astype(str).str.contains("Gotówka", na=False)]["kwota"].sum() - wydatki
+    # Gotówka kierowcy/bufet — tylko "Gotówka - *", bez przeniesienia (żeby nie liczyć dwa razy)
+    gotowka_kb    = temp[temp["typ"].astype(str).str.startswith("Gotówka -", na=False)]["kwota"].sum()
+    gotowka       = przeniesienie + gotowka_kb - wydatki
     return przychod, gotowka, wydatki, przeniesienie
 
 
