@@ -2081,7 +2081,7 @@ st.subheader("⚡ Szybkie akcje")
 m1, m2 = st.columns(2)
 
 with m1:
-    if st.button("📧\nRaport", use_container_width=True, key="mobile_report"):
+    if st.button("📧\nRaport", use_container_width=True, key="mobile_report_2"):
         df_mob = sort_df_by_data_zdarzenia(load_data())
         mp, mg, mw, mpr = calculate_range_sums(df_mob)
         if send_email_with_reports(
@@ -2091,7 +2091,7 @@ with m1:
             st.success("✅ Wysłano raport!")
 
 with m2:
-    if st.button("🔒\nZamknij", use_container_width=True, key="mobile_lock"):
+    if st.button("🔒\nZamknij", use_container_width=True, key="mobile_lock_2"):
         st.session_state.lock_step      = 1
         st.session_state.lock_confirm_1 = False
         st.session_state.lock_confirm_2 = False
