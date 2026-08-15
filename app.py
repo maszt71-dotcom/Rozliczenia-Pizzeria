@@ -2036,15 +2036,15 @@ st.markdown("""<div class="bottom-nav">
 
 nav1, nav2, nav3 = st.columns(3)
 with nav1:
-    if st.button("🏠", key="nav_home", use_container_width=True):
+    if st.button("🏠", key="nav_home_2", use_container_width=True):
         st.session_state.page = "home"
         st.rerun()
 with nav2:
-    if st.button("⚙️", key="nav_menu", use_container_width=True):
+    if st.button("⚙️", key="nav_menu_2", use_container_width=True):
         st.session_state.page = "menu"
         st.rerun()
 with nav3:
-    if st.button("📋", key="nav_hist", use_container_width=True):
+    if st.button("📋", key="nav_hist_2", use_container_width=True):
         st.session_state.page = "home"
         st.rerun()
 
