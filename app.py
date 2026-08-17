@@ -1732,7 +1732,7 @@ with st.sidebar:
 st.divider()
 
 # Powielony filtr "Pokaż od" — widoczny pod szybkimi akcjami przed historią
-podbottom_date_key = f"podbottom_date_{st.session_state.get('cumulative_date_widget_version', 0)}"
+podbottom_date_key = f"podbottom_date_v2_{st.session_state.get('cumulative_date_widget_version', 0)}"
 podbottom_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=podbottom_date_key, label_visibility="visible")
 if podbottom_date != cumulative_date_from:
     st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
@@ -2053,7 +2053,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Zakres dat
-mm_date_key = f"mm_date_{st.session_state.get('cumulative_date_widget_version', 0)}"
+mm_date_key = f"mm_date_mobile_{st.session_state.get('cumulative_date_widget_version', 0)}"
 mm_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=mm_date_key)
 if mm_date != cumulative_date_from:
     st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
@@ -2371,7 +2371,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Zakres dat
-mm_date_key = f"mm_date_{st.session_state.get('cumulative_date_widget_version', 0)}"
+mm_date_key = f"mm_date_mobile_{st.session_state.get('cumulative_date_widget_version', 0)}"
 mm_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=mm_date_key)
 if mm_date != cumulative_date_from:
     st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
