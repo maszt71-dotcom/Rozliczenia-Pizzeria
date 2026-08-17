@@ -988,56 +988,92 @@ st.markdown(
             display: none !important;
         }
 
-        /* BOTTOM NAV BAR — tylko mobile */
-        .bottom-nav {
-            display: none;
+        /* STRZAŁKA MENU — widoczna na wszystkich urządzeniach */
+        .menu-arrow {
+            position: fixed;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px;
+            height: 56px;
+            background: rgba(124,110,255,0.85);
+            border-radius: 0 10px 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 99998;
+            box-shadow: 4px 0 20px rgba(124,110,255,0.4);
+            transition: all 0.2s ease;
+            -webkit-tap-highlight-color: transparent;
         }
-        @media (max-width: 768px) {
-            .bottom-nav {
-                display: flex;
-                position: fixed;
-                bottom: 0; left: 0; right: 0;
-                height: 4.8rem;
-                padding-bottom: env(safe-area-inset-bottom);
-                background: rgba(15,15,22,0.97);
-                backdrop-filter: blur(20px);
-                border-top: 1px solid rgba(255,255,255,0.08);
-                z-index: 99999;
-                align-items: center;
-                justify-content: space-around;
-                padding-left: 0.5rem;
-                padding-right: 0.5rem;
-                box-shadow: 0 -8px 32px rgba(0,0,0,0.5);
-            }
-            .bottom-nav a {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                gap: 3px;
-                color: #4a4a62;
-                text-decoration: none;
-                font-size: 0.58rem;
-                font-weight: 700;
-                letter-spacing: 0.06em;
-                text-transform: uppercase;
-                padding: 0.4rem 0.8rem;
-                border-radius: 10px;
-                transition: all 0.18s ease;
-                -webkit-tap-highlight-color: transparent;
-                min-width: 4rem;
-                text-align: center;
-            }
-            .bottom-nav a:active { background: rgba(124,110,255,0.15); }
-            .bottom-nav a .icon {
-                font-size: 1.4rem;
-                line-height: 1;
-            }
-            .bottom-nav a.accent { color: #7c6eff; }
-            .bottom-nav a.danger { color: #ef4444; }
-            .bottom-nav a.green  { color: #22c55e; }
+        .menu-arrow:hover { width: 34px; background: rgba(124,110,255,1); }
+        .menu-arrow svg { width: 14px; height: 14px; fill: white; transition: transform 0.3s ease; }
+        .menu-arrow.open svg { transform: rotate(180deg); }
 
-            /* padding żeby ostatni element nie był pod paskiem */
-            .block-container { padding-bottom: 9rem !important; }
+        /* OVERLAY */
+        .menu-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 99998;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .menu-overlay.open {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        /* PANEL MENU */
+        .slide-menu {
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            width: min(320px, 85vw);
+            background: #0f0f16;
+            border-right: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 8px 0 40px rgba(0,0,0,0.6);
+            z-index: 99999;
+            transform: translateX(-100%);
+            transition: transform 0.32s cubic-bezier(.4,0,.2,1);
+            overflow-y: auto;
+            padding: 1.5rem 1.2rem 2rem;
+        }
+        .slide-menu.open { transform: translateX(0); }
+
+        .slide-menu .sm-header {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: #eeeef8;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .slide-menu .sm-section {
+            font-size: 0.62rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: #3a3a52;
+            margin: 1.2rem 0 0.5rem;
+        }
+        .slide-menu .sm-close {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: #5a5a72;
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        @media (max-width: 768px) {
+            section[data-testid="stSidebar"] { display: none !important; }
+            .block-container { padding-bottom: 2rem !important; }
         }
     </style>
 """,
@@ -1316,28 +1352,9 @@ if st.session_state.page == "menu":
         st.rerun()
 
     # bottom nav na stronie menu też
-    st.markdown("""<div class="bottom-nav">
-        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#4a4a62;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-            <span style="font-size:1.4rem;">🏠</span><span>Główna</span>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-            <span style="font-size:1.4rem;">⚙️</span><span>Menu</span>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#4a4a62;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-            <span style="font-size:1.4rem;">📋</span><span>Historia</span>
-        </div>
-    </div>""", unsafe_allow_html=True)
-    mn1, mn2, mn3 = st.columns(3)
-    with mn1:
-        if st.button("🏠", key="menu_nav_home", use_container_width=True):
-            st.session_state.page = "home"
-            st.rerun()
-    with mn2:
-        st.button("⚙️", key="menu_nav_menu", use_container_width=True, disabled=True)
-    with mn3:
-        if st.button("📋", key="menu_nav_hist", use_container_width=True):
-            st.session_state.page = "home"
-            st.rerun()
+    if st.button("🏠 Wróć do głównej", key="menu_nav_home", use_container_width=True):
+        st.session_state.page = "home"
+        st.rerun()
 
 else:
     # =========================================================================
@@ -1379,6 +1396,29 @@ if st.session_state.s == "ZP":
                     "opis":           op_zp,
                     "status":         "Aktywny",
                     "data_zdarzenia": d_zp.strftime("%d.%m.%Y"),
+                }).execute()
+                st.session_state.s = ""
+                st.rerun()
+
+# --- Extra gotówka ---
+if st.button("➕ Extra gotówka", key="eg"):
+    st.session_state.s = "EG" if st.session_state.s != "EG" else ""
+    st.rerun()
+
+if st.session_state.s == "EG":
+    with st.container(border=True):
+        d_eg  = st.date_input("Data zdarzenia", get_now().date(), key="date_eg")
+        kw_eg = st.number_input("Kwota", value=None, step=1.0, key="eg_v", placeholder="Wpisz kwotę")
+        op_eg = st.text_input("Opis", key="desc_eg", placeholder="Opcjonalnie")
+        if st.button("DODAJ", key="save_eg", use_container_width=True, type="primary"):
+            if kw_eg is not None and kw_eg > 0:
+                supabase.table("finanse").insert({
+                    "data":           get_now().strftime("%d.%m %H:%M"),
+                    "typ":            "Gotówka - Extra",
+                    "kwota":          float(kw_eg),
+                    "opis":           op_eg,
+                    "status":         "Aktywny",
+                    "data_zdarzenia": d_eg.strftime("%d.%m.%Y"),
                 }).execute()
                 st.session_state.s = ""
                 st.rerun()
@@ -1801,46 +1841,63 @@ else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
 
 
-# Bottom nav — Streamlit przyciski ukryte, HTML pasek na wierzchu
+# Strzałka i wysuwany panel menu — renderowane jako HTML (czysto wizualne)
 st.markdown("""
-    <style>
-    /* Ukryj etykiety przycisków nav — zostawiamy tylko funkcjonalność */
-    div[data-testid="stHorizontalBlock"]:has(#nav_home) button,
-    div[data-testid="stHorizontalBlock"]:has(#nav_menu) button,
-    div[data-testid="stHorizontalBlock"]:has(#nav_hist) button {
-        opacity: 0 !important;
-        position: absolute !important;
-        height: 4.8rem !important;
-        width: 100% !important;
-        z-index: 100000 !important;
+    <div class="menu-arrow" id="menuArrow" onclick="toggleMenu()">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 18l6-6-6-6"/>
+        </svg>
+    </div>
+    <div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
+    <div class="slide-menu" id="slideMenu">
+        <div class="sm-header">
+            ⚙️ Menu
+            <button class="sm-close" onclick="closeMenu()">✕</button>
+        </div>
+        <div class="sm-section">Zakres dat</div>
+        <div style="color:#8888a8;font-size:0.82rem;margin-bottom:1rem;">
+            Zmień zakres w polu "Pokaż od" na głównym widoku.
+        </div>
+        <div class="sm-section">Akcje</div>
+        <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1rem;">
+            <a onclick="closeMenu();window.scrollTo(0,0);" style="display:flex;align-items:center;gap:10px;padding:0.8rem 1rem;background:rgba(124,110,255,0.12);border:1px solid rgba(124,110,255,0.25);border-radius:12px;color:#a594ff;font-weight:600;font-size:0.88rem;cursor:pointer;text-decoration:none;">
+                🏠 Główna
+            </a>
+            <a onclick="closeMenu();window.scrollTo(0,document.body.scrollHeight);" style="display:flex;align-items:center;gap:10px;padding:0.8rem 1rem;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;color:#8888a8;font-weight:600;font-size:0.88rem;cursor:pointer;text-decoration:none;">
+                📋 Historia wpisów
+            </a>
+        </div>
+    </div>
+    <script>
+    function toggleMenu() {
+        var menu = document.getElementById('slideMenu');
+        var overlay = document.getElementById('menuOverlay');
+        var arrow = document.getElementById('menuArrow');
+        var isOpen = menu.classList.contains('open');
+        if (isOpen) { closeMenu(); }
+        else {
+            menu.classList.add('open');
+            overlay.classList.add('open');
+            arrow.classList.add('open');
+        }
     }
-    </style>
+    function closeMenu() {
+        document.getElementById('slideMenu').classList.remove('open');
+        document.getElementById('menuOverlay').classList.remove('open');
+        document.getElementById('menuArrow').classList.remove('open');
+    }
+    </script>
 """, unsafe_allow_html=True)
 
-st.markdown("""<div class="bottom-nav">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-        <span style="font-size:1.4rem;">🏠</span><span>Główna</span>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-        <span style="font-size:1.4rem;">⚙️</span><span>Menu</span>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#4a4a62;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-        <span style="font-size:1.4rem;">📋</span><span>Historia</span>
-    </div>
-</div>""", unsafe_allow_html=True)
-
-nav1, nav2, nav3 = st.columns(3)
+# Ukryte przyciski Streamlit do przełączania stron
+nav1, nav2 = st.columns(2)
 with nav1:
-    if st.button("🏠", key="nav_home", use_container_width=True):
+    if st.button("🏠 Główna", key="nav_home", use_container_width=True):
         st.session_state.page = "home"
         st.rerun()
 with nav2:
-    if st.button("⚙️", key="nav_menu", use_container_width=True):
+    if st.button("⚙️ Menu", key="nav_menu", use_container_width=True):
         st.session_state.page = "menu"
-        st.rerun()
-with nav3:
-    if st.button("📋", key="nav_hist", use_container_width=True):
-        st.session_state.page = "home"
         st.rerun()
 
 # =============================================================================
@@ -2007,46 +2064,11 @@ else:
 
 
 # Bottom nav — Streamlit przyciski ukryte, HTML pasek na wierzchu
-st.markdown("""
-    <style>
-    /* Ukryj etykiety przycisków nav — zostawiamy tylko funkcjonalność */
-    div[data-testid="stHorizontalBlock"]:has(#nav_home) button,
-    div[data-testid="stHorizontalBlock"]:has(#nav_menu) button,
-    div[data-testid="stHorizontalBlock"]:has(#nav_hist) button {
-        opacity: 0 !important;
-        position: absolute !important;
-        height: 4.8rem !important;
-        width: 100% !important;
-        z-index: 100000 !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
 
-st.markdown("""<div class="bottom-nav">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-        <span style="font-size:1.4rem;">🏠</span><span>Główna</span>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#7c6eff;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-        <span style="font-size:1.4rem;">⚙️</span><span>Menu</span>
-    </div>
-    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;color:#4a4a62;font-size:0.58rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">
-        <span style="font-size:1.4rem;">📋</span><span>Historia</span>
-    </div>
-</div>""", unsafe_allow_html=True)
 
-nav1, nav2, nav3 = st.columns(3)
-with nav1:
-    if st.button("🏠", key="nav_home_2", use_container_width=True):
-        st.session_state.page = "home"
-        st.rerun()
-with nav2:
-    if st.button("⚙️", key="nav_menu_2", use_container_width=True):
-        st.session_state.page = "menu"
-        st.rerun()
-with nav3:
-    if st.button("📋", key="nav_hist_2", use_container_width=True):
-        st.session_state.page = "home"
-        st.rerun()
+
+
+
 
 # =============================================================================
 # 17. SZYBKIE AKCJE (MOBILNE)
