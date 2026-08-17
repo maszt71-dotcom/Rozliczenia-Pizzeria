@@ -2304,7 +2304,7 @@ if st.session_state.lock_step >= 1:
     if st.session_state.selected_ids:
         if not st.session_state.get("show_delete_confirm"):
             if st.button(f"🗑️ Usuń zaznaczone ({len(st.session_state.selected_ids)})",
-                         use_container_width=True, type="primary", key="delete_checked_btn"):
+                         use_container_width=True, type="primary", key="delete_checked_btn_2"):
                 st.session_state.show_delete_confirm = True
                 st.rerun()
         else:
@@ -2312,14 +2312,14 @@ if st.session_state.lock_step >= 1:
             st.warning(f"⚠️ Usunięcie **{len(st.session_state.selected_ids)}** wpis(ów): ID {ids_str}. Tej operacji nie można cofnąć!")
             confirm_text = st.text_input(
                 'Wpisz "USUŃ" aby potwierdzić:',
-                key="delete_confirm_text",
+                key="delete_confirm_text_2",
                 placeholder="USUŃ",
             )
             cd1, cd2 = st.columns(2)
             with cd1:
                 ok = confirm_text.strip().upper() == "USUŃ"
                 if st.button("✅ Potwierdź usunięcie", use_container_width=True, type="primary",
-                             key="delete_confirm_yes", disabled=not ok):
+                             key="delete_confirm_yes_2", disabled=not ok):
                     for rid in st.session_state.selected_ids:
                         supabase.table("finanse").delete().eq("id", int(rid)).execute()
                     st.session_state.selected_ids = []
@@ -2327,7 +2327,7 @@ if st.session_state.lock_step >= 1:
                     st.success("✅ Usunięto wpisy.")
                     st.rerun()
             with cd2:
-                if st.button("Anuluj", use_container_width=True, key="delete_confirm_no"):
+                if st.button("Anuluj", use_container_width=True, key="delete_confirm_no_2"):
                     st.session_state.show_delete_confirm = False
                     st.rerun()
 
@@ -2337,236 +2337,3 @@ else:
 
 
 # Bottom nav — Streamlit przyciski ukryte, HTML pasek na wierzchu
-
-
-
-
-
-
-# =============================================================================
-# 16b. MENU MOBILNE — identyczne jak sidebar, widoczne tylko na mobile
-# =============================================================================
-
-st.markdown("""
-    <style>
-    .mobile-menu-section { display: none; }
-    @media (max-width: 768px) { .mobile-menu-section { display: block; } }
-    </style>
-    <div class="mobile-menu-section" id="mobile-menu-anchor"></div>
-""", unsafe_allow_html=True)
-
-# Sprawdź czy jesteśmy na mobile (zawsze renderuj, CSS ukryje na desktop)
-st.markdown("""
-    <div class="mobile-menu-section">
-""", unsafe_allow_html=True)
-
-st.markdown("""
-    <div style="margin:2rem 0 1rem;border-top:1px solid rgba(255,255,255,0.06);position:relative;">
-        <span style="position:absolute;top:-0.65rem;left:0;background:#0a0a0f;padding-right:1rem;
-        font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:800;color:#eeeef8;">
-            ⚙️ Menu
-        </span>
-    </div>
-    <div style="height:0.8rem;"></div>
-""", unsafe_allow_html=True)
-
-# Zakres dat
-mm_date_key = f"mm_date_mobile_{st.session_state.get('cumulative_date_widget_version', 0)}"
-mm_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=mm_date_key)
-if mm_date != cumulative_date_from:
-    st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
-    st.rerun()
-
-st.divider()
-
-# Wyślij raport
-if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="mm_send_open"):
-    st.session_state.show_send_picker = not st.session_state.show_send_picker
-    st.rerun()
-if st.session_state.show_send_picker:
-    with st.container(border=True):
-        mm_sd_from = st.date_input("Data od", value=get_now().date(), key="mm_send_from")
-        mm_sd_to   = st.date_input("Data do", value=get_now().date(), key="mm_send_to")
-        if mm_sd_from <= mm_sd_to:
-            df_mms = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), mm_sd_from, mm_sd_to))
-            msp, msg, msw, mspr = calculate_range_sums(df_mms)
-            st.write(f"Wpisów: **{len(df_mms)}** | Przychód: **{msp:,.2f} zł** | Wydatki: **{msw:,.2f} zł**")
-            if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="mm_send_btn"):
-                if send_email_with_reports(
-                    create_pdf(df_mms, msp, msg, msw, mspr, mm_sd_from, mm_sd_to),
-                    public_csv_data(df_mms),
-                ):
-                    st.success("✅ Wysłano!")
-        if st.button("↩️ Zamknij", use_container_width=True, key="mm_send_close"):
-            st.session_state.show_send_picker = False
-            st.rerun()
-
-st.divider()
-
-# Zamknij i rozlicz okres
-if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", use_container_width=True, type="primary", key="mm_lock_open"):
-    st.session_state.lock_step = 1
-    st.session_state.lock_confirm_1 = False
-    st.rerun()
-if st.session_state.lock_step >= 1:
-    with st.container(border=True):
-        mm_ld_from = st.date_input("Rozlicz od:", value=get_now().date(), key="mm_lock_from")
-        mm_ld_to   = st.date_input("Rozlicz do:", value=get_now().date(), key="mm_lock_to")
-        if mm_ld_from <= mm_ld_to:
-            if not st.session_state.lock_confirm_1:
-                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="mm_confirm1"):
-                    st.session_state.lock_confirm_1 = True
-                    st.rerun()
-            else:
-                st.warning("⚠️ Tej czynności nie można cofnąć!")
-                if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="mm_confirm2"):
-                    execute_period_close(mm_ld_from, mm_ld_to)
-                    reset_lock_state()
-                    st.rerun()
-        if st.button("Anuluj", use_container_width=True, key="mm_lock_cancel"):
-            reset_lock_state()
-            st.rerun()
-
-st.divider()
-
-# Pobierz raport
-if st.button("📥 POBIERZ RAPORT", use_container_width=True, key="mm_report_open"):
-    st.session_state.show_report_picker = not st.session_state.show_report_picker
-    st.rerun()
-if st.session_state.show_report_picker:
-    with st.container(border=True):
-        mm_rd_from = st.date_input("Data od", value=default_date_from, key="mm_rep_from")
-        mm_rd_to   = st.date_input("Data do", value=default_date_to,   key="mm_rep_to")
-        if mm_rd_from <= mm_rd_to:
-            df_mmr = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), mm_rd_from, mm_rd_to))
-            rp, rg, rw, rpr = calculate_range_sums(df_mmr)
-            st.write(f"Przychód: **{rp:,.2f} zł** | Gotówka: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
-            st.download_button("📥 Pobierz PDF",
-                data=create_pdf(df_mmr, rp, rg, rw, rpr, mm_rd_from, mm_rd_to),
-                file_name=f"raport_{mm_rd_from}_{mm_rd_to}.pdf",
-                use_container_width=True, key="mm_dl_pdf")
-            st.download_button("📥 Pobierz CSV",
-                data=public_csv_data(df_mmr),
-                file_name=f"raport_{mm_rd_from}_{mm_rd_to}.csv",
-                use_container_width=True, key="mm_dl_csv")
-        if st.button("↩️ Zamknij", use_container_width=True, key="mm_rep_close"):
-            st.session_state.show_report_picker = False
-            st.rerun()
-
-st.divider()
-
-# Archiwum raportów
-if st.button("📜 ARCHIWUM RAPORTÓW", use_container_width=True, key="mm_arch_open"):
-    st.session_state.show_archive_picker = not st.session_state.show_archive_picker
-    st.rerun()
-if st.session_state.show_archive_picker:
-    with st.container(border=True):
-        df_mma = load_archived_reports()
-        if df_mma.empty:
-            st.info("Brak zapisanych raportów.")
-        else:
-            for _, r_row in df_mma.iterrows():
-                with st.expander(f"📅 {r_row['okres_od']} - {r_row['okres_do']}"):
-                    st.write(f"Suma: {r_row['suma_przychodow']:.2f} zł")
-                    try:
-                        df_ar = load_report_rows(r_row)
-                        st.download_button("📥 CSV",
-                            data=public_csv_data(df_ar),
-                            file_name=f"arch_{r_row['okres_od']}.csv",
-                            key=f"mm_arch_{r_row['id']}", use_container_width=True)
-                    except Exception as e:
-                        st.error(f"Błąd: {e}")
-        if st.button("↩️ Zamknij", use_container_width=True, key="mm_arch_close"):
-            st.session_state.show_archive_picker = False
-            st.rerun()
-
-st.divider()
-
-# Wyloguj
-if st.button("🔓 WYLOGUJ", use_container_width=True, key="mm_logout"):
-    cookies["auth_token"] = ""
-    cookies.save()
-    st.rerun()
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# =============================================================================
-# 17. SZYBKIE AKCJE (MOBILNE)
-# =============================================================================
-
-st.divider()
-st.markdown("""
-<style>
-/* Szybkie akcje — duże kafelki z ikonką */
-div[data-testid="stHorizontalBlock"]:has(.quick-action-col) {
-    gap: 0.75rem !important;
-}
-.quick-btn > div > button {
-    height: 5.5rem !important;
-    border-radius: 16px !important;
-    flex-direction: column !important;
-    font-size: 0.72rem !important;
-    font-weight: 700 !important;
-    letter-spacing: 0.1em !important;
-    text-transform: uppercase !important;
-    gap: 0.4rem !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    line-height: 1 !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.subheader("⚡ Szybkie akcje")
-
-m1, m2 = st.columns(2)
-
-with m1:
-    if st.button("📧\nRaport", use_container_width=True, key="mobile_report_2"):
-        df_mob = sort_df_by_data_zdarzenia(load_data())
-        mp, mg, mw, mpr = calculate_range_sums(df_mob)
-        if send_email_with_reports(
-            create_pdf(df_mob, mp, mg, mw, mpr),
-            public_csv_data(df_mob),
-        ):
-            st.success("✅ Wysłano raport!")
-
-with m2:
-    if st.button("🔒\nZamknij", use_container_width=True, key="mobile_lock_2"):
-        st.session_state.lock_step      = 1
-        st.session_state.lock_confirm_1 = False
-        st.session_state.lock_confirm_2 = False
-        st.rerun()
-
-# Formularz zamknięcia okresu (wspólny — pojawia się po kliknięciu z paska lub mobile)
-if st.session_state.lock_step >= 1:
-    with st.container(border=True):
-        st.markdown("**Zamknij i rozlicz okres**")
-        lock_df_m = st.date_input("Rozlicz od:", value=get_now().date(), key="lock_date_from_mobile")
-        lock_dt_m = st.date_input("Rozlicz do:", value=get_now().date(), key="lock_date_to_mobile")
-
-        if lock_df_m > lock_dt_m:
-            st.error("Data od nie może być większa niż data do.")
-        else:
-            if not st.session_state.lock_confirm_1:
-                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="confirm_1_mobile"):
-                    st.session_state.lock_confirm_1 = True
-                    st.rerun()
-            elif not st.session_state.lock_confirm_2:
-                st.warning("⚠️ Tej czynności nie można cofnąć!")
-                ca, cb = st.columns(2)
-                with ca:
-                    if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="confirm_2_mobile"):
-                        execute_period_close(lock_df_m, lock_dt_m)
-                        reset_lock_state()
-                        st.rerun()
-                with cb:
-                    if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile_inner"):
-                        reset_lock_state()
-                        st.rerun()
-
-        if not st.session_state.lock_confirm_1:
-            if st.button("Anuluj", use_container_width=True, key="cancel_close_mobile"):
-                reset_lock_state()
-                st.rerun()
