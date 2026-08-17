@@ -1841,51 +1841,125 @@ else:
     st.info("Brak wpisów w historii dla wybranego okresu.")
 
 
-# Strzałka i wysuwany panel menu — renderowane jako HTML (czysto wizualne)
+# Strzałka i wysuwany panel — przez window.parent.document (działa poza iframe)
 st.markdown("""
-    <div class="menu-arrow" id="menuArrow" onclick="toggleMenu()">
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 18l6-6-6-6"/>
-        </svg>
-    </div>
-    <div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
-    <div class="slide-menu" id="slideMenu">
-        <div class="sm-header">
-            ⚙️ Menu
-            <button class="sm-close" onclick="closeMenu()">✕</button>
-        </div>
-        <div class="sm-section">Zakres dat</div>
-        <div style="color:#8888a8;font-size:0.82rem;margin-bottom:1rem;">
-            Zmień zakres w polu "Pokaż od" na głównym widoku.
-        </div>
-        <div class="sm-section">Akcje</div>
-        <div style="display:flex;flex-direction:column;gap:0.6rem;margin-bottom:1rem;">
-            <a onclick="closeMenu();window.scrollTo(0,0);" style="display:flex;align-items:center;gap:10px;padding:0.8rem 1rem;background:rgba(124,110,255,0.12);border:1px solid rgba(124,110,255,0.25);border-radius:12px;color:#a594ff;font-weight:600;font-size:0.88rem;cursor:pointer;text-decoration:none;">
-                🏠 Główna
-            </a>
-            <a onclick="closeMenu();window.scrollTo(0,document.body.scrollHeight);" style="display:flex;align-items:center;gap:10px;padding:0.8rem 1rem;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;color:#8888a8;font-weight:600;font-size:0.88rem;cursor:pointer;text-decoration:none;">
-                📋 Historia wpisów
-            </a>
-        </div>
-    </div>
     <script>
-    function toggleMenu() {
-        var menu = document.getElementById('slideMenu');
-        var overlay = document.getElementById('menuOverlay');
-        var arrow = document.getElementById('menuArrow');
-        var isOpen = menu.classList.contains('open');
-        if (isOpen) { closeMenu(); }
-        else {
-            menu.classList.add('open');
-            overlay.classList.add('open');
-            arrow.classList.add('open');
+    (function() {
+        var p = window.parent.document;
+
+        // Wstrzyknij style do rodzica
+        if (!p.getElementById('sm-style')) {
+            var s = p.createElement('style');
+            s.id = 'sm-style';
+            s.textContent = `
+                #sm-arrow {
+                    position: fixed; left: 0; top: 50%; transform: translateY(-50%);
+                    width: 28px; height: 56px;
+                    background: rgba(124,110,255,0.85);
+                    border-radius: 0 10px 10px 0;
+                    display: flex; align-items: center; justify-content: center;
+                    cursor: pointer; z-index: 999999;
+                    box-shadow: 4px 0 20px rgba(124,110,255,0.4);
+                    transition: all 0.2s ease;
+                }
+                #sm-arrow:hover { width: 34px; background: rgba(124,110,255,1); }
+                #sm-arrow svg { width: 14px; height: 14px; fill: white; transition: transform 0.3s; }
+                #sm-arrow.open svg { transform: rotate(180deg); }
+                #sm-overlay {
+                    position: fixed; inset: 0;
+                    background: rgba(0,0,0,0.55);
+                    z-index: 999998; opacity: 0; pointer-events: none;
+                    transition: opacity 0.3s;
+                }
+                #sm-overlay.open { opacity: 1; pointer-events: all; }
+                #sm-panel {
+                    position: fixed; top: 0; left: 0; bottom: 0;
+                    width: min(300px, 82vw);
+                    background: #0f0f16;
+                    border-right: 1px solid rgba(255,255,255,0.08);
+                    box-shadow: 8px 0 40px rgba(0,0,0,0.6);
+                    z-index: 999999;
+                    transform: translateX(-100%);
+                    transition: transform 0.32s cubic-bezier(.4,0,.2,1);
+                    overflow-y: auto;
+                    padding: 1.5rem 1.2rem 2rem;
+                    font-family: 'DM Sans', sans-serif;
+                }
+                #sm-panel.open { transform: translateX(0); }
+                #sm-panel .smp-head {
+                    font-size: 1.2rem; font-weight: 800; color: #eeeef8;
+                    margin-bottom: 1.5rem; display: flex; align-items: center; gap: 8px;
+                }
+                #sm-panel .smp-close {
+                    margin-left: auto; background: none; border: none;
+                    color: #5a5a72; font-size: 1.4rem; cursor: pointer;
+                }
+                #sm-panel .smp-sec {
+                    font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+                    letter-spacing: 0.12em; color: #3a3a52; margin: 1.2rem 0 0.5rem;
+                }
+                .smp-btn {
+                    display: flex; align-items: center; gap: 10px;
+                    padding: 0.8rem 1rem; border-radius: 12px;
+                    font-weight: 600; font-size: 0.88rem;
+                    cursor: pointer; text-decoration: none;
+                    margin-bottom: 0.5rem; transition: filter 0.15s;
+                }
+                .smp-btn:hover { filter: brightness(1.2); }
+                .smp-btn.purple {
+                    background: rgba(124,110,255,0.12);
+                    border: 1px solid rgba(124,110,255,0.25); color: #a594ff;
+                }
+                .smp-btn.dark {
+                    background: rgba(255,255,255,0.04);
+                    border: 1px solid rgba(255,255,255,0.08); color: #8888a8;
+                }
+            `;
+            p.head.appendChild(s);
         }
-    }
-    function closeMenu() {
-        document.getElementById('slideMenu').classList.remove('open');
-        document.getElementById('menuOverlay').classList.remove('open');
-        document.getElementById('menuArrow').classList.remove('open');
-    }
+
+        // Wstrzyknij elementy do rodzica
+        if (!p.getElementById('sm-arrow')) {
+            var arrow = p.createElement('div');
+            arrow.id = 'sm-arrow';
+            arrow.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 18l6-6-6-6" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>';
+            p.body.appendChild(arrow);
+
+            var overlay = p.createElement('div');
+            overlay.id = 'sm-overlay';
+            p.body.appendChild(overlay);
+
+            var panel = p.createElement('div');
+            panel.id = 'sm-panel';
+            panel.innerHTML = `
+                <div class="smp-head">⚙️ Menu <button class="smp-close" onclick="smClose()">✕</button></div>
+                <div class="smp-sec">Nawigacja</div>
+                <a class="smp-btn purple" onclick="smClose();window.parent.scrollTo(0,0);">🏠 Główna</a>
+                <a class="smp-btn dark" onclick="smClose();window.parent.scrollTo(0,window.parent.document.body.scrollHeight);">📋 Historia wpisów</a>
+                <div class="smp-sec">Sidebar</div>
+                <div style="color:#5a5a72;font-size:0.8rem;">Na desktopie użyj lewego panelu bocznego aplikacji.</div>
+            `;
+            p.body.appendChild(panel);
+
+            arrow.onclick = function() {
+                var isOpen = panel.classList.contains('open');
+                if (isOpen) { smClose(); }
+                else {
+                    panel.classList.add('open');
+                    overlay.classList.add('open');
+                    arrow.classList.add('open');
+                }
+            };
+            overlay.onclick = smClose;
+        }
+
+        function smClose() {
+            p.getElementById('sm-panel').classList.remove('open');
+            p.getElementById('sm-overlay').classList.remove('open');
+            p.getElementById('sm-arrow').classList.remove('open');
+        }
+        window.smClose = smClose;
+    })();
     </script>
 """, unsafe_allow_html=True)
 
@@ -1899,6 +1973,153 @@ with nav2:
     if st.button("⚙️ Menu", key="nav_menu", use_container_width=True):
         st.session_state.page = "menu"
         st.rerun()
+
+# =============================================================================
+# 16b. MENU MOBILNE — identyczne jak sidebar, widoczne tylko na mobile
+# =============================================================================
+
+st.markdown("""
+    <style>
+    .mobile-menu-section { display: none; }
+    @media (max-width: 768px) { .mobile-menu-section { display: block; } }
+    </style>
+    <div class="mobile-menu-section" id="mobile-menu-anchor"></div>
+""", unsafe_allow_html=True)
+
+# Sprawdź czy jesteśmy na mobile (zawsze renderuj, CSS ukryje na desktop)
+st.markdown("""
+    <div class="mobile-menu-section">
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    <div style="margin:2rem 0 1rem;border-top:1px solid rgba(255,255,255,0.06);position:relative;">
+        <span style="position:absolute;top:-0.65rem;left:0;background:#0a0a0f;padding-right:1rem;
+        font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:800;color:#eeeef8;">
+            ⚙️ Menu
+        </span>
+    </div>
+    <div style="height:0.8rem;"></div>
+""", unsafe_allow_html=True)
+
+# Zakres dat
+mm_date_key = f"mm_date_{st.session_state.get('cumulative_date_widget_version', 0)}"
+mm_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=mm_date_key)
+if mm_date != cumulative_date_from:
+    st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
+    st.rerun()
+
+st.divider()
+
+# Wyślij raport
+if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="mm_send_open"):
+    st.session_state.show_send_picker = not st.session_state.show_send_picker
+    st.rerun()
+if st.session_state.show_send_picker:
+    with st.container(border=True):
+        mm_sd_from = st.date_input("Data od", value=get_now().date(), key="mm_send_from")
+        mm_sd_to   = st.date_input("Data do", value=get_now().date(), key="mm_send_to")
+        if mm_sd_from <= mm_sd_to:
+            df_mms = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), mm_sd_from, mm_sd_to))
+            msp, msg, msw, mspr = calculate_range_sums(df_mms)
+            st.write(f"Wpisów: **{len(df_mms)}** | Przychód: **{msp:,.2f} zł** | Wydatki: **{msw:,.2f} zł**")
+            if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="mm_send_btn"):
+                if send_email_with_reports(
+                    create_pdf(df_mms, msp, msg, msw, mspr, mm_sd_from, mm_sd_to),
+                    public_csv_data(df_mms),
+                ):
+                    st.success("✅ Wysłano!")
+        if st.button("↩️ Zamknij", use_container_width=True, key="mm_send_close"):
+            st.session_state.show_send_picker = False
+            st.rerun()
+
+st.divider()
+
+# Zamknij i rozlicz okres
+if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", use_container_width=True, type="primary", key="mm_lock_open"):
+    st.session_state.lock_step = 1
+    st.session_state.lock_confirm_1 = False
+    st.rerun()
+if st.session_state.lock_step >= 1:
+    with st.container(border=True):
+        mm_ld_from = st.date_input("Rozlicz od:", value=get_now().date(), key="mm_lock_from")
+        mm_ld_to   = st.date_input("Rozlicz do:", value=get_now().date(), key="mm_lock_to")
+        if mm_ld_from <= mm_ld_to:
+            if not st.session_state.lock_confirm_1:
+                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="mm_confirm1"):
+                    st.session_state.lock_confirm_1 = True
+                    st.rerun()
+            else:
+                st.warning("⚠️ Tej czynności nie można cofnąć!")
+                if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="mm_confirm2"):
+                    execute_period_close(mm_ld_from, mm_ld_to)
+                    reset_lock_state()
+                    st.rerun()
+        if st.button("Anuluj", use_container_width=True, key="mm_lock_cancel"):
+            reset_lock_state()
+            st.rerun()
+
+st.divider()
+
+# Pobierz raport
+if st.button("📥 POBIERZ RAPORT", use_container_width=True, key="mm_report_open"):
+    st.session_state.show_report_picker = not st.session_state.show_report_picker
+    st.rerun()
+if st.session_state.show_report_picker:
+    with st.container(border=True):
+        mm_rd_from = st.date_input("Data od", value=default_date_from, key="mm_rep_from")
+        mm_rd_to   = st.date_input("Data do", value=default_date_to,   key="mm_rep_to")
+        if mm_rd_from <= mm_rd_to:
+            df_mmr = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), mm_rd_from, mm_rd_to))
+            rp, rg, rw, rpr = calculate_range_sums(df_mmr)
+            st.write(f"Przychód: **{rp:,.2f} zł** | Gotówka: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
+            st.download_button("📥 Pobierz PDF",
+                data=create_pdf(df_mmr, rp, rg, rw, rpr, mm_rd_from, mm_rd_to),
+                file_name=f"raport_{mm_rd_from}_{mm_rd_to}.pdf",
+                use_container_width=True, key="mm_dl_pdf")
+            st.download_button("📥 Pobierz CSV",
+                data=public_csv_data(df_mmr),
+                file_name=f"raport_{mm_rd_from}_{mm_rd_to}.csv",
+                use_container_width=True, key="mm_dl_csv")
+        if st.button("↩️ Zamknij", use_container_width=True, key="mm_rep_close"):
+            st.session_state.show_report_picker = False
+            st.rerun()
+
+st.divider()
+
+# Archiwum raportów
+if st.button("📜 ARCHIWUM RAPORTÓW", use_container_width=True, key="mm_arch_open"):
+    st.session_state.show_archive_picker = not st.session_state.show_archive_picker
+    st.rerun()
+if st.session_state.show_archive_picker:
+    with st.container(border=True):
+        df_mma = load_archived_reports()
+        if df_mma.empty:
+            st.info("Brak zapisanych raportów.")
+        else:
+            for _, r_row in df_mma.iterrows():
+                with st.expander(f"📅 {r_row['okres_od']} - {r_row['okres_do']}"):
+                    st.write(f"Suma: {r_row['suma_przychodow']:.2f} zł")
+                    try:
+                        df_ar = load_report_rows(r_row)
+                        st.download_button("📥 CSV",
+                            data=public_csv_data(df_ar),
+                            file_name=f"arch_{r_row['okres_od']}.csv",
+                            key=f"mm_arch_{r_row['id']}", use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Błąd: {e}")
+        if st.button("↩️ Zamknij", use_container_width=True, key="mm_arch_close"):
+            st.session_state.show_archive_picker = False
+            st.rerun()
+
+st.divider()
+
+# Wyloguj
+if st.button("🔓 WYLOGUJ", use_container_width=True, key="mm_logout"):
+    cookies["auth_token"] = ""
+    cookies.save()
+    st.rerun()
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # =============================================================================
 # 17. SZYBKIE AKCJE (MOBILNE)
@@ -2069,6 +2290,153 @@ else:
 
 
 
+
+# =============================================================================
+# 16b. MENU MOBILNE — identyczne jak sidebar, widoczne tylko na mobile
+# =============================================================================
+
+st.markdown("""
+    <style>
+    .mobile-menu-section { display: none; }
+    @media (max-width: 768px) { .mobile-menu-section { display: block; } }
+    </style>
+    <div class="mobile-menu-section" id="mobile-menu-anchor"></div>
+""", unsafe_allow_html=True)
+
+# Sprawdź czy jesteśmy na mobile (zawsze renderuj, CSS ukryje na desktop)
+st.markdown("""
+    <div class="mobile-menu-section">
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    <div style="margin:2rem 0 1rem;border-top:1px solid rgba(255,255,255,0.06);position:relative;">
+        <span style="position:absolute;top:-0.65rem;left:0;background:#0a0a0f;padding-right:1rem;
+        font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:800;color:#eeeef8;">
+            ⚙️ Menu
+        </span>
+    </div>
+    <div style="height:0.8rem;"></div>
+""", unsafe_allow_html=True)
+
+# Zakres dat
+mm_date_key = f"mm_date_{st.session_state.get('cumulative_date_widget_version', 0)}"
+mm_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=mm_date_key)
+if mm_date != cumulative_date_from:
+    st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
+    st.rerun()
+
+st.divider()
+
+# Wyślij raport
+if st.button("📧 WYŚLIJ RAPORT", use_container_width=True, type="primary", key="mm_send_open"):
+    st.session_state.show_send_picker = not st.session_state.show_send_picker
+    st.rerun()
+if st.session_state.show_send_picker:
+    with st.container(border=True):
+        mm_sd_from = st.date_input("Data od", value=get_now().date(), key="mm_send_from")
+        mm_sd_to   = st.date_input("Data do", value=get_now().date(), key="mm_send_to")
+        if mm_sd_from <= mm_sd_to:
+            df_mms = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), mm_sd_from, mm_sd_to))
+            msp, msg, msw, mspr = calculate_range_sums(df_mms)
+            st.write(f"Wpisów: **{len(df_mms)}** | Przychód: **{msp:,.2f} zł** | Wydatki: **{msw:,.2f} zł**")
+            if st.button("📧 Wyślij PDF + CSV", use_container_width=True, type="primary", key="mm_send_btn"):
+                if send_email_with_reports(
+                    create_pdf(df_mms, msp, msg, msw, mspr, mm_sd_from, mm_sd_to),
+                    public_csv_data(df_mms),
+                ):
+                    st.success("✅ Wysłano!")
+        if st.button("↩️ Zamknij", use_container_width=True, key="mm_send_close"):
+            st.session_state.show_send_picker = False
+            st.rerun()
+
+st.divider()
+
+# Zamknij i rozlicz okres
+if st.button("🔒 ZAMKNIJ I ROZLICZ OKRES", use_container_width=True, type="primary", key="mm_lock_open"):
+    st.session_state.lock_step = 1
+    st.session_state.lock_confirm_1 = False
+    st.rerun()
+if st.session_state.lock_step >= 1:
+    with st.container(border=True):
+        mm_ld_from = st.date_input("Rozlicz od:", value=get_now().date(), key="mm_lock_from")
+        mm_ld_to   = st.date_input("Rozlicz do:", value=get_now().date(), key="mm_lock_to")
+        if mm_ld_from <= mm_ld_to:
+            if not st.session_state.lock_confirm_1:
+                if st.button("❓ Jesteś pewien?", use_container_width=True, type="primary", key="mm_confirm1"):
+                    st.session_state.lock_confirm_1 = True
+                    st.rerun()
+            else:
+                st.warning("⚠️ Tej czynności nie można cofnąć!")
+                if st.button("🚀 WYKONAJ ZAMKNIĘCIE", use_container_width=True, type="primary", key="mm_confirm2"):
+                    execute_period_close(mm_ld_from, mm_ld_to)
+                    reset_lock_state()
+                    st.rerun()
+        if st.button("Anuluj", use_container_width=True, key="mm_lock_cancel"):
+            reset_lock_state()
+            st.rerun()
+
+st.divider()
+
+# Pobierz raport
+if st.button("📥 POBIERZ RAPORT", use_container_width=True, key="mm_report_open"):
+    st.session_state.show_report_picker = not st.session_state.show_report_picker
+    st.rerun()
+if st.session_state.show_report_picker:
+    with st.container(border=True):
+        mm_rd_from = st.date_input("Data od", value=default_date_from, key="mm_rep_from")
+        mm_rd_to   = st.date_input("Data do", value=default_date_to,   key="mm_rep_to")
+        if mm_rd_from <= mm_rd_to:
+            df_mmr = sort_df_by_data_zdarzenia(filter_data_by_date_range(load_data(), mm_rd_from, mm_rd_to))
+            rp, rg, rw, rpr = calculate_range_sums(df_mmr)
+            st.write(f"Przychód: **{rp:,.2f} zł** | Gotówka: **{rg:,.2f} zł** | Wydatki: **{rw:,.2f} zł**")
+            st.download_button("📥 Pobierz PDF",
+                data=create_pdf(df_mmr, rp, rg, rw, rpr, mm_rd_from, mm_rd_to),
+                file_name=f"raport_{mm_rd_from}_{mm_rd_to}.pdf",
+                use_container_width=True, key="mm_dl_pdf")
+            st.download_button("📥 Pobierz CSV",
+                data=public_csv_data(df_mmr),
+                file_name=f"raport_{mm_rd_from}_{mm_rd_to}.csv",
+                use_container_width=True, key="mm_dl_csv")
+        if st.button("↩️ Zamknij", use_container_width=True, key="mm_rep_close"):
+            st.session_state.show_report_picker = False
+            st.rerun()
+
+st.divider()
+
+# Archiwum raportów
+if st.button("📜 ARCHIWUM RAPORTÓW", use_container_width=True, key="mm_arch_open"):
+    st.session_state.show_archive_picker = not st.session_state.show_archive_picker
+    st.rerun()
+if st.session_state.show_archive_picker:
+    with st.container(border=True):
+        df_mma = load_archived_reports()
+        if df_mma.empty:
+            st.info("Brak zapisanych raportów.")
+        else:
+            for _, r_row in df_mma.iterrows():
+                with st.expander(f"📅 {r_row['okres_od']} - {r_row['okres_do']}"):
+                    st.write(f"Suma: {r_row['suma_przychodow']:.2f} zł")
+                    try:
+                        df_ar = load_report_rows(r_row)
+                        st.download_button("📥 CSV",
+                            data=public_csv_data(df_ar),
+                            file_name=f"arch_{r_row['okres_od']}.csv",
+                            key=f"mm_arch_{r_row['id']}", use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Błąd: {e}")
+        if st.button("↩️ Zamknij", use_container_width=True, key="mm_arch_close"):
+            st.session_state.show_archive_picker = False
+            st.rerun()
+
+st.divider()
+
+# Wyloguj
+if st.button("🔓 WYLOGUJ", use_container_width=True, key="mm_logout"):
+    cookies["auth_token"] = ""
+    cookies.save()
+    st.rerun()
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 # =============================================================================
 # 17. SZYBKIE AKCJE (MOBILNE)
