@@ -1228,8 +1228,9 @@ df_history     = df_current.copy()
 if not df_active_calc.empty:
     df_active_calc["kwota"] = pd.to_numeric(df_active_calc["kwota"], errors="coerce").fillna(0)
     s_og, s_got, s_wyd, s_przeniesienie = calculate_range_sums(df_active_calc)
+    s_extra = df_active_calc[df_active_calc["typ"] == "Gotówka - Extra"]["kwota"].sum()
 else:
-    s_og = s_got = s_wyd = s_przeniesienie = 0.0
+    s_og = s_got = s_wyd = s_przeniesienie = s_extra = 0.0
 
 
 # =============================================================================
@@ -1400,10 +1401,52 @@ if st.session_state.s == "ZP":
                 st.session_state.s = ""
                 st.rerun()
 
-# --- Extra gotówka ---
-if st.button("➕ Extra gotówka", key="eg"):
-    st.session_state.s = "EG" if st.session_state.s != "EG" else ""
-    st.rerun()
+# --- Extra gotówka — karta w jednej linii ---
+st.markdown(f"""
+    <style>
+    .extra-row {{
+        display: flex; align-items: center; gap: 1rem;
+        background: rgba(245,158,11,0.08);
+        border: 1px solid rgba(245,158,11,0.22);
+        border-radius: 14px;
+        padding: 0.85rem 1.2rem;
+        margin-bottom: 0.6rem;
+    }}
+    .extra-label {{
+        font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.12em; color: #f59e0b; white-space: nowrap;
+    }}
+    .extra-value {{
+        font-family: 'Syne', sans-serif; font-size: 1.45rem; font-weight: 800;
+        color: #f59e0b; flex: 1;
+    }}
+    .stButton.eg-btn > button {{
+        background: rgba(245,158,11,0.15) !important;
+        border: 1px solid rgba(245,158,11,0.35) !important;
+        color: #f59e0b !important;
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+        white-space: nowrap !important;
+    }}
+    .stButton.eg-btn > button:hover {{
+        background: rgba(245,158,11,0.28) !important;
+    }}
+    </style>
+    <div class="extra-row">
+        <div>
+            <div class="extra-label">Extra gotówka</div>
+            <div class="extra-value">{money_text(s_extra)}</div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+eg_col1, eg_col2 = st.columns([3, 1])
+with eg_col2:
+    st.markdown('<div class="eg-btn">', unsafe_allow_html=True)
+    if st.button("➕ DODAJ", key="eg", use_container_width=True):
+        st.session_state.s = "EG" if st.session_state.s != "EG" else ""
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 if st.session_state.s == "EG":
     with st.container(border=True):
@@ -1687,6 +1730,14 @@ with st.sidebar:
 # =============================================================================
 
 st.divider()
+
+# Powielony filtr "Pokaż od" — widoczny pod szybkimi akcjami przed historią
+podbottom_date_key = f"podbottom_date_{st.session_state.get('cumulative_date_widget_version', 0)}"
+podbottom_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=podbottom_date_key, label_visibility="visible")
+if podbottom_date != cumulative_date_from:
+    st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
+    st.rerun()
+
 st.markdown("""
     <div style="
         margin: 2rem 0 1.5rem 0;
@@ -2215,6 +2266,7 @@ if st.session_state.lock_step >= 1:
         elif typ == CARRYOVER_TYPE:
             c = "background-color:rgba(96,165,250,0.12);color:#60a5fa"
         elif "Gotówka" in typ:
+            # Gotówka - Bufet, Gotówka - Kierowca*, Gotówka - Extra — wszystkie żółte
             c = "background-color:rgba(245,158,11,0.12);color:#f59e0b"
         else:
             c = "background-color:rgba(255,255,255,0.03);color:#c8c8e0"
