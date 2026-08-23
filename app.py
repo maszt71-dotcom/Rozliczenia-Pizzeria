@@ -1100,8 +1100,12 @@ def metric_card(label: str, value, color_class: str):
 # 11. LOGOWANIE
 # =============================================================================
 
-# Logowanie przez session_state
-if "auth_token" not in st.session_state:
+# Logowanie przez query_params (przeżywa odświeżenie strony)
+# Token w URL: ?auth=<token>
+_qp_token = st.query_params.get("auth", "")
+if _qp_token and is_valid_auth_token(_qp_token):
+    st.session_state["auth_token"] = _qp_token
+elif "auth_token" not in st.session_state:
     st.session_state["auth_token"] = ""
 
 if not is_valid_auth_token(st.session_state.get("auth_token", "")):
@@ -1347,6 +1351,7 @@ if st.session_state.page == "menu":
 
     if st.button("🔓 WYLOGUJ", use_container_width=True, key="menu_logout"):
         st.session_state["auth_token"] = ""
+        st.query_params.clear()
         st.rerun()
 
     # bottom nav na stronie menu też
@@ -1718,6 +1723,7 @@ with st.sidebar:
     # ---- Wyloguj ----
     if st.button("🔓 Wyloguj", use_container_width=True, key="logout_btn"):
         st.session_state["auth_token"] = ""
+        st.query_params.clear()
         st.rerun()
 
 
@@ -2163,6 +2169,7 @@ st.divider()
 # Wyloguj
 if st.button("🔓 WYLOGUJ", use_container_width=True, key="mm_logout"):
     st.session_state["auth_token"] = ""
+    st.query_params.clear()
     st.rerun()
 
 st.markdown("</div>", unsafe_allow_html=True)
