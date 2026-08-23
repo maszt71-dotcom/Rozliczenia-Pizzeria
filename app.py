@@ -13,7 +13,6 @@ from email import encoders
 from fpdf import FPDF
 from datetime import datetime, timedelta
 import pytz
-from streamlit_cookies_manager import CookieManager
 from supabase import create_client, Client
 
 # =============================================================================
@@ -1101,11 +1100,11 @@ def metric_card(label: str, value, color_class: str):
 # 11. LOGOWANIE
 # =============================================================================
 
-cookies = CookieManager()
-if not cookies.ready():
-    st.stop()
+# Logowanie przez session_state
+if "auth_token" not in st.session_state:
+    st.session_state["auth_token"] = ""
 
-if not is_valid_auth_token(cookies.get("auth_token")):
+if not is_valid_auth_token(st.session_state.get("auth_token", "")):
     # Login — nagłówek na pełną szerokość, formularz wyśrodkowany pod nim
     st.markdown(
         """
@@ -1157,8 +1156,7 @@ if not is_valid_auth_token(cookies.get("auth_token")):
         if not get_secret("APP_PASSWORD"):
             st.error("Brak APP_PASSWORD w konfiguracji.")
         elif check_secret_password(haslo, "APP_PASSWORD"):
-            cookies["auth_token"] = make_auth_token()
-            cookies.save()
+            st.session_state["auth_token"] = make_auth_token()
             st.rerun()
         else:
             st.error("Nieprawidłowe hasło.")
@@ -1348,8 +1346,7 @@ if st.session_state.page == "menu":
     st.divider()
 
     if st.button("🔓 WYLOGUJ", use_container_width=True, key="menu_logout"):
-        cookies["auth_token"] = ""
-        cookies.save()
+        st.session_state["auth_token"] = ""
         st.rerun()
 
     # bottom nav na stronie menu też
@@ -1720,8 +1717,7 @@ with st.sidebar:
 
     # ---- Wyloguj ----
     if st.button("🔓 Wyloguj", use_container_width=True, key="logout_btn"):
-        cookies["auth_token"] = ""
-        cookies.save()
+        st.session_state["auth_token"] = ""
         st.rerun()
 
 
@@ -2166,8 +2162,7 @@ st.divider()
 
 # Wyloguj
 if st.button("🔓 WYLOGUJ", use_container_width=True, key="mm_logout"):
-    cookies["auth_token"] = ""
-    cookies.save()
+    st.session_state["auth_token"] = ""
     st.rerun()
 
 st.markdown("</div>", unsafe_allow_html=True)
