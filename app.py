@@ -1211,30 +1211,31 @@ current_month_start = next_cumulative_date_from or latest_reset_date or _default
 with st.sidebar:
     st.header("⚙️ Menu")
     st.markdown("**Kwoty narastająco:**")
-    st.markdown("**Pokaż od:**")
-    _months = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
-               "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"]
-    _col1, _col2 = st.columns(2)
-    with _col1:
-        _month = st.selectbox("Miesiąc", options=list(range(1,13)),
-            format_func=lambda m: _months[m-1],
-            index=current_month_start.month - 1,
-            key=f"sel_month_{st.session_state.get('cumulative_date_widget_version',0)}")
-    with _col2:
-        _year = st.selectbox("Rok", options=list(range(2024, 2030)),
-            index=list(range(2024,2030)).index(current_month_start.year) if current_month_start.year in range(2024,2030) else 2,
-            key=f"sel_year_{st.session_state.get('cumulative_date_widget_version',0)}")
-    from datetime import date as _date
-    cumulative_date_from = _date(_year, _month, 1)
+    st.markdown("**Zakres dat:**")
+    cumulative_date_from = st.date_input(
+        "Od", value=current_month_start,
+        key=f"range_from_{st.session_state.get('cumulative_date_widget_version',0)}",
+        format="DD.MM.YYYY"
+    )
+    _date_to_raw = st.date_input(
+        "Do (opcjonalne — puste = dziś)",
+        value=None,
+        key=f"range_to_{st.session_state.get('cumulative_date_widget_version',0)}",
+        format="DD.MM.YYYY"
+    )
+    # Jeśli nie podano daty końcowej — użyj dzisiejszej
+    cumulative_date_to_override = _date_to_raw if _date_to_raw else get_now().date()
     st.divider()
 
 latest_data_date  = get_latest_event_date(data)
-cumulative_date_to = max(latest_data_date, cumulative_date_from)
+# Górna granica: data_to z sidebara (lub dziś) ale nie dalej niż ostatni wpis
+_upper = min(cumulative_date_to_override, latest_data_date) if cumulative_date_to_override <= latest_data_date else latest_data_date
+cumulative_date_to = max(_upper, cumulative_date_from)
 
 if cumulative_date_from > latest_data_date:
     df_current = pd.DataFrame(columns=data.columns)
 else:
-    df_current = filter_data_by_date_range(data, cumulative_date_from, latest_data_date).copy()
+    df_current = filter_data_by_date_range(data, cumulative_date_from, cumulative_date_to).copy()
 
 df_active_calc = df_current.copy()
 df_history     = df_current.copy()
