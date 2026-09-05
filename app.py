@@ -1211,20 +1211,38 @@ current_month_start = next_cumulative_date_from or latest_reset_date or _default
 with st.sidebar:
     st.header("⚙️ Menu")
     st.markdown("**Kwoty narastająco:**")
-    st.markdown("**Zakres dat:**")
-    cumulative_date_from = st.date_input(
-        "Od", value=current_month_start,
-        key=f"range_from_{st.session_state.get('cumulative_date_widget_version',0)}",
-        format="DD.MM.YYYY"
-    )
-    _date_to_raw = st.date_input(
-        "Do (opcjonalne — puste = dziś)",
-        value=None,
-        key=f"range_to_{st.session_state.get('cumulative_date_widget_version',0)}",
-        format="DD.MM.YYYY"
-    )
-    # Jeśli nie podano daty końcowej — użyj dzisiejszej
-    cumulative_date_to_override = _date_to_raw if _date_to_raw else get_now().date()
+    import calendar as _cal
+    from datetime import date as _date
+    _months = ["Sty","Lut","Mar","Kwi","Maj","Cze","Lip","Sie","Wrz","Paź","Lis","Gru"]
+    _years  = list(range(2024, 2031))
+    _ver    = st.session_state.get('cumulative_date_widget_version', 0)
+
+    st.markdown("**Od:**")
+    _fc1, _fc2, _fc3 = st.columns(3)
+    with _fc1:
+        _fd = st.selectbox("Dzień", list(range(1,32)), index=current_month_start.day-1, key=f"fd_{_ver}")
+    with _fc2:
+        _fm = st.selectbox("Mies.", list(range(1,13)), format_func=lambda m:_months[m-1], index=current_month_start.month-1, key=f"fm_{_ver}")
+    with _fc3:
+        _fy = st.selectbox("Rok", _years, index=_years.index(current_month_start.year) if current_month_start.year in _years else 2, key=f"fy_{_ver}")
+    _fd = min(_fd, _cal.monthrange(_fy, _fm)[1])
+    cumulative_date_from = _date(_fy, _fm, _fd)
+
+    st.markdown("**Do (puste = dziś):**")
+    _use_to = st.checkbox("Ustaw datę końcową", value=False, key=f"use_to_{_ver}")
+    if _use_to:
+        _tc1, _tc2, _tc3 = st.columns(3)
+        _today = get_now().date()
+        with _tc1:
+            _td = st.selectbox("Dzień", list(range(1,32)), index=_today.day-1, key=f"td_{_ver}")
+        with _tc2:
+            _tm = st.selectbox("Mies.", list(range(1,13)), format_func=lambda m:_months[m-1], index=_today.month-1, key=f"tm_{_ver}")
+        with _tc3:
+            _ty = st.selectbox("Rok", _years, index=_years.index(_today.year) if _today.year in _years else 2, key=f"ty_{_ver}")
+        _td = min(_td, _cal.monthrange(_ty, _tm)[1])
+        cumulative_date_to_override = _date(_ty, _tm, _td)
+    else:
+        cumulative_date_to_override = get_now().date()
     st.divider()
 
 latest_data_date  = get_latest_event_date(data)
