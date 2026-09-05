@@ -1211,8 +1211,21 @@ current_month_start = next_cumulative_date_from or latest_reset_date or _default
 with st.sidebar:
     st.header("⚙️ Menu")
     st.markdown("**Kwoty narastająco:**")
-    cumulative_date_key  = f"cumulative_date_from_{st.session_state.get('cumulative_date_widget_version', 0)}"
-    cumulative_date_from = st.date_input("Pokaż od", value=current_month_start, key=cumulative_date_key)
+    st.markdown("**Pokaż od:**")
+    _months = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
+               "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"]
+    _col1, _col2 = st.columns(2)
+    with _col1:
+        _month = st.selectbox("Miesiąc", options=list(range(1,13)),
+            format_func=lambda m: _months[m-1],
+            index=current_month_start.month - 1,
+            key=f"sel_month_{st.session_state.get('cumulative_date_widget_version',0)}")
+    with _col2:
+        _year = st.selectbox("Rok", options=list(range(2024, 2030)),
+            index=list(range(2024,2030)).index(current_month_start.year) if current_month_start.year in range(2024,2030) else 2,
+            key=f"sel_year_{st.session_state.get('cumulative_date_widget_version',0)}")
+    from datetime import date as _date
+    cumulative_date_from = _date(_year, _month, 1)
     st.divider()
 
 latest_data_date  = get_latest_event_date(data)
@@ -1251,11 +1264,7 @@ if st.session_state.page == "menu":
     )
 
     st.markdown("**Kwoty narastająco od:**")
-    cumulative_date_key2 = f"menu_date_{st.session_state.get('cumulative_date_widget_version', 0)}"
-    new_date = st.date_input("Pokaż od", value=cumulative_date_from, key=cumulative_date_key2)
-    if new_date != cumulative_date_from:
-        st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
-        st.rerun()
+    # Data wyświetlana z selectboxów sidebara — bez duplikatu
 
     st.divider()
 
@@ -1734,11 +1743,7 @@ with st.sidebar:
 st.divider()
 
 # Powielony filtr "Pokaż od" — widoczny pod szybkimi akcjami przed historią
-podbottom_date_key = f"podbottom_date_v2_{st.session_state.get('cumulative_date_widget_version', 0)}"
-podbottom_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=podbottom_date_key, label_visibility="visible")
-if podbottom_date != cumulative_date_from:
-    st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
-    st.rerun()
+st.markdown(f"📅 **Pokaż od:** {cumulative_date_from.strftime('%d.%m.%Y')} — zmień w lewym panelu (Menu → Miesiąc/Rok)")
 
 st.markdown("""
     <div style="
@@ -2055,11 +2060,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Zakres dat
-mm_date_key = f"mm_date_mobile_{st.session_state.get('cumulative_date_widget_version', 0)}"
-mm_date = st.date_input("📅 Pokaż od", value=cumulative_date_from, key=mm_date_key)
-if mm_date != cumulative_date_from:
-    st.session_state.cumulative_date_widget_version = st.session_state.get('cumulative_date_widget_version', 0) + 1
-    st.rerun()
+st.markdown(f"📅 **Pokaż od:** {cumulative_date_from.strftime('%d.%m.%Y')}") 
 
 st.divider()
 
