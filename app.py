@@ -1187,10 +1187,12 @@ if next_cumulative_date_from is not None:
     )
 
 latest_reset_date   = get_next_date_after_latest_closed_report()
-# Domyślnie: dzień po ostatnim zamkniętym raporcie, lub 1. bieżącego miesiąca
+# Domyślnie: dzień po ostatnim zamkniętym raporcie, lub 1. dnia miesiąca najnowszego wpisu w bazie, lub 1. bieżącego miesiąca
 _today = get_now().date()
 _default_month_start = _today.replace(day=1)
-current_month_start = next_cumulative_date_from or latest_reset_date or _default_month_start
+# Jeśli mamy wpisy z poprzedniego miesiąca, pokaż od 1. tego miesiąca (nie od daty raportu)
+_data_month_start = default_date_from  # 1. dnia miesiąca ostatniego wpisu w bazie
+current_month_start = next_cumulative_date_from or _data_month_start or _default_month_start
 
 # --- Pasek boczny: wybór zakresu narastającego ---
 with st.sidebar:
