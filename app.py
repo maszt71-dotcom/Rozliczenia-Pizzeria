@@ -1238,9 +1238,6 @@ cumulative_date_to = max(cumulative_date_to_override, cumulative_date_from)
 
 df_current = filter_data_by_date_range(data, cumulative_date_from, cumulative_date_to).copy()
 
-# DEBUG — usuń po naprawie
-st.sidebar.info(f"🔍 Od: {cumulative_date_from} | Do: {cumulative_date_to} | Wpisów w bazie: {len(data)} | Po filtrze: {len(df_current)}")
-
 df_active_calc = df_current.copy()
 df_history     = df_current.copy()
 
@@ -1578,7 +1575,7 @@ with c2:
                                         "status":         "Aktywny",
                                         "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
                                     }).execute()
-                                    st.toast(f"✅ Zapisano: {o} {kw_g} zł ({d_g.strftime('%d.%m.%Y')}) id={result_g.data[0]['id'] if result_g.data else '?'}")
+                                    _ = result_g  # insert executed
                                     st.session_state.s  = ""
                                     st.session_state.os = None
                                     st.rerun()
