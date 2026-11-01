@@ -1551,20 +1551,21 @@ with c2:
                     st.session_state.os = o if st.session_state.os != o else None
                     st.rerun()
                 if st.session_state.os == o:
-                    with st.form(f"form_g_{o}_{st.session_state.form_ver}", border=True):
+                    _o_key = str(osoby.index(o))
+                    with st.form(f"form_g_{_o_key}_{st.session_state.form_ver}", border=True):
                         st.markdown(f"Dla: **{o}**")
                         _g_cols = st.columns([2,2,2])
-                        _g_d = _g_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key=f"g_d_{o}_{st.session_state.form_ver}")
-                        _g_m = _g_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}", key=f"g_m_{o}_{st.session_state.form_ver}")
-                        _g_y = _g_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key=f"g_y_{o}_{st.session_state.form_ver}")
+                        _g_d = _g_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key=f"g_d_{_o_key}_{st.session_state.form_ver}")
+                        _g_m = _g_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}", key=f"g_m_{_o_key}_{st.session_state.form_ver}")
+                        _g_y = _g_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key=f"g_y_{_o_key}_{st.session_state.form_ver}")
                         _g_d = min(_g_d, _cal2.monthrange(_g_y, _g_m)[1])
                         d_g = _date2(_g_y, _g_m, _g_d)
-                        kw_g = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę", key=f"g_kw_{o}_{st.session_state.form_ver}")
+                        kw_g = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę", key=f"g_kw_{_o_key}_{st.session_state.form_ver}")
                         submitted_g = st.form_submit_button("DODAJ", use_container_width=True, type="primary")
                         if submitted_g:
                             if kw_g is not None and float(kw_g) != 0:
                                 try:
-                                    supabase.table("finanse").insert({
+                                    result_g = supabase.table("finanse").insert({
                                         "data":           get_now().strftime("%d.%m %H:%M"),
                                         "typ":            f"Gotówka - {o}",
                                         "kwota":          float(kw_g),
@@ -1572,6 +1573,7 @@ with c2:
                                         "status":         "Aktywny",
                                         "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
                                     }).execute()
+                                    st.toast(f"✅ Zapisano: {o} {kw_g} zł ({d_g.strftime('%d.%m.%Y')}) id={result_g.data[0]['id'] if result_g.data else '?'}")
                                     st.session_state.s  = ""
                                     st.session_state.os = None
                                     st.rerun()
