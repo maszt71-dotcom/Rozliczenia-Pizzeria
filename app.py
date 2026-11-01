@@ -1402,12 +1402,7 @@ if st.button("➕ DODAJ", key="zp"):
 
 if st.session_state.s == "ZP":
     with st.container(border=True):
-        _zp_cols = st.columns([2,2,2])
-        _zp_d = _zp_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key="zp_dd")
-        _zp_m = _zp_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, key="zp_mm", format_func=lambda x: f"{x:02d}")
-        _zp_y = _zp_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key="zp_yy")
-        _zp_d = min(_zp_d, _cal2.monthrange(_zp_y, _zp_m)[1])
-        d_zp = _date2(_zp_y, _zp_m, _zp_d)
+        d_zp = st.date_input("Data zdarzenia", get_now().date().replace(day=1) - timedelta(days=1), key="date_zp", format="DD.MM.YYYY")
         kw_zp = st.number_input("Kwota", value=None, step=1.0, key="zp_v", placeholder="Wpisz kwotę")
         op_zp = st.text_input("Opis", key="desc_zp", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_zp", use_container_width=True, type="primary"):
@@ -1472,12 +1467,7 @@ with eg_col2:
 
 if st.session_state.s == "EG":
     with st.container(border=True):
-        _eg_cols = st.columns([2,2,2])
-        _eg_d = _eg_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key="eg_dd")
-        _eg_m = _eg_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, key="eg_mm", format_func=lambda x: f"{x:02d}")
-        _eg_y = _eg_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key="eg_yy")
-        _eg_d = min(_eg_d, _cal2.monthrange(_eg_y, _eg_m)[1])
-        d_eg = _date2(_eg_y, _eg_m, _eg_d)
+        d_eg = st.date_input("Data zdarzenia", get_now().date().replace(day=1) - timedelta(days=1), key="date_eg", format="DD.MM.YYYY")
         kw_eg = st.number_input("Kwota", value=None, step=1.0, key="eg_v", placeholder="Wpisz kwotę")
         op_eg = st.text_input("Opis", key="desc_eg", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_eg", use_container_width=True, type="primary"):
@@ -1503,12 +1493,7 @@ with c1:
         st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
-            _p_cols = st.columns([2,2,2])
-            _p_d = _p_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key="p_dd")
-            _p_m = _p_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, key="p_mm", format_func=lambda x: f"{x:02d}")
-            _p_y = _p_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key="p_yy")
-            _p_d = min(_p_d, _cal2.monthrange(_p_y, _p_m)[1])
-            d_p = _date2(_p_y, _p_m, _p_d)
+            d_p = st.date_input("Data zdarzenia", get_now().date().replace(day=1) - timedelta(days=1), key="date_p", format="DD.MM.YYYY")
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v", placeholder="Wpisz kwotę")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p is not None and kw_p > 0:
@@ -1539,12 +1524,7 @@ with c2:
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
-                        _g_cols = st.columns([2,2,2])
-                        _g_d = _g_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key=f"g_dd_{o}")
-                        _g_m = _g_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, key=f"g_mm_{o}", format_func=lambda x: f"{x:02d}")
-                        _g_y = _g_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key=f"g_yy_{o}")
-                        _g_d = min(_g_d, _cal2.monthrange(_g_y, _g_m)[1])
-                        d_g = _date2(_g_y, _g_m, _g_d)
+                        d_g = st.date_input("Data", get_now().date().replace(day=1) - timedelta(days=1), key=f"date_g_{o}", format="DD.MM.YYYY")
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
                         if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g is not None and kw_g > 0:
@@ -1567,12 +1547,7 @@ with c3:
         st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
-            _w_cols = st.columns([2,2,2])
-            _w_d = _w_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key="w_dd")
-            _w_m = _w_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, key="w_mm", format_func=lambda x: f"{x:02d}")
-            _w_y = _w_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key="w_yy")
-            _w_d = min(_w_d, _cal2.monthrange(_w_y, _w_m)[1])
-            d_w = _date2(_w_y, _w_m, _w_d)
+            d_w = st.date_input("Data zdarzenia", get_now().date().replace(day=1) - timedelta(days=1), key="date_w", format="DD.MM.YYYY")
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v", placeholder="Wpisz kwotę")
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
