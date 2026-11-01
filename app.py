@@ -1411,7 +1411,7 @@ if st.session_state.s == "ZP":
         kw_zp = st.number_input("Kwota", value=None, step=1.0, key="zp_v", placeholder="Wpisz kwotę")
         op_zp = st.text_input("Opis", key="desc_zp", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_zp", use_container_width=True, type="primary"):
-            if kw_zp is not None and kw_zp > 0:
+            if kw_zp is not None and float(kw_zp) != 0:
                 supabase.table("finanse").insert({
                     "data":           get_now().strftime("%d.%m %H:%M"),
                     "typ":            CARRYOVER_TYPE,
@@ -1422,6 +1422,8 @@ if st.session_state.s == "ZP":
                 }).execute()
                 st.session_state.s = ""
                 st.rerun()
+            else:
+                st.error("Wpisz kwotę")
 
 # --- Extra gotówka — karta w jednej linii ---
 st.markdown(f"""
@@ -1481,7 +1483,7 @@ if st.session_state.s == "EG":
         kw_eg = st.number_input("Kwota", value=None, step=1.0, key="eg_v", placeholder="Wpisz kwotę")
         op_eg = st.text_input("Opis", key="desc_eg", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_eg", use_container_width=True, type="primary"):
-            if kw_eg is not None and kw_eg > 0:
+            if kw_eg is not None and float(kw_eg) != 0:
                 supabase.table("finanse").insert({
                     "data":           get_now().strftime("%d.%m %H:%M"),
                     "typ":            "Gotówka - Extra",
@@ -1511,7 +1513,7 @@ with c1:
             d_p = _date2(_p_y, _p_m, _p_d)
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v", placeholder="Wpisz kwotę")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
-                if kw_p is not None and kw_p > 0:
+                if kw_p is not None and float(kw_p) != 0:
                     supabase.table("finanse").insert({
                         "data":           get_now().strftime("%d.%m %H:%M"),
                         "typ":            "Przychód ogólny",
@@ -1547,7 +1549,7 @@ with c2:
                         d_g = _date2(_g_y, _g_m, _g_d)
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
                         if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
-                            if kw_g is not None and kw_g > 0:
+                            if kw_g is not None and float(kw_g) != 0:
                                 supabase.table("finanse").insert({
                                     "data":           get_now().strftime("%d.%m %H:%M"),
                                     "typ":            f"Gotówka - {o}",
@@ -1576,7 +1578,7 @@ with c3:
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v", placeholder="Wpisz kwotę")
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
-                if kw_w is not None and kw_w > 0:
+                if kw_w is not None and float(kw_w) != 0:
                     supabase.table("finanse").insert({
                         "data":           get_now().strftime("%d.%m %H:%M"),
                         "typ":            "Wydatki gotówkowe",
