@@ -11,7 +11,8 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 from fpdf import FPDF
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as _date2
+import calendar as _cal2
 import pytz
 from supabase import create_client, Client
 
@@ -1405,9 +1406,7 @@ if st.session_state.s == "ZP":
         _zp_d = _zp_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key="zp_dd")
         _zp_m = _zp_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, key="zp_mm", format_func=lambda x: f"{x:02d}")
         _zp_y = _zp_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key="zp_yy")
-        import calendar as _cal2
         _zp_d = min(_zp_d, _cal2.monthrange(_zp_y, _zp_m)[1])
-        from datetime import date as _date2
         d_zp = _date2(_zp_y, _zp_m, _zp_d)
         kw_zp = st.number_input("Kwota", value=None, step=1.0, key="zp_v", placeholder="Wpisz kwotę")
         op_zp = st.text_input("Opis", key="desc_zp", placeholder="Opcjonalnie")
