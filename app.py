@@ -186,9 +186,19 @@ FINANCE_DEFAULTS = {
 
 
 def load_data() -> pd.DataFrame:
-    # Ładuje WSZYSTKIE wpisy bez filtrowania po statusie (limit 10000 > domyślny Supabase 1000)
-    res = supabase.table("finanse").select("*").order("id").limit(10000).execute()
-    df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
+    # Ładuje WSZYSTKIE wpisy przez paginację (Supabase domyślnie zwraca max 1000)
+    all_rows = []
+    page_size = 1000
+    offset = 0
+    while True:
+        res = supabase.table("finanse").select("*").order("id").range(offset, offset + page_size - 1).execute()
+        if not res.data:
+            break
+        all_rows.extend(res.data)
+        if len(res.data) < page_size:
+            break
+        offset += page_size
+    df = pd.DataFrame(all_rows) if all_rows else pd.DataFrame()
     for col in EXPECTED_FINANCE_COLS:
         if col not in df.columns:
             df[col] = FINANCE_DEFAULTS[col]
