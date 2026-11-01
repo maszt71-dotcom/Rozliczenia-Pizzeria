@@ -1168,6 +1168,7 @@ for key, default in {
     "show_send_picker":     False,
     "show_archive_picker":  False,
     "page":                 "home",
+    "form_ver":             0,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -1187,9 +1188,9 @@ if next_cumulative_date_from is not None:
     )
 
 latest_reset_date   = get_next_date_after_latest_closed_report()
-# Domyślnie: pierwszy dzień miesiąca najpóźniejszego wpisu w bazie
-_, _latest_date = get_default_date_range(data)
-_default_month_start = _latest_date.replace(day=1)
+# Domyślnie: dzień po ostatnim zamkniętym raporcie, lub 1. bieżącego miesiąca
+_today = get_now().date()
+_default_month_start = _today.replace(day=1)
 current_month_start = next_cumulative_date_from or latest_reset_date or _default_month_start
 
 # --- Pasek boczny: wybór zakresu narastającego ---
@@ -1395,17 +1396,18 @@ if st.session_state.page == "home":
 metric_card("Gotówka z przeniesienia", s_przeniesienie, "blue")
 if st.button("➕ DODAJ", key="zp"):
     st.session_state.s = "ZP" if st.session_state.s != "ZP" else ""
+    st.session_state.form_ver += 1
     st.rerun()
 
 if st.session_state.s == "ZP":
-    with st.form("form_zp", border=True):
+    with st.form(f"form_zp_{st.session_state.form_ver}", border=True):
         _zp_cols = st.columns([2,2,2])
-        _zp_d = _zp_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1)
-        _zp_m = _zp_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}")
-        _zp_y = _zp_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1)
+        _zp_d = _zp_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key=f"zp_d_{st.session_state.form_ver}")
+        _zp_m = _zp_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}", key=f"zp_m_{st.session_state.form_ver}")
+        _zp_y = _zp_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key=f"zp_y_{st.session_state.form_ver}")
         _zp_d = min(_zp_d, _cal2.monthrange(_zp_y, _zp_m)[1])
         d_zp = _date2(_zp_y, _zp_m, _zp_d)
-        kw_zp = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę")
+        kw_zp = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę", key=f"zp_kw_{st.session_state.form_ver}")
         op_zp = st.text_input("Opis", placeholder="Opcjonalnie")
         if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
             if kw_zp is not None and float(kw_zp) != 0:
@@ -1469,18 +1471,19 @@ with eg_col2:
     st.markdown('<div class="eg-btn">', unsafe_allow_html=True)
     if st.button("➕ DODAJ", key="eg", use_container_width=True):
         st.session_state.s = "EG" if st.session_state.s != "EG" else ""
+        st.session_state.form_ver += 1
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 if st.session_state.s == "EG":
-    with st.form("form_eg", border=True):
+    with st.form(f"form_eg_{st.session_state.form_ver}", border=True):
         _eg_cols = st.columns([2,2,2])
-        _eg_d = _eg_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1)
-        _eg_m = _eg_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}")
-        _eg_y = _eg_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1)
+        _eg_d = _eg_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key=f"eg_d_{st.session_state.form_ver}")
+        _eg_m = _eg_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}", key=f"eg_m_{st.session_state.form_ver}")
+        _eg_y = _eg_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key=f"eg_y_{st.session_state.form_ver}")
         _eg_d = min(_eg_d, _cal2.monthrange(_eg_y, _eg_m)[1])
         d_eg = _date2(_eg_y, _eg_m, _eg_d)
-        kw_eg = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę")
+        kw_eg = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę", key=f"eg_kw_{st.session_state.form_ver}")
         op_eg = st.text_input("Opis", placeholder="Opcjonalnie")
         if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
             if kw_eg is not None and float(kw_eg) != 0:
@@ -1505,16 +1508,17 @@ with c1:
     metric_card("Przychód", s_og, "green")
     if st.button("➕ DODAJ", key="p"):
         st.session_state.s = "P" if st.session_state.s != "P" else ""
+        st.session_state.form_ver += 1
         st.rerun()
     if st.session_state.s == "P":
-        with st.form("form_p", border=True):
+        with st.form(f"form_p_{st.session_state.form_ver}", border=True):
             _p_cols = st.columns([2,2,2])
-            _p_d = _p_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1)
-            _p_m = _p_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}")
-            _p_y = _p_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1)
+            _p_d = _p_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key=f"p_d_{st.session_state.form_ver}")
+            _p_m = _p_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}", key=f"p_m_{st.session_state.form_ver}")
+            _p_y = _p_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key=f"p_y_{st.session_state.form_ver}")
             _p_d = min(_p_d, _cal2.monthrange(_p_y, _p_m)[1])
             d_p = _date2(_p_y, _p_m, _p_d)
-            kw_p = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę")
+            kw_p = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę", key=f"p_kw_{st.session_state.form_ver}")
             if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
                 if kw_p is not None and float(kw_p) != 0:
                     try:
@@ -1538,6 +1542,7 @@ with c2:
     if st.button("➕ DODAJ", key="g"):
         st.session_state.s = "G" if st.session_state.s != "G" else ""
         st.session_state.os = None
+        st.session_state.form_ver += 1
         st.rerun()
     if st.session_state.s == "G":
         with st.container(border=True):
@@ -1547,15 +1552,15 @@ with c2:
                     st.session_state.os = o if st.session_state.os != o else None
                     st.rerun()
                 if st.session_state.os == o:
-                    with st.form(f"form_g_{o}", border=True):
+                    with st.form(f"form_g_{o}_{st.session_state.form_ver}", border=True):
                         st.markdown(f"Dla: **{o}**")
                         _g_cols = st.columns([2,2,2])
-                        _g_d = _g_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1)
-                        _g_m = _g_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}")
-                        _g_y = _g_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1)
+                        _g_d = _g_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key=f"g_d_{o}_{st.session_state.form_ver}")
+                        _g_m = _g_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}", key=f"g_m_{o}_{st.session_state.form_ver}")
+                        _g_y = _g_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key=f"g_y_{o}_{st.session_state.form_ver}")
                         _g_d = min(_g_d, _cal2.monthrange(_g_y, _g_m)[1])
                         d_g = _date2(_g_y, _g_m, _g_d)
-                        kw_g = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę")
+                        kw_g = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę", key=f"g_kw_{o}_{st.session_state.form_ver}")
                         submitted_g = st.form_submit_button("DODAJ", use_container_width=True, type="primary")
                         if submitted_g:
                             if kw_g is not None and float(kw_g) != 0:
@@ -1580,16 +1585,17 @@ with c3:
     metric_card("Wydatki", s_wyd, "red")
     if st.button("➕ DODAJ", key="w"):
         st.session_state.s = "W" if st.session_state.s != "W" else ""
+        st.session_state.form_ver += 1
         st.rerun()
     if st.session_state.s == "W":
-        with st.form("form_w", border=True):
+        with st.form(f"form_w_{st.session_state.form_ver}", border=True):
             _w_cols = st.columns([2,2,2])
-            _w_d = _w_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1)
-            _w_m = _w_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}")
-            _w_y = _w_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1)
+            _w_d = _w_cols[0].selectbox("Dzień", list(range(1,32)), index=get_now().day-1, key=f"w_d_{st.session_state.form_ver}")
+            _w_m = _w_cols[1].selectbox("Miesiąc", list(range(1,13)), index=get_now().month-1, format_func=lambda x: f"{x:02d}", key=f"w_m_{st.session_state.form_ver}")
+            _w_y = _w_cols[2].selectbox("Rok", [get_now().year-1, get_now().year], index=1, key=f"w_y_{st.session_state.form_ver}")
             _w_d = min(_w_d, _cal2.monthrange(_w_y, _w_m)[1])
             d_w = _date2(_w_y, _w_m, _w_d)
-            kw_w = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę")
+            kw_w = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę", key=f"w_kw_{st.session_state.form_ver}")
             op_w = st.text_input("Opis")
             if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
                 if kw_w is not None and float(kw_w) != 0:
