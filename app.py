@@ -639,34 +639,34 @@ st.markdown(
         }
         [data-testid="stSidebarNav"] { display: none !important; }
 
-        /* Przycisk otwierania sidebara — zawsze widoczny */
+        /* Przycisk otwierania sidebara — zawsze widoczny i ładny */
         button[data-testid="collapsedControl"],
-        [data-testid="stSidebarCollapsedControl"],
-        [data-testid="stSidebarCollapseButton"],
-        .stSidebarCollapsedControl {
+        [data-testid="stSidebarCollapsedControl"] {
             display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
-            pointer-events: all !important;
-            background: #a855f7 !important;
-            border: 2px solid #7c3aed !important;
+            background: var(--surface) !important;
+            border: 1px solid var(--border2) !important;
             border-radius: 0 10px 10px 0 !important;
-            color: white !important;
-            box-shadow: 4px 0 20px rgba(168,85,247,0.5) !important;
-            width: 2.5rem !important;
-            height: 3.5rem !important;
+            color: var(--text) !important;
+            box-shadow: 4px 0 16px rgba(0,0,0,0.3) !important;
+            width: 2.2rem !important;
+            height: 2.8rem !important;
             position: fixed !important;
             top: 50% !important;
             left: 0 !important;
             transform: translateY(-50%) !important;
-            z-index: 99999 !important;
+            z-index: 999 !important;
             cursor: pointer !important;
         }
+        button[data-testid="collapsedControl"]:hover,
+        [data-testid="stSidebarCollapsedControl"]:hover {
+            background: var(--surface2) !important;
+            border-color: var(--accent) !important;
+        }
         button[data-testid="collapsedControl"] svg,
-        [data-testid="stSidebarCollapsedControl"] svg,
-        [data-testid="stSidebarCollapseButton"] svg {
-            fill: white !important;
-            color: white !important;
+        [data-testid="stSidebarCollapsedControl"] svg {
+            fill: var(--accent2) !important;
         }
         [data-testid="stSidebar"] .block-container { padding-top: 1.5rem !important; }
         [data-testid="stSidebar"] h2,
@@ -1406,10 +1406,6 @@ if st.session_state.page == "home":
     """,
     unsafe_allow_html=True,
 )
-    # Przycisk menu — zawsze widoczny, zamiast sidebara na laptopie
-    if st.button("☰ MENU", key="top_menu_btn"):
-        st.session_state.page = "menu"
-        st.rerun()
 
 # --- Gotówka z przeniesienia ---
 metric_card("Gotówka z przeniesienia", s_przeniesienie, "blue")
@@ -2363,10 +2359,3 @@ else:
 
 
 # Bottom nav — Streamlit przyciski ukryte, HTML pasek na wierzchu
-
-
-
-
-
-
-
