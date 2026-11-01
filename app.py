@@ -267,6 +267,7 @@ def public_csv_data(df: pd.DataFrame) -> bytes:
 
 
 def get_default_date_range(df: pd.DataFrame):
+    today = get_now().date()
     dates = [
         parse_event_date(v)
         for v in df.get("data_zdarzenia", pd.Series(dtype=str)).astype(str).str.strip()
@@ -274,8 +275,8 @@ def get_default_date_range(df: pd.DataFrame):
     ] if not df.empty else []
     if dates:
         latest = max(dates)
-        return latest.replace(day=1), latest
-    today = get_now().date()
+        # Zawsze zaczynamy od 1. bieżącego miesiąca (nie od miesiąca ostatniego wpisu)
+        return today.replace(day=1), today
     return today.replace(day=1), today
 
 
@@ -1230,14 +1231,10 @@ with st.sidebar:
     st.divider()
 
 latest_data_date  = get_latest_event_date(data)
-# Górna granica: data_to z sidebara (lub dziś) ale nie dalej niż ostatni wpis
-_upper = min(cumulative_date_to_override, latest_data_date) if cumulative_date_to_override <= latest_data_date else latest_data_date
-cumulative_date_to = max(_upper, cumulative_date_from)
+# Górna granica: data_to z sidebara (lub dziś)
+cumulative_date_to = max(cumulative_date_to_override, cumulative_date_from)
 
-if cumulative_date_from > latest_data_date:
-    df_current = pd.DataFrame(columns=data.columns)
-else:
-    df_current = filter_data_by_date_range(data, cumulative_date_from, cumulative_date_to).copy()
+df_current = filter_data_by_date_range(data, cumulative_date_from, cumulative_date_to).copy()
 
 df_active_calc = df_current.copy()
 df_history     = df_current.copy()
@@ -1412,16 +1409,19 @@ if st.session_state.s == "ZP":
         op_zp = st.text_input("Opis", placeholder="Opcjonalnie")
         if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
             if kw_zp is not None and float(kw_zp) != 0:
-                supabase.table("finanse").insert({
-                    "data":           get_now().strftime("%d.%m %H:%M"),
-                    "typ":            CARRYOVER_TYPE,
-                    "kwota":          float(kw_zp),
-                    "opis":           op_zp,
-                    "status":         "Aktywny",
-                    "data_zdarzenia": d_zp.strftime("%d.%m.%Y"),
-                }).execute()
-                st.session_state.s = ""
-                st.rerun()
+                try:
+                    supabase.table("finanse").insert({
+                        "data":           get_now().strftime("%d.%m %H:%M"),
+                        "typ":            CARRYOVER_TYPE,
+                        "kwota":          float(kw_zp),
+                        "opis":           op_zp,
+                        "status":         "Aktywny",
+                        "data_zdarzenia": d_zp.strftime("%d.%m.%Y"),
+                    }).execute()
+                    st.session_state.s = ""
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Błąd zapisu: {e}")
             else:
                 st.error("Wpisz kwotę")
 
@@ -1484,16 +1484,19 @@ if st.session_state.s == "EG":
         op_eg = st.text_input("Opis", placeholder="Opcjonalnie")
         if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
             if kw_eg is not None and float(kw_eg) != 0:
-                supabase.table("finanse").insert({
-                    "data":           get_now().strftime("%d.%m %H:%M"),
-                    "typ":            "Gotówka - Extra",
-                    "kwota":          float(kw_eg),
-                    "opis":           op_eg,
-                    "status":         "Aktywny",
-                    "data_zdarzenia": d_eg.strftime("%d.%m.%Y"),
-                }).execute()
-                st.session_state.s = ""
-                st.rerun()
+                try:
+                    supabase.table("finanse").insert({
+                        "data":           get_now().strftime("%d.%m %H:%M"),
+                        "typ":            "Gotówka - Extra",
+                        "kwota":          float(kw_eg),
+                        "opis":           op_eg,
+                        "status":         "Aktywny",
+                        "data_zdarzenia": d_eg.strftime("%d.%m.%Y"),
+                    }).execute()
+                    st.session_state.s = ""
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Błąd zapisu: {e}")
 
 # --- Trzy kolumny: Przychód / Gotówka / Wydatki ---
 c1, c2, c3 = st.columns(3)
@@ -1555,17 +1558,20 @@ with c2:
                         kw_g = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę")
                         if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
                             if kw_g is not None and float(kw_g) != 0:
-                                supabase.table("finanse").insert({
-                                    "data":           get_now().strftime("%d.%m %H:%M"),
-                                    "typ":            f"Gotówka - {o}",
-                                    "kwota":          float(kw_g),
-                                    "opis":           "",
-                                    "status":         "Aktywny",
-                                    "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
-                                }).execute()
-                                st.session_state.s  = ""
-                                st.session_state.os = None
-                                st.rerun()
+                                try:
+                                    supabase.table("finanse").insert({
+                                        "data":           get_now().strftime("%d.%m %H:%M"),
+                                        "typ":            f"Gotówka - {o}",
+                                        "kwota":          float(kw_g),
+                                        "opis":           "",
+                                        "status":         "Aktywny",
+                                        "data_zdarzenia": d_g.strftime("%d.%m.%Y"),
+                                    }).execute()
+                                    st.session_state.s  = ""
+                                    st.session_state.os = None
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Błąd zapisu: {e}")
 
 with c3:
     metric_card("Wydatki", s_wyd, "red")
@@ -1584,16 +1590,19 @@ with c3:
             op_w = st.text_input("Opis")
             if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
                 if kw_w is not None and float(kw_w) != 0:
-                    supabase.table("finanse").insert({
-                        "data":           get_now().strftime("%d.%m %H:%M"),
-                        "typ":            "Wydatki gotówkowe",
-                        "kwota":          float(kw_w),
-                        "opis":           op_w,
-                        "status":         "Aktywny",
-                        "data_zdarzenia": d_w.strftime("%d.%m.%Y"),
-                    }).execute()
-                    st.session_state.s = ""
-                    st.rerun()
+                    try:
+                        supabase.table("finanse").insert({
+                            "data":           get_now().strftime("%d.%m %H:%M"),
+                            "typ":            "Wydatki gotówkowe",
+                            "kwota":          float(kw_w),
+                            "opis":           op_w,
+                            "status":         "Aktywny",
+                            "data_zdarzenia": d_w.strftime("%d.%m.%Y"),
+                        }).execute()
+                        st.session_state.s = ""
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Błąd zapisu: {e}")
 
 
 # =============================================================================
