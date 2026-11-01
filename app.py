@@ -186,8 +186,8 @@ FINANCE_DEFAULTS = {
 
 
 def load_data() -> pd.DataFrame:
-    # Ładuje WSZYSTKIE wpisy bez filtrowania po statusie
-    res = supabase.table("finanse").select("*").order("id").execute()
+    # Ładuje WSZYSTKIE wpisy bez filtrowania po statusie (limit 10000 > domyślny Supabase 1000)
+    res = supabase.table("finanse").select("*").order("id").limit(10000).execute()
     df = pd.DataFrame(res.data) if res.data else pd.DataFrame()
     for col in EXPECTED_FINANCE_COLS:
         if col not in df.columns:
