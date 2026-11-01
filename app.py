@@ -1402,7 +1402,7 @@ if st.button("➕ DODAJ", key="zp"):
 
 if st.session_state.s == "ZP":
     with st.container(border=True):
-        d_zp = st.date_input("Data zdarzenia", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), key="date_zp", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
+        d_zp = st.date_input("Data zdarzenia", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=15), key="date_zp", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
         kw_zp = st.number_input("Kwota", value=None, step=1.0, key="zp_v", placeholder="Wpisz kwotę")
         op_zp = st.text_input("Opis", key="desc_zp", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_zp", use_container_width=True, type="primary"):
@@ -1467,7 +1467,7 @@ with eg_col2:
 
 if st.session_state.s == "EG":
     with st.container(border=True):
-        d_eg = st.date_input("Data zdarzenia", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), key="date_eg", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
+        d_eg = st.date_input("Data zdarzenia", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=15), key="date_eg", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
         kw_eg = st.number_input("Kwota", value=None, step=1.0, key="eg_v", placeholder="Wpisz kwotę")
         op_eg = st.text_input("Opis", key="desc_eg", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_eg", use_container_width=True, type="primary"):
@@ -1493,7 +1493,7 @@ with c1:
         st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
-            d_p = st.date_input("Data zdarzenia", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), key="date_p", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
+            d_p = st.date_input("Data zdarzenia", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=15), key="date_p", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v", placeholder="Wpisz kwotę")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p is not None and kw_p > 0:
@@ -1524,7 +1524,7 @@ with c2:
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
-                        d_g = st.date_input("Data", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), key=f"date_g_{o}", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
+                        d_g = st.date_input("Data", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=15), key=f"date_g_{o}", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
                         if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g is not None and kw_g > 0:
@@ -1547,7 +1547,7 @@ with c3:
         st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
-            d_w = st.date_input("Data zdarzenia", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), key="date_w", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
+            d_w = st.date_input("Data zdarzenia", (get_now().date().replace(day=1) - timedelta(days=1)).replace(day=15), key="date_w", format="DD.MM.YYYY", min_value=(get_now().date().replace(day=1) - timedelta(days=1)).replace(day=1), max_value=get_now().date().replace(day=__import__("calendar").monthrange(get_now().date().year, get_now().date().month)[1]))
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v", placeholder="Wpisz kwotę")
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
