@@ -1238,6 +1238,9 @@ cumulative_date_to = max(cumulative_date_to_override, cumulative_date_from)
 
 df_current = filter_data_by_date_range(data, cumulative_date_from, cumulative_date_to).copy()
 
+# DEBUG — usuń po naprawie
+st.sidebar.info(f"🔍 Od: {cumulative_date_from} | Do: {cumulative_date_to} | Wpisów w bazie: {len(data)} | Po filtrze: {len(df_current)}")
+
 df_active_calc = df_current.copy()
 df_history     = df_current.copy()
 
