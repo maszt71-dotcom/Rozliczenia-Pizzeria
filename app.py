@@ -1514,16 +1514,21 @@ with c1:
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v", placeholder="Wpisz kwotę")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p is not None and float(kw_p) != 0:
-                    supabase.table("finanse").insert({
-                        "data":           get_now().strftime("%d.%m %H:%M"),
-                        "typ":            "Przychód ogólny",
-                        "kwota":          float(kw_p),
-                        "opis":           "",
-                        "status":         "Aktywny",
-                        "data_zdarzenia": d_p.strftime("%d.%m.%Y"),
-                    }).execute()
-                    st.session_state.s = ""
-                    st.rerun()
+                    try:
+                        supabase.table("finanse").insert({
+                            "data":           get_now().strftime("%d.%m %H:%M"),
+                            "typ":            "Przychód ogólny",
+                            "kwota":          float(kw_p),
+                            "opis":           "",
+                            "status":         "Aktywny",
+                            "data_zdarzenia": d_p.strftime("%d.%m.%Y"),
+                        }).execute()
+                        st.session_state.s = ""
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Błąd zapisu: {e}")
+                else:
+                    st.error(f"Wpisz kwotę (kw_p={kw_p})")
 
 with c2:
     metric_card("Gotówka", s_got, "negative" if s_got < 0 else "yellow")
