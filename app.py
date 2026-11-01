@@ -275,8 +275,7 @@ def get_default_date_range(df: pd.DataFrame):
     ] if not df.empty else []
     if dates:
         latest = max(dates)
-        # Zawsze zaczynamy od 1. bieżącego miesiąca (nie od miesiąca ostatniego wpisu)
-        return today.replace(day=1), today
+        return latest.replace(day=1), latest
     return today.replace(day=1), today
 
 
