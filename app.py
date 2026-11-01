@@ -1405,7 +1405,10 @@ if st.session_state.page == "home":
     </div>
     """,
     unsafe_allow_html=True,
-)
+    )
+    if st.button("☰ MENU", key="top_menu_btn"):
+        st.session_state.page = "menu"
+        st.rerun()
 
 # --- Gotówka z przeniesienia ---
 metric_card("Gotówka z przeniesienia", s_przeniesienie, "blue")
