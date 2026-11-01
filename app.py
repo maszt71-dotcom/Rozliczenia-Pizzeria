@@ -636,38 +636,21 @@ st.markdown(
             background: var(--bg2) !important;
             border-right: 1px solid var(--border) !important;
             box-shadow: 4px 0 40px rgba(0,0,0,0.4) !important;
+            display: flex !important;
+            visibility: visible !important;
+            transform: none !important;
+            min-width: 244px !important;
+            width: 244px !important;
+            position: relative !important;
+        }
+        /* Ukryj przycisk zwijania — sidebar ma być zawsze otwarty */
+        button[data-testid="collapsedControl"],
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="stSidebarCollapseButton"] {
+            display: none !important;
         }
         [data-testid="stSidebarNav"] { display: none !important; }
 
-        /* Przycisk otwierania sidebara — zawsze widoczny i ładny */
-        button[data-testid="collapsedControl"],
-        [data-testid="stSidebarCollapsedControl"] {
-            display: flex !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            background: var(--surface) !important;
-            border: 1px solid var(--border2) !important;
-            border-radius: 0 10px 10px 0 !important;
-            color: var(--text) !important;
-            box-shadow: 4px 0 16px rgba(0,0,0,0.3) !important;
-            width: 2.2rem !important;
-            height: 2.8rem !important;
-            position: fixed !important;
-            top: 50% !important;
-            left: 0 !important;
-            transform: translateY(-50%) !important;
-            z-index: 999 !important;
-            cursor: pointer !important;
-        }
-        button[data-testid="collapsedControl"]:hover,
-        [data-testid="stSidebarCollapsedControl"]:hover {
-            background: var(--surface2) !important;
-            border-color: var(--accent) !important;
-        }
-        button[data-testid="collapsedControl"] svg,
-        [data-testid="stSidebarCollapsedControl"] svg {
-            fill: var(--accent2) !important;
-        }
         [data-testid="stSidebar"] .block-container { padding-top: 1.5rem !important; }
         [data-testid="stSidebar"] h2,
         [data-testid="stSidebar"] h3 { color: var(--text) !important; }
