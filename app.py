@@ -1401,7 +1401,7 @@ if st.button("➕ DODAJ", key="zp"):
 
 if st.session_state.s == "ZP":
     with st.container(border=True):
-        d_zp  = st.date_input("Data zdarzenia", get_now().date(), key="date_zp", min_value=datetime(get_now().date().year - 1, 1, 1).date())
+        d_zp  = st.date_input("Data zdarzenia", get_now().date(), key="date_zp", min_value=datetime(get_now().date().year - 1, 1, 1).date(), max_value=get_now().date(), format="DD.MM.YYYY")
         kw_zp = st.number_input("Kwota", value=None, step=1.0, key="zp_v", placeholder="Wpisz kwotę")
         op_zp = st.text_input("Opis", key="desc_zp", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_zp", use_container_width=True, type="primary"):
@@ -1466,7 +1466,7 @@ with eg_col2:
 
 if st.session_state.s == "EG":
     with st.container(border=True):
-        d_eg  = st.date_input("Data zdarzenia", get_now().date(), key="date_eg", min_value=datetime(get_now().date().year - 1, 1, 1).date())
+        d_eg  = st.date_input("Data zdarzenia", get_now().date(), key="date_eg", min_value=datetime(get_now().date().year - 1, 1, 1).date(), max_value=get_now().date(), format="DD.MM.YYYY")
         kw_eg = st.number_input("Kwota", value=None, step=1.0, key="eg_v", placeholder="Wpisz kwotę")
         op_eg = st.text_input("Opis", key="desc_eg", placeholder="Opcjonalnie")
         if st.button("DODAJ", key="save_eg", use_container_width=True, type="primary"):
@@ -1492,7 +1492,7 @@ with c1:
         st.rerun()
     if st.session_state.s == "P":
         with st.container(border=True):
-            d_p  = st.date_input("Data zdarzenia", get_now().date(), key="date_p", min_value=datetime(get_now().date().year - 1, 1, 1).date())
+            d_p  = st.date_input("Data zdarzenia", get_now().date(), key="date_p", min_value=datetime(get_now().date().year - 1, 1, 1).date(), max_value=get_now().date(), format="DD.MM.YYYY")
             kw_p = st.number_input("Kwota", value=None, step=1.0, key="p_v", placeholder="Wpisz kwotę")
             if st.button("DODAJ", key="save_p", use_container_width=True, type="primary"):
                 if kw_p is not None and kw_p > 0:
@@ -1523,7 +1523,7 @@ with c2:
                 if st.session_state.os == o:
                     with st.container(border=True):
                         st.markdown(f"Dla: **{o}**")
-                        d_g  = st.date_input("Data", get_now().date(), key=f"date_g_{o}", min_value=datetime(get_now().date().year - 1, 1, 1).date())
+                        d_g  = st.date_input("Data", get_now().date(), key=f"date_g_{o}", min_value=datetime(get_now().date().year - 1, 1, 1).date(), max_value=get_now().date(), format="DD.MM.YYYY")
                         kw_g = st.number_input("Kwota", value=None, step=1.0, key=f"g_v_{o}", placeholder="Wpisz kwotę")
                         if st.button("DODAJ", key=f"save_g_{o}", use_container_width=True, type="primary"):
                             if kw_g is not None and kw_g > 0:
@@ -1546,7 +1546,7 @@ with c3:
         st.rerun()
     if st.session_state.s == "W":
         with st.container(border=True):
-            d_w  = st.date_input("Data zdarzenia", get_now().date(), key="date_w", min_value=datetime(get_now().date().year - 1, 1, 1).date())
+            d_w  = st.date_input("Data zdarzenia", get_now().date(), key="date_w", min_value=datetime(get_now().date().year - 1, 1, 1).date(), max_value=get_now().date(), format="DD.MM.YYYY")
             kw_w = st.number_input("Kwota", value=None, step=1.0, key="w_v", placeholder="Wpisz kwotę")
             op_w = st.text_input("Opis", key="desc_w")
             if st.button("DODAJ", key="save_w", use_container_width=True, type="primary"):
