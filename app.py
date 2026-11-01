@@ -1556,7 +1556,8 @@ with c2:
                         _g_d = min(_g_d, _cal2.monthrange(_g_y, _g_m)[1])
                         d_g = _date2(_g_y, _g_m, _g_d)
                         kw_g = st.number_input("Kwota", value=None, step=1.0, placeholder="Wpisz kwotę")
-                        if st.form_submit_button("DODAJ", use_container_width=True, type="primary"):
+                        submitted_g = st.form_submit_button("DODAJ", use_container_width=True, type="primary")
+                        if submitted_g:
                             if kw_g is not None and float(kw_g) != 0:
                                 try:
                                     supabase.table("finanse").insert({
@@ -1572,6 +1573,8 @@ with c2:
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Błąd zapisu: {e}")
+                            else:
+                                st.error(f"Wpisz kwotę (kw_g={kw_g})")
 
 with c3:
     metric_card("Wydatki", s_wyd, "red")
