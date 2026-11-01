@@ -1403,35 +1403,13 @@ if st.session_state.page == "home":
             Narastająco {cumulative_date_from.strftime('%d.%m.%Y')} &mdash; {cumulative_date_to.strftime('%d.%m.%Y')}
         </div>
     </div>
-    <style>
-    .menu-toggle-btn {{
-        position: fixed;
-        top: 50%;
-        left: 0;
-        transform: translateY(-50%);
-        z-index: 999999;
-        background: #a855f7;
-        color: white;
-        border: none;
-        border-radius: 0 12px 12px 0;
-        width: 32px;
-        height: 56px;
-        font-size: 18px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 4px 0 16px rgba(168,85,247,0.6);
-    }}
-    </style>
-    <button class="menu-toggle-btn" onclick="
-        var sidebar = window.parent.document.querySelector('[data-testid=stSidebar]');
-        var btn = window.parent.document.querySelector('[data-testid=collapsedControl]') || window.parent.document.querySelector('[data-testid=stSidebarCollapsedControl]') || window.parent.document.querySelector('[data-testid=stSidebarCollapseButton]');
-        if(btn) btn.click();
-    ">☰</button>
     """,
     unsafe_allow_html=True,
 )
+    # Przycisk menu — zawsze widoczny, zamiast sidebara na laptopie
+    if st.button("☰ MENU", key="top_menu_btn"):
+        st.session_state.page = "menu"
+        st.rerun()
 
 # --- Gotówka z przeniesienia ---
 metric_card("Gotówka z przeniesienia", s_przeniesienie, "blue")
